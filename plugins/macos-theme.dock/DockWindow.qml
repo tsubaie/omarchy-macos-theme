@@ -48,11 +48,12 @@ PanelWindow {
   readonly property bool tucked: autohide && !(revealed || menuOpen || dragging || insertIndex >= 0)
   readonly property bool contentShown: shown && !tucked
 
-  readonly property int gap: Style.spacing.xs
-  readonly property int iconSize: Math.round(36 * Style.fontScale)
-  // Each app has a square slot with its icon in the middle, and the slots run
-  // straight to the edge of the dock.
+  readonly property int gap: Style.spacing.sm
+  readonly property int iconSize: Math.round(48 * Style.fontScale)
+  // Each app has a square slot with its icon in the middle, and the glass
+  // platter leaves room around the slots, like the macOS dock.
   readonly property int iconInset: Style.spacing.md
+  readonly property int platterPadding: Style.space(8)
   readonly property int slotSize: iconSize + iconInset * 2
   // A pinned app that is not running is drawn faded.
   readonly property real idleOpacity: 0.7
@@ -272,8 +273,8 @@ PanelWindow {
     LayoutMirroring.enabled: false
     LayoutMirroring.childrenInherit: true
 
-    width: slots.implicitWidth
-    height: slots.implicitHeight
+    width: slots.implicitWidth + window.platterPadding * 2
+    height: slots.implicitHeight + window.platterPadding * 2
     // How far the dock is tucked past its edge. Auto-hide slides it, but only
     // while the dock is on screen: arriving on a floating workspace shows it
     // where it belongs at once.
@@ -306,7 +307,7 @@ PanelWindow {
     // with a faint light edge. Hyprland blurs what is behind it.
     Rectangle {
       anchors.fill: parent
-      radius: Math.round(window.slotSize * 0.3)
+      radius: Math.round((window.slotSize + window.platterPadding * 2) * 0.3)
       color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.4)
       border.width: 1
       border.color: Qt.rgba(1, 1, 1, 0.16)
