@@ -824,7 +824,7 @@ PanelWindow {
     visible: window.contentShown && (!!item || window.settingsMenu || window.trashMenu || window.downloadsMenu)
     // Like the macOS dock menu: translucent slate glass with a faint light
     // edge, roomy rows, grey section headings, and a tail pointing at the icon.
-    readonly property color fill: Qt.rgba(0.16, 0.19, 0.24, 0.72)
+    readonly property color fill: Qt.rgba(0.2, 0.2, 0.23, 0.45)
     readonly property int tail: window.position === "bottom" ? Style.space(9) : 0
     width: Math.min(Style.space(380), Math.max(Style.space(230), menuColumn.implicitWidth)) + padding * 2
     height: menuColumn.implicitHeight + padding * 2
