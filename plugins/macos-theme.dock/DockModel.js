@@ -97,7 +97,12 @@ function buildItems(pinned, windows) {
     if (isDockWindow(window)) itemFor(window.key, false).windows.push(window)
   }
 
-  return items
+  // An unpinned app whose windows are all minimized shows only in the
+  // minimized section on the right, not a second time among the apps.
+  return items.filter(function(item) {
+    if (item.pinned || item.windows.length === 0) return true
+    return item.windows.some(function(window) { return window.minimized !== true })
+  })
 }
 
 // Puts the items in the dock's own order, which the dock keeps for the
