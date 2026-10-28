@@ -22,6 +22,7 @@ Optional extras:
 - **macOS icons** (`--icons`): installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from GitHub (default color only, into your home folder) and switches to it, so app icons, Files, and the dock's Trash and Downloads look like macOS.
 - **App switcher** (`--switcher`): Alt+Tab like Cmd+Tab on a Mac. Every running app across all workspaces, most recent first, as large icons on frosted glass. Tab / Shift+Tab move while Alt is held, letting go of Alt switches (going to the app's workspace), Esc cancels. Apps with several windows show a dot per window; press Down (or `) to list them and pick one.
   Super+Tab is the same for workspaces: each workspace appears as a miniature with its windows drawn live, Tab / Shift+Tab move while Super is held, and letting go of Super switches.
+- **Spotlight-like menu** (`--wide-menu`): Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, with a magnifying glass and "Search…" instead of "Go…". It clones the Omarchy menu installed on your machine and changes only those lines; re-run after big Omarchy updates to pick up menu changes.
 - **Dictation HUD** (`--dictation-hud`): a frosted pill with a red mic and moving bars while [Voxtype](https://voxtype.io) is recording, and "Transcribing" with pulsing dots after.
 
 ## Install

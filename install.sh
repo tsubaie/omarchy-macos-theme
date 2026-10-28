@@ -7,6 +7,7 @@
 #   ./install.sh --dock           + macOS dock (running dots, Downloads stack, Trash)
 #   ./install.sh --icons          + MacTahoe macOS icon theme (from GitHub)
 #   ./install.sh --switcher       + app switcher (Alt+Tab) and workspace switcher (Super+Tab)
+#   ./install.sh --wide-menu      + Spotlight-like Omarchy menu: wider, magnifying glass, "Search"
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -38,17 +39,18 @@ SWITCHER_ID="macos-theme.switcher"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false uninstall=false
+with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false with_wide_menu=false uninstall=false
 for arg in "$@"; do
   case "$arg" in
     --osd) with_osd=true ;;
     --dictation-hud) with_hud=true ;;
     --dock) with_dock=true ;;
     --icons) with_icons=true ;;
-    --switcher) with_switcher=true ;;
+    --switcher) with_switcher=true; with_wide_menu=true ;;
+    --wide-menu) with_wide_menu=true ;;
     --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true ;;
     --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -80,6 +82,14 @@ if $uninstall; then
     rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
     say "Removed the macOS dock and restored Omarchy's own"
   fi
+  # The wide menu is a clone of Omarchy's menu marked by its width comment.
+  for dir in "$PLUGINS_DIR"/*.menu; do
+    [[ -f $dir/Menu.qml ]] && grep -q "macOS theme: wider" "$dir/Menu.qml" || continue
+    omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
+    omarchy plugin enable omarchy.menu >/dev/null 2>&1 || true
+    rm -rf "${dir:?}"
+    say "Removed the wide menu and restored Omarchy's own"
+  done
   if [[ -d $PLUGINS_DIR/$SWITCHER_ID ]]; then
     omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
     rm -rf "${PLUGINS_DIR:?}/$SWITCHER_ID"
@@ -173,6 +183,20 @@ fi
 if $with_switcher; then
   install_plugin "$SWITCHER_ID"
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
+fi
+if $with_wide_menu; then
+  # Clone the menu of the Omarchy version installed here, then patch it (width,
+  # magnifying glass, "Search"), so it matches this Omarchy's menu otherwise.
+  menu_dir=$(ls -d "$PLUGINS_DIR"/*.menu 2>/dev/null | while read -r d; do grep -q '"clonedFrom": "omarchy.menu"' "$d/manifest.json" 2>/dev/null && echo "$d"; done | head -n1)
+  if [[ -z $menu_dir ]]; then
+    menu_dir=$(omarchy plugin clone omarchy.menu 2>/dev/null | sed -n 's/^Cloned omarchy.menu to \(.*\) and switched.*/\1/p')
+  fi
+  if [[ -n $menu_dir && -f $menu_dir/Menu.qml ]]; then
+    perl -0pi "$REPO/menu-patch.pl" "$menu_dir/Menu.qml"
+    grep -q "Style.space(560)), panel.width" "$menu_dir/Menu.qml" && say "Widened the Omarchy menu, with a Spotlight search line" || echo "    Could not patch this Omarchy version's menu; it keeps its own look." >&2
+  else
+    echo "    Could not clone Omarchy's menu; it keeps its own width." >&2
+  fi
 fi
 if $with_hud; then
   install_plugin "$HUD_ID"
