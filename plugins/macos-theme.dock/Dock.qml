@@ -99,28 +99,31 @@ Item {
     }
 
     return DockModel.orderItems(DockModel.buildItems(pinned, windows), root.order)
+      .filter(function(item) { return item.pinned })
   }
 
-  // Minimized windows, one each, for the macOS-style section at the end of the
-  // dock. Windows without an app id are listed too (with a generic icon), since
-  // they have no app slot to come back through.
-  readonly property var minimizedWindows: {
-    var out = []
+  // Running apps that are not pinned: they sit on the right of the divider,
+  // open or minimized, and move to the left only once pinned.
+  readonly property var unpinnedItems: {
+    var windows = []
     var toplevels = Hyprland.toplevels.values
     for (var i = 0; i < toplevels.length; i++) {
-      var workspace = toplevels[i].workspace
       var toplevel = toplevels[i].wayland
-      if (!workspace || !DockModel.isMinimizedWorkspace(workspace.name) || !toplevel || toplevel.parent) continue
+      if (!toplevel || toplevel.parent) continue
       var entry = root.entryForWindow(toplevel)
-      out.push({
+      var workspace = toplevels[i].workspace
+      windows.push({
         key: entry ? entry.id : (toplevel.appId || "window:" + toplevels[i].address),
-        title: String(toplevel.title || ""),
-        minimized: true,
+        hasEntry: !!entry && !entry.noDisplay,
+        standalone: !entry && !toplevel.appId,
+        workspaceId: workspace ? workspace.id : -1,
+        minimized: !!workspace && DockModel.isMinimizedWorkspace(workspace.name),
         address: toplevels[i].address,
         toplevel: toplevel
       })
     }
-    return out
+    var pinned = root.pinnedKeys
+    return DockModel.buildItems([], windows).filter(function(item) { return pinned.indexOf(item.key) < 0 })
   }
 
   readonly property var itemsByKey: {

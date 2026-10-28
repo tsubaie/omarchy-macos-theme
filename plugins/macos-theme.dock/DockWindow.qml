@@ -327,7 +327,7 @@ PanelWindow {
     Grid {
       id: slots
       anchors.centerIn: parent
-      columns: window.vertical ? 1 : appRepeater.count + 1 + 1 + minimizedRepeater.count + 2
+      columns: window.vertical ? 1 : appRepeater.count + 1 + 1 + unpinnedRepeater.count + 2
 
       AppsSlot {}
 
@@ -338,8 +338,8 @@ PanelWindow {
         delegate: AppSlot {}
       }
 
-      // macOS-style: a divider, then Downloads, each minimized window on its
-      // own, and Trash at the very end.
+      // A divider, then running apps that are not pinned, Downloads, and
+      // Trash at the very end.
       Item {
         width: window.vertical ? window.slotSize : Style.space(13)
         height: window.vertical ? Style.space(13) : window.slotSize
@@ -353,16 +353,16 @@ PanelWindow {
         }
       }
 
+      Repeater {
+        id: unpinnedRepeater
+        model: window.dock ? window.dock.unpinnedItems : []
+
+        delegate: UnpinnedSlot {}
+      }
+
       PlaceSlot {
         iconSources: window.placeIcons("folder-download")
         stack: true
-      }
-
-      Repeater {
-        id: minimizedRepeater
-        model: window.dock ? window.dock.minimizedWindows : []
-
-        delegate: MinimizedSlot {}
       }
 
       PlaceSlot {
@@ -442,45 +442,43 @@ PanelWindow {
     }
   }
 
-  // A minimized window: its app icon on a small frosted card, like the window
-  // previews macOS keeps at the end of the dock. Clicking brings it back.
-  component MinimizedSlot: Slot {
-    id: minimizedSlot
+  // A running app that is not pinned, on the right of the divider. A click
+  // brings its window forward (restoring a minimized one); right-click opens
+  // the same menu as the pinned apps, where it can be kept in the dock.
+  component UnpinnedSlot: Slot {
+    id: unpinnedSlot
 
     required property var modelData
 
     mouse.onClicked: function(event) {
+      if (event.button === Qt.RightButton) {
+        window.openMenu(unpinnedSlot.modelData, unpinnedSlot)
+        return
+      }
       window.closeMenu()
-      if (window.dock) window.dock.bringForward(minimizedSlot.modelData)
+      if (window.dock) window.dock.activate(unpinnedSlot.modelData)
     }
 
-    Rectangle {
+    Image {
       x: window.iconInset
       y: window.iconInset
       width: window.iconSize
       height: window.iconSize
-      radius: Math.round(window.iconSize * 0.22)
-      color: Qt.rgba(1, 1, 1, 0.08)
-      border.width: 1
-      border.color: Qt.rgba(1, 1, 1, 0.18)
-      scale: minimizedSlot.hovered ? 1.15 : 1
+      sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+      source: window.dock ? window.dock.iconFor(unpinnedSlot.modelData) : ""
+      fillMode: Image.PreserveAspectFit
+      asynchronous: true
+      smooth: true
+      mipmap: true
+      scale: unpinnedSlot.hovered ? 1.15 : 1
       transformOrigin: window.popOrigin
 
       Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
-
-      Image {
-        anchors.centerIn: parent
-        width: Math.round(window.iconSize * 0.72)
-        height: width
-        sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
-        source: window.dock ? window.dock.iconFor(minimizedSlot.modelData) : ""
-        fillMode: Image.PreserveAspectFit
-        asynchronous: true
-        smooth: true
-        mipmap: true
-      }
     }
+
+    RunningDot {}
   }
+
 
   // The macOS running indicator: a small dot between the icon and the dock's edge.
   component RunningDot: Rectangle {
