@@ -123,3 +123,15 @@ if hl.plugin.hyprbars then
     return apply_config(options)
   end
 end
+
+-- Omarchy makes windows on floating workspaces fully opaque; keep the same
+-- glass there as on tiled workspaces. Rules it adds later for that tag drop
+-- their opacity, everything else about them stays.
+local add_window_rule = o.window
+o.window = function(match, rules)
+  if type(match) == "table" and match.tag == "omarchy-floating-workspace" and type(rules) == "table" and rules.opacity ~= nil then
+    rules.opacity = nil
+    if next(rules) == nil then return end
+  end
+  return add_window_rule(match, rules)
+end

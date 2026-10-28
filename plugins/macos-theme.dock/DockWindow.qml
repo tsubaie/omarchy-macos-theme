@@ -60,9 +60,8 @@ PanelWindow {
   // Room inward of the dock for its menus: the tallest, the apps button's,
   // has five rows.
   readonly property int popupRoom: Math.max(Style.spacing.popupRowHeight * 5 + Style.spacing.sm * 2 + Style.normalBorderWidth * 2 + gap * 2, stackRoom)
-  // The Downloads stack: four columns, three rows, a title and a footer.
-  readonly property int stackTile: Math.round(96 * Style.fontScale)
-  readonly property int stackRoom: stackTile * 4 + Style.space(120)
+  // The Downloads fan: up to ten files plus "Open in Files".
+  readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(6)) * 11 + Style.space(24))
   // Icons pop away from the screen edge.
   readonly property int popOrigin: position === "top" ? Item.Top
     : position === "left" ? Item.Left
@@ -136,6 +135,9 @@ PanelWindow {
   property Item menuSlot: null
   // The apps button's menu: where the dock sits and whether it hides.
   property bool settingsMenu: false
+  // The Trash's own menu (Open / Empty Trash), and its confirm step.
+  property bool trashMenu: false
+  property bool trashConfirm: false
 
   onWorkspaceIdChanged: if (dock) dock.readMode(workspaceId)
   onShownChanged: {
@@ -157,6 +159,12 @@ PanelWindow {
     window.menuSlot = slot
   }
 
+  function openTrashMenu(slot) {
+    window.closeMenu()
+    window.trashMenu = true
+    window.menuSlot = slot
+  }
+
   function settleShifts() {
     window.animateShifts = false
     Qt.callLater(function() { window.animateShifts = true })
@@ -172,6 +180,8 @@ PanelWindow {
 
   function closeMenu() {
     window.stackOpen = false
+    window.trashMenu = false
+    window.trashConfirm = false
     window.menuItem = null
     window.settingsMenu = false
     window.menuSlot = null
@@ -368,6 +378,7 @@ PanelWindow {
       PlaceSlot {
         iconSources: window.placeIcons(window.trashFull ? "user-trash-full" : "user-trash")
         command: "gio open trash:///"
+        trash: true
       }
     }
   }
@@ -412,7 +423,13 @@ PanelWindow {
     property string command
     property bool stack: false
 
+    property bool trash: false
+
     mouse.onClicked: function(event) {
+      if (event.button === Qt.RightButton) {
+        if (placeSlot.trash) window.openTrashMenu(placeSlot)
+        return
+      }
       if (placeSlot.stack) {
         if (window.stackOpen) window.closeMenu()
         else window.openStack(placeSlot)
@@ -718,7 +735,7 @@ PanelWindow {
     readonly property bool hasEntry: !!item && !!window.dock && !!window.dock.entryFor(item)
     readonly property bool running: !!item && item.windows.length > 0
 
-    visible: window.contentShown && (!!item || window.settingsMenu)
+    visible: window.contentShown && (!!item || window.settingsMenu || window.trashMenu)
     // Like the macOS dock menu: frosted dark glass, a faint light edge, and
     // rows that light up blue under the pointer.
     width: Math.min(Style.space(320), Math.max(Style.space(200), menuColumn.implicitWidth)) + padding * 2
@@ -760,8 +777,50 @@ PanelWindow {
 
       // The app's open windows: a check marks the front one, a diamond a
       // minimized one, as in the macOS dock menu.
+      MenuRow {
+        visible: window.trashMenu && !window.trashConfirm
+        text: "Open"
+        onTriggered: Util.execDetached("gio open trash:///")
+      }
+
+      MenuRow {
+        visible: window.trashMenu && !window.trashConfirm
+        enabled: window.trashFull
+        opacity: window.trashFull ? 1 : 0.4
+        text: "Empty Trash"
+        keepOpen: true
+        onTriggered: window.trashConfirm = true
+      }
+
+      // Emptying deletes for good, so it asks first, as macOS does.
+      Text {
+        visible: window.trashConfirm
+        width: Math.max(implicitWidth, Style.space(200))
+        textFormat: Text.PlainText
+        text: "Permanently erase the items in the Trash?"
+        wrapMode: Text.WordWrap
+        leftPadding: Style.space(10)
+        rightPadding: Style.space(10)
+        topPadding: Style.space(4)
+        bottomPadding: Style.space(6)
+        color: Commons.Color.popups.text
+        font.family: "Adwaita Sans"
+        font.pixelSize: Math.round(13 * Style.fontScale)
+      }
+
+      MenuRow {
+        visible: window.trashConfirm
+        text: "Empty Trash"
+        onTriggered: Util.execDetached("gio trash --empty")
+      }
+
+      MenuRow {
+        visible: window.trashConfirm
+        text: "Cancel"
+      }
+
       Repeater {
-        model: window.settingsMenu ? [] : menu.windows
+        model: window.settingsMenu || window.trashMenu ? [] : menu.windows
 
         delegate: MenuRow {
           required property var modelData
@@ -772,7 +831,7 @@ PanelWindow {
         }
       }
 
-      MenuSeparator { visible: !window.settingsMenu && menu.windows.length > 0 }
+      MenuSeparator { visible: !window.settingsMenu && !window.trashMenu && menu.windows.length > 0 }
 
       MenuRow {
         visible: menu.hasEntry && menu.running
@@ -855,156 +914,138 @@ PanelWindow {
     Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir + "/" + name.replace(/\/$/, "")))
   }
 
-  BorderSurface {
+  // The Downloads fan, like macOS: files rise in a column above the icon,
+  // newest nearest the dock, each name in a dark label to the left of its
+  // icon, with "Open in Files" at the top.
+  Item {
     id: stack
 
-    readonly property int columns: 4
-    readonly property int tile: window.stackTile
+    readonly property int icon: Math.round(window.iconSize * 1.05)
+    readonly property int rowHeight: icon + Style.space(6)
+    readonly property int labelRoom: Style.space(260)
+    // Oldest at the top, newest at the bottom next to the dock.
+    readonly property var files: window.stackFiles.slice(0, 10).reverse()
 
     visible: window.contentShown && opacity > 0
     opacity: window.stackOpen ? 1 : 0
-    width: stackColumn.implicitWidth + padding * 2
-    height: stackColumn.implicitHeight + padding * 2
-    x: window.popupX(window.stackSlot, stack)
-    y: window.popupY(window.stackSlot, stack)
-    radius: Math.round(Style.cornerRadius * 1.4)
-    color: Commons.Color.popups.background
-    borderSpec: Border.surfaceSpec("popups", "border", Commons.Color.popups.border, Style.normalBorderWidth)
-    padding: Style.spacing.md
+    width: labelRoom + Style.space(10) + icon + Style.space(40)
+    height: fanColumn.implicitHeight
+    // The icon column sits right above the Downloads icon.
+    x: window.stackSlot ? window.stackSlot.mapToItem(window.contentItem, window.stackSlot.width / 2, 0).x - (labelRoom + Style.space(10) + icon / 2) : 0
+    y: window.stackSlot ? body.y - height - window.gap : 0
 
-    // Slides up out of the dock as it fades in, and settles back on the way out.
     transform: Translate {
-      y: window.stackOpen ? 0 : (window.position === "top" ? -Style.space(14) : Style.space(14))
-      Behavior on y { NumberAnimation { duration: Style.duration(window.stackOpen ? 200 : 140); easing.type: Easing.OutCubic } }
+      y: window.stackOpen ? 0 : Style.space(18)
+      Behavior on y { NumberAnimation { duration: Style.duration(window.stackOpen ? 220 : 140); easing.type: Easing.OutCubic } }
     }
     Behavior on opacity { NumberAnimation { duration: Style.duration(window.stackOpen ? 180 : 120); easing.type: Easing.OutCubic } }
 
     HoverHandler { id: stackHover }
 
     Column {
-      id: stackColumn
-      x: stack.padding
-      y: stack.padding
-      spacing: Style.spacing.sm
+      id: fanColumn
+      width: parent.width
 
-      Text {
-        textFormat: Text.PlainText
-        text: "Downloads"
-        font.family: Style.font.family
-        font.pixelSize: Style.font.title
-        font.bold: true
-        color: Commons.Color.popups.text
-        leftPadding: Style.spacing.xs
-      }
-
-      Text {
-        visible: window.stackFiles.length === 0
-        textFormat: Text.PlainText
-        text: "No downloads"
-        width: stack.tile * stack.columns
-        horizontalAlignment: Text.AlignHCenter
-        topPadding: Style.space(24)
-        bottomPadding: Style.space(24)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.body
-        color: Commons.Color.popups.text
-        opacity: 0.6
-      }
-
-      Grid {
-        columns: stack.columns
-        Repeater {
-          model: window.stackFiles
-          delegate: Item {
-            id: tileItem
-            required property string modelData
-            width: stack.tile
-            height: stack.tile + Style.space(10)
-
-            Rectangle {
-              anchors.fill: parent
-              anchors.margins: Style.space(2)
-              radius: Style.space(8)
-              color: Commons.Color.popups.text
-              opacity: tileMouse.containsMouse ? 0.1 : 0
-            }
-
-            Image {
-              id: tileIcon
-              anchors.horizontalCenter: parent.horizontalCenter
-              y: Style.space(8)
-              width: Math.round(stack.tile * 0.56)
-              height: width
-              sourceSize: Qt.size(width * 2, width * 2)
-              source: window.stackIcon(tileItem.modelData)
-              fillMode: Image.PreserveAspectFit
-              asynchronous: true
-              smooth: true
-              mipmap: true
-            }
-
-            Text {
-              anchors.top: tileIcon.bottom
-              anchors.topMargin: Style.space(4)
-              anchors.horizontalCenter: parent.horizontalCenter
-              width: stack.tile - Style.space(10)
-              textFormat: Text.PlainText
-              text: tileItem.modelData.replace(/\/$/, "")
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WrapAnywhere
-              maximumLineCount: 2
-              elide: Text.ElideMiddle
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              color: Commons.Color.popups.text
-            }
-
-            MouseArea {
-              id: tileMouse
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: window.openDownload(tileItem.modelData)
-            }
-          }
+      // "Open in Files" at the top of the fan.
+      FanRow {
+        label: "Open in Files"
+        iconSource: Quickshell.iconPath("folder-open", true) || Quickshell.iconPath("folder", true)
+        arrow: true
+        index: stack.files.length
+        onActivated: {
+          window.stackOpen = false
+          Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir))
         }
       }
+
+      Repeater {
+        model: stack.files
+        delegate: FanRow {
+          required property string modelData
+          required property int index
+          label: modelData.replace(/\/$/, "")
+          iconSource: window.stackIcon(modelData)
+          // Counted from the dock, so the fan bends the same however long it is.
+          fanIndex: stack.files.length - 1 - index
+          onActivated: window.openDownload(modelData)
+        }
+      }
+    }
+  }
+
+  // One row of the fan: a dark rounded label, then the file's icon. Rows
+  // further from the dock lean a little to the right, as the macOS fan bends.
+  component FanRow: Item {
+    id: fanRow
+
+    property string label
+    property url iconSource
+    property bool arrow: false
+    property int index: 0
+    property int fanIndex: index
+    signal activated()
+
+    width: stack.width
+    height: stack.rowHeight
+
+    readonly property real bend: Math.round(fanIndex * fanIndex * Style.space(1) * 0.45)
+
+    Row {
+      x: fanRow.bend
+      height: parent.height
+      spacing: Style.space(10)
+      layoutDirection: Qt.LeftToRight
 
       Item {
-        width: Math.max(stack.tile * stack.columns, openAll.width)
-        height: openAll.height
+        width: stack.labelRoom
+        height: parent.height
 
         Rectangle {
-          id: openAll
           anchors.right: parent.right
-          width: openAllText.implicitWidth + Style.space(24)
-          height: openAllText.implicitHeight + Style.space(10)
+          anchors.verticalCenter: parent.verticalCenter
+          width: Math.min(stack.labelRoom, labelText.implicitWidth + Style.space(20))
+          height: labelText.implicitHeight + Style.space(8)
           radius: height / 2
-          color: Commons.Color.popups.text
-          opacity: openAllMouse.containsMouse ? 0.22 : 0.12
+          color: fanMouse.containsMouse ? "#0a84ff" : Qt.rgba(0.12, 0.12, 0.13, 0.85)
+          border.width: 1
+          border.color: Qt.rgba(1, 1, 1, 0.12)
 
-          MouseArea {
-            id: openAllMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              window.stackOpen = false
-              Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir))
-            }
+          Text {
+            id: labelText
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, stack.labelRoom - Style.space(20))
+            textFormat: Text.PlainText
+            text: fanRow.label + (fanRow.arrow ? "  ›" : "")
+            elide: Text.ElideMiddle
+            color: "#ffffff"
+            font.family: "Adwaita Sans"
+            font.pixelSize: Math.round(13 * Style.fontScale)
+            font.weight: fanRow.arrow ? Font.DemiBold : Font.Normal
           }
         }
-
-        Text {
-          id: openAllText
-          anchors.centerIn: openAll
-          textFormat: Text.PlainText
-          text: "Open in Files"
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
-          color: Commons.Color.popups.text
-        }
       }
+
+      Image {
+        anchors.verticalCenter: parent.verticalCenter
+        width: stack.icon
+        height: stack.icon
+        sourceSize: Qt.size(stack.icon * 2, stack.icon * 2)
+        source: fanRow.iconSource
+        fillMode: Image.PreserveAspectFit
+        asynchronous: true
+        smooth: true
+        mipmap: true
+        scale: fanMouse.containsMouse ? 1.08 : 1
+        Behavior on scale { NumberAnimation { duration: Style.duration(100); easing.type: Easing.OutCubic } }
+      }
+    }
+
+    MouseArea {
+      id: fanMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: fanRow.activated()
     }
   }
 
@@ -1027,6 +1068,7 @@ PanelWindow {
     property string text: ""
     property bool checked: false
     property string mark: checked ? "✓" : ""
+    property bool keepOpen: false
     signal triggered()
 
     readonly property int gutter: Style.space(22)
@@ -1069,9 +1111,10 @@ PanelWindow {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
+      enabled: row.enabled
       onClicked: {
         row.triggered()
-        window.closeMenu()
+        if (!row.keepOpen) window.closeMenu()
       }
     }
   }
