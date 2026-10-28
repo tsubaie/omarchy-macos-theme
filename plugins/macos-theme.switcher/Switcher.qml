@@ -9,7 +9,8 @@ import qs.Ui
 // macOS-style app switcher. Alt+Tab opens it on the next most recent app;
 // Tab / Shift+Tab move while Alt is held, releasing Alt switches, Esc cancels.
 // It lists every running app across all workspaces, most recent first, and
-// switching to one goes to the workspace its window is on.
+// switching to one goes to the workspace its window is on. Down (or `) opens
+// the selected app's windows to pick one, as on macOS.
 Item {
   id: root
 
@@ -20,6 +21,10 @@ Item {
   property bool commitWhenLoaded: false
   property int pendingStep: 1
   property var collect: []
+  // The selected app's windows, shown below the switcher to pick from.
+  property bool showWindows: false
+  property int windowIndex: 0
+  readonly property var selectedApp: root.apps[root.index] || null
 
   readonly property int tile: Math.round(104 * Style.fontScale)
   readonly property int iconSize: Math.round(80 * Style.fontScale)
@@ -30,6 +35,9 @@ Item {
     function prev(): string { root.step(-1); return "ok" }
     function commit(): string { root.commit(); return "ok" }
     function cancel(): string { root.close(); return "ok" }
+    function windows(): string { root.openWindows(); return "ok" }
+    function down(): string { root.moveWindow(1); return "ok" }
+    function up(): string { root.moveWindow(-1); return "ok" }
   }
 
   function step(direction) {
@@ -43,19 +51,43 @@ Item {
       return
     }
     if (root.apps.length > 0) root.index = (root.index + direction + root.apps.length) % root.apps.length
+    root.showWindows = false
+  }
+
+  function openWindows() {
+    if (!root.selectedApp || root.selectedApp.windows.length < 2) return
+    if (!root.showWindows) {
+      root.showWindows = true
+      root.windowIndex = 0
+    } else {
+      root.moveWindow(1)
+    }
+  }
+
+  function moveWindow(direction) {
+    if (!root.showWindows) {
+      if (direction > 0) root.openWindows()
+      return
+    }
+    var count = root.selectedApp ? root.selectedApp.windows.length : 0
+    var next = root.windowIndex + direction
+    if (next < 0) { root.showWindows = false; return }
+    root.windowIndex = Math.min(count - 1, next)
   }
 
   function commit() {
     if (!root.opened) return
     if (clients.running) { root.commitWhenLoaded = true; return }
     var app = root.apps[root.index]
+    var window = app && root.showWindows ? app.windows[root.windowIndex] : (app ? app.windows[0] : null)
     root.close()
-    if (app) root.activate(app)
+    if (window) root.activate(window)
   }
 
   function close() {
     root.opened = false
     root.commitWhenLoaded = false
+    root.showWindows = false
   }
 
   // A window without an app id may name its app at the end of its title.
@@ -96,16 +128,20 @@ Item {
           name: entry ? String(entry.name || "") : (cls || String(c.title || "")),
           icon: Quickshell.iconPath(entry && entry.icon ? entry.icon : cls, true) || Quickshell.iconPath("application-x-executable", true),
           rank: rank,
-          address: c.address,
-          minimized: minimized
+          windows: []
         }
         out.push(app)
-      } else if (rank < app.rank) {
-        app.rank = rank
-        app.address = c.address
-        app.minimized = minimized
       }
+      app.rank = Math.min(app.rank, rank)
+      app.windows.push({
+        address: c.address,
+        title: String(c.title || ""),
+        workspace: minimized ? "minimized" : String(ws.name || ws.id),
+        minimized: minimized,
+        rank: rank
+      })
     }
+    out.forEach(function(app) { app.windows.sort(function(a, b) { return a.rank - b.rank }) })
     out.sort(function(a, b) { return a.rank - b.rank })
     root.apps = out
     // Like macOS, the first press lands on the previous app.
@@ -116,10 +152,10 @@ Item {
     else if (root.commitWhenLoaded) root.commit()
   }
 
-  function activate(app) {
-    var target = "window = \"address:" + app.address + "\""
+  function activate(window) {
+    var target = "window = \"address:" + window.address + "\""
     var steps = []
-    if (app.minimized) {
+    if (window.minimized) {
       // Back from the dock onto the workspace in front of the user.
       steps.push("hl.dsp.window.move({ workspace = \"e+0\", " + target + " })")
     }
@@ -157,6 +193,8 @@ Item {
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Right) root.step(1)
         else if (event.key === Qt.Key_Backtab || event.key === Qt.Key_Left) root.step(-1)
+        else if (event.key === Qt.Key_Down || event.key === Qt.Key_QuoteLeft) root.moveWindow(1)
+        else if (event.key === Qt.Key_Up) root.moveWindow(-1)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.commit()
         else if (event.key === Qt.Key_Escape) root.close()
         else return
@@ -224,13 +262,29 @@ Item {
               asynchronous: true
             }
 
+            // Apps with several windows get a small dot per window (up to four)
+            // under the icon, so the window list is discoverable.
+            Row {
+              visible: !tileItem.selected && tileItem.modelData.windows.length > 1
+              anchors.horizontalCenter: parent.horizontalCenter
+              y: root.tile + Style.space(8)
+              spacing: Style.space(4)
+              Repeater {
+                model: Math.min(4, tileItem.modelData.windows.length)
+                Rectangle {
+                  width: Style.space(5); height: width; radius: width / 2
+                  color: Qt.rgba(1, 1, 1, 0.6)
+                }
+              }
+            }
+
             Text {
               id: nameText
               y: root.tile + Style.space(6)
               width: root.tile
               horizontalAlignment: Text.AlignHCenter
               textFormat: Text.PlainText
-              text: tileItem.modelData.name
+              text: tileItem.modelData.name + (tileItem.modelData.windows.length > 1 && !root.showWindows ? "  ⌄" : "")
               visible: tileItem.selected
               elide: Text.ElideRight
               color: Qt.rgba(1, 1, 1, 0.85)
@@ -244,6 +298,82 @@ Item {
               cursorShape: Qt.PointingHandCursor
               onEntered: root.index = tileItem.index
               onClicked: { root.index = tileItem.index; root.commit() }
+            }
+          }
+        }
+      }
+    }
+
+    // The selected app's windows, newest first, on the same glass below the
+    // switcher. Up / Down pick one; letting go of Alt switches to it.
+    Rectangle {
+      id: windowList
+      visible: root.showWindows && !!root.selectedApp
+      anchors.top: card.bottom
+      anchors.topMargin: Style.space(12)
+      anchors.horizontalCenter: card.horizontalCenter
+      width: Math.min(Style.space(560), Math.max(Style.space(320), windowColumn.implicitWidth)) + Style.space(16)
+      height: windowColumn.implicitHeight + Style.space(16)
+      radius: Style.space(18)
+      color: Qt.rgba(0.2, 0.2, 0.23, 0.34)
+
+      MouseArea { anchors.fill: parent }
+
+      Column {
+        id: windowColumn
+        x: Style.space(8)
+        y: Style.space(8)
+        width: windowList.width - Style.space(16)
+
+        Repeater {
+          model: windowList.visible ? root.selectedApp.windows : []
+
+          delegate: Rectangle {
+            id: windowRow
+            required property var modelData
+            required property int index
+            readonly property bool selected: windowRow.index === root.windowIndex
+
+            width: windowColumn.width
+            implicitWidth: rowText.implicitWidth + rowWs.implicitWidth + Style.space(40)
+            height: Style.space(32)
+            radius: Style.space(9)
+            color: windowRow.selected ? Qt.rgba(0, 0, 0, 0.28) : "transparent"
+
+            Text {
+              id: rowText
+              anchors.left: parent.left
+              anchors.leftMargin: Style.space(12)
+              anchors.right: rowWs.left
+              anchors.rightMargin: Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: windowRow.modelData.title || root.selectedApp.name
+              elide: Text.ElideRight
+              color: "#ffffff"
+              font.family: "Adwaita Sans"
+              font.pixelSize: Math.round(13 * Style.fontScale)
+            }
+
+            // Where the window is: its workspace, or that it is minimized.
+            Text {
+              id: rowWs
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: windowRow.modelData.minimized ? "Minimized" : "Workspace " + windowRow.modelData.workspace
+              color: Qt.rgba(1, 1, 1, 0.55)
+              font.family: "Adwaita Sans"
+              font.pixelSize: Math.round(12 * Style.fontScale)
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onEntered: root.windowIndex = windowRow.index
+              onClicked: { root.windowIndex = windowRow.index; root.commit() }
             }
           }
         }
