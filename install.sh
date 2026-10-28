@@ -4,6 +4,7 @@
 #   ./install.sh                  theme only
 #   ./install.sh --osd            + frosted volume/brightness capsule
 #   ./install.sh --dictation-hud  + Voxtype dictation pill
+#   ./install.sh --dock           + minimized windows at the end of the dock
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -30,17 +31,19 @@ GTK_LINE="@import url(\"file://$OMARCHY_PATH/default/gtk/glass.css\");"
 
 OSD_ID="macos-theme.osd"
 HUD_ID="macos-theme.dictation-hud"
+DOCK_ID="macos-theme.dock"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false uninstall=false
+with_osd=false with_hud=false with_dock=false uninstall=false
 for arg in "$@"; do
   case "$arg" in
     --osd) with_osd=true ;;
     --dictation-hud) with_hud=true ;;
-    --all) with_osd=true; with_hud=true ;;
+    --dock) with_dock=true ;;
+    --all) with_osd=true; with_hud=true; with_dock=true ;;
     --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -65,6 +68,12 @@ if $uninstall; then
     omarchy plugin enable omarchy.osd >/dev/null 2>&1 || true
     rm -rf "${PLUGINS_DIR:?}/$OSD_ID"
     say "Removed the volume capsule and restored Omarchy's own"
+  fi
+  if [[ -d $PLUGINS_DIR/$DOCK_ID ]]; then
+    omarchy plugin disable "$DOCK_ID" >/dev/null 2>&1 || true
+    omarchy plugin enable omarchy.dock >/dev/null 2>&1 || true
+    rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
+    say "Removed the macOS dock and restored Omarchy's own"
   fi
   if [[ -d $PLUGINS_DIR/$HUD_ID ]]; then
     omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
@@ -125,6 +134,11 @@ if $with_osd; then
   omarchy plugin disable omarchy.osd >/dev/null 2>&1 || true
   say "Installed the frosted volume capsule (replaces Omarchy's own popup)"
 fi
+if $with_dock; then
+  install_plugin "$DOCK_ID"
+  omarchy plugin disable omarchy.dock >/dev/null 2>&1 || true
+  say "Installed the macOS dock (minimized windows sit after a divider at its end)"
+fi
 if $with_hud; then
   install_plugin "$HUD_ID"
   say "Installed the dictation HUD"
@@ -136,6 +150,13 @@ if $with_hud; then
   fi
 fi
 
-# 5. Apply.
-omarchy theme set macos
+# 5. Apply. Re-applying the active theme would move to its next wallpaper, so
+# when it is already active, refresh it in place instead.
+if [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; then
+  cp -r "$REPO/theme/." "$HOME/.local/state/omarchy/current/theme/"
+  hyprctl reload >/dev/null
+  omarchy restart shell >/dev/null 2>&1 || true
+else
+  omarchy theme set macos
+fi
 say "Done. The bar, menus and popups pick up the theme now; restart the shell if they don't: omarchy restart shell"

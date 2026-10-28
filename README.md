@@ -18,6 +18,7 @@ A dark macOS look for [Omarchy](https://omarchy.org), following Apple's Liquid G
 Optional extras:
 
 - **Volume capsule** (`--osd`): the volume and brightness popup as a frosted pill with a white slider.
+- **Minimized windows in the dock** (`--dock`): like macOS, each minimized window gets its own icon after a divider at the end of the dock. Click it to bring the window back.
 - **Dictation HUD** (`--dictation-hud`): a frosted pill with a red mic and moving bars while [Voxtype](https://voxtype.io) is recording, and "Transcribing" with pulsing dots after.
 
 ## Install
@@ -26,7 +27,7 @@ Optional extras:
 git clone https://github.com/tsubaie/omarchy-macos-theme.git
 cd omarchy-macos-theme
 ./install.sh            # theme only
-./install.sh --all      # theme + volume capsule + dictation HUD
+./install.sh --all      # theme + volume capsule + dock + dictation HUD
 ```
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps.
@@ -69,7 +70,7 @@ Bar, menu and popup colors and transparency are in `shell.toml` in the same fold
 ## Credits
 
 - Wallpapers: [photo by Pawel Czerwinski on Unsplash](https://unsplash.com/photos/ZkzobNDayXo) and [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4), used under the [Unsplash License](https://unsplash.com/license).
-- The volume capsule is a restyled copy of Omarchy's own on-screen display ([Omarchy](https://github.com/basecamp/omarchy), MIT License).
+- The volume capsule and dock are modified copies of Omarchy's own on-screen display and dock ([Omarchy](https://github.com/basecamp/omarchy), MIT License).
 - Colors follow Apple's published dark-mode system colors. This project isn't affiliated with or endorsed by Apple. macOS and Liquid Glass are trademarks of Apple Inc.
 
 ## License

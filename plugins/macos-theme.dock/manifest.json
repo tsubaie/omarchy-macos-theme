@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.dock",
+  "name": "macOS dock",
+  "version": "1.0.0",
+  "description": "Omarchy's dock with a macOS-style section of minimized windows after a divider.",
+  "license": "MIT",
+  "kinds": ["service"],
+  "entryPoints": {
+    "service": "Dock.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.dock"
+  }
+}
