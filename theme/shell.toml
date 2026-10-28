@@ -139,13 +139,12 @@ border           = "hyprland.active-border-foreground"
 border-alpha     = 1.0
 
 [notifications]
-background       = "#1c1c1e"
-background-alpha = 0.72
+# The same borderless frosted glass as the dock, its menus and the switchers.
+background       = "#33333b"
+background-alpha = 0.45
 text             = "#f5f5f7"
-# Conventionally matches the Hyprland active-window border. Border accepts
-# either a solid color or the full active-border gradient.
 border           = "hyprland.active-border"
-border-alpha     = 1.0
+border-alpha     = 0.0
 # border-width     = 2
 countdown        = "#0a84ff"
 
