@@ -43,7 +43,7 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOut
 -- Frosted glass behind the bar (it is almost clear, so blur every pixel of it)
 -- and behind the dock, menus, launcher, notifications and popups.
 hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popups = true, ignore_alpha = 0.0 })
-hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher|spotlight)$" }, blur = true, ignore_alpha = 0.3 })
+hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher)$" }, blur = true, ignore_alpha = 0.3 })
 
 -- Menus, popups and the launcher pop in with the same spring as windows.
 hl.animation({ leaf = "layersIn", enabled = true, speed = 3.5, bezier = "macSpring", style = "popin 92%" })
@@ -146,11 +146,4 @@ if switcher then
   o.rebind("ALT + SHIFT + TAB", "App switcher (previous)", "omarchy-shell -q macos-switcher prev")
   o.rebind("SUPER + TAB", "Workspace switcher", "omarchy-shell -q macos-spaces next")
   o.rebind("SUPER + SHIFT + TAB", "Workspace switcher (previous)", "omarchy-shell -q macos-spaces prev")
-end
-
--- Super+Space opens the Spotlight-style launcher when its plugin is installed.
-local spotlight = io.open((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/omarchy/plugins/macos-theme.spotlight/manifest.json", "r")
-if spotlight then
-  spotlight:close()
-  o.rebind("SUPER + SPACE", "Spotlight", "omarchy-shell -q macos-spotlight toggle")
 end
