@@ -313,14 +313,12 @@ PanelWindow {
     // frame back instead of being uploaded again.
     opacity: window.shown ? 1 : 0
 
-    // The macOS dock platter: a rounded sheet of frosted glass behind the icons,
-    // with a faint light edge. Hyprland blurs what is behind it.
+    // The macOS dock platter: a borderless sheet of tinted glass behind the
+    // icons, the same as the app switcher. Hyprland blurs what is behind it.
     Rectangle {
       anchors.fill: parent
       radius: Math.round((window.slotSize + window.platterPadding * 2) * 0.3)
-      color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.4)
-      border.width: 1
-      border.color: Qt.rgba(1, 1, 1, 0.16)
+      color: Qt.rgba(0.2, 0.2, 0.23, 0.34)
     }
 
     HoverHandler {
