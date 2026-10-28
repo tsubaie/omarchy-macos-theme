@@ -21,7 +21,11 @@ Item {
   property var collect: []
   property string wallpaper: ""
 
-  readonly property int thumbWidth: Math.round(300 * Style.fontScale)
+  // Large miniatures, shrunk only as far as needed to fit the screen.
+  property int screenWidth: 1920
+  readonly property int thumbWidth: Math.max(Math.round(200 * Style.fontScale),
+    Math.min(Math.round(420 * Style.fontScale),
+      Math.floor((screenWidth - Style.space(160) - Math.max(0, spaces.length - 1) * Style.space(22)) / Math.max(1, spaces.length) - Style.space(12))))
 
   ShellIpc {
     target: "macos-spaces"
@@ -115,7 +119,9 @@ Item {
   }
 
   OverlayWindow {
+    id: spacesWindow
     shown: root.opened && root.spaces.length > 0
+    onWidthChanged: if (width > 0) root.screenWidth = width
     WlrLayershell.namespace: "omarchy-switcher"
     onContentRevealedChanged: if (contentRevealed) keys.forceActiveFocus()
 
@@ -160,7 +166,7 @@ Item {
       Row {
         id: row
         anchors.centerIn: parent
-        spacing: Style.space(18)
+        spacing: Style.space(22)
 
         Repeater {
           model: root.opened ? root.spaces : []
@@ -170,8 +176,12 @@ Item {
             required property var modelData
             required property int index
             readonly property bool selected: spaceItem.index === root.index
-            readonly property real scaleFactor: root.thumbWidth / Math.max(1, modelData.monitor.width)
-            readonly property int thumbHeight: Math.round(modelData.monitor.height * scaleFactor)
+            // A taller box than an ultrawide screen's shape: the wallpaper fills
+            // it and the windows sit centered at their true proportions.
+            readonly property int thumbHeight: Math.round(root.thumbWidth * 0.56)
+            readonly property real scaleFactor: Math.min(root.thumbWidth / Math.max(1, modelData.monitor.width), thumbHeight / Math.max(1, modelData.monitor.height))
+            readonly property real offsetX: (root.thumbWidth - modelData.monitor.width * scaleFactor) / 2
+            readonly property real offsetY: (thumbHeight - modelData.monitor.height * scaleFactor) / 2
 
             width: root.thumbWidth + Style.space(12)
             height: thumbHeight + Style.space(12) + label.height + Style.space(8)
@@ -208,8 +218,8 @@ Item {
 
                 delegate: Item {
                   required property var modelData
-                  x: Math.round((modelData.x - spaceItem.modelData.monitor.x) * spaceItem.scaleFactor)
-                  y: Math.round((modelData.y - spaceItem.modelData.monitor.y) * spaceItem.scaleFactor)
+                  x: Math.round(spaceItem.offsetX + (modelData.x - spaceItem.modelData.monitor.x) * spaceItem.scaleFactor)
+                  y: Math.round(spaceItem.offsetY + (modelData.y - spaceItem.modelData.monitor.y) * spaceItem.scaleFactor)
                   width: Math.max(4, Math.round(modelData.w * spaceItem.scaleFactor))
                   height: Math.max(4, Math.round(modelData.h * spaceItem.scaleFactor))
 
@@ -224,6 +234,7 @@ Item {
                     captureSource: root.opened ? root.toplevelFor(parent.modelData.address) : null
                     live: root.opened
                     constraintSize: Qt.size(width * 2, height * 2)
+                    smooth: true
                   }
                 }
               }

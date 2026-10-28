@@ -137,6 +137,7 @@ PanelWindow {
   property bool settingsMenu: false
   // The Trash's own menu (Open / Empty Trash), and its confirm step.
   property bool trashMenu: false
+  property bool downloadsMenu: false
   property bool trashConfirm: false
 
   onWorkspaceIdChanged: if (dock) dock.readMode(workspaceId)
@@ -165,6 +166,12 @@ PanelWindow {
     window.menuSlot = slot
   }
 
+  function openDownloadsMenu(slot) {
+    window.closeMenu()
+    window.downloadsMenu = true
+    window.menuSlot = slot
+  }
+
   function settleShifts() {
     window.animateShifts = false
     Qt.callLater(function() { window.animateShifts = true })
@@ -181,6 +188,7 @@ PanelWindow {
   function closeMenu() {
     window.stackOpen = false
     window.trashMenu = false
+    window.downloadsMenu = false
     window.trashConfirm = false
     window.menuItem = null
     window.settingsMenu = false
@@ -230,6 +238,7 @@ PanelWindow {
 
     Region { item: window.shown && window.autohide ? edgeTrigger : null }
     Region { item: menu.visible ? menu : null }
+    Region { item: menuTail.visible ? menuTail : null }
     Region { item: stack.visible ? stack : null }
   }
 
@@ -429,6 +438,7 @@ PanelWindow {
     mouse.onClicked: function(event) {
       if (event.button === Qt.RightButton) {
         if (placeSlot.trash) window.openTrashMenu(placeSlot)
+        else if (placeSlot.stack) window.openDownloadsMenu(placeSlot)
         return
       }
       if (placeSlot.stack) {
@@ -549,7 +559,7 @@ PanelWindow {
       text: tipLabel.text
       color: "#ffffff"
       font.family: "Adwaita Sans"
-      font.pixelSize: Math.round(13 * Style.fontScale)
+      font.pixelSize: Math.round(15 * Style.fontScale)
     }
   }
 
@@ -784,17 +794,19 @@ PanelWindow {
     readonly property bool hasEntry: !!item && !!window.dock && !!window.dock.entryFor(item)
     readonly property bool running: !!item && item.windows.length > 0
 
-    visible: window.contentShown && (!!item || window.settingsMenu || window.trashMenu)
-    // Like the macOS dock menu: frosted dark glass, a faint light edge, and
-    // rows that light up blue under the pointer.
-    width: Math.min(Style.space(320), Math.max(Style.space(200), menuColumn.implicitWidth)) + padding * 2
+    visible: window.contentShown && (!!item || window.settingsMenu || window.trashMenu || window.downloadsMenu)
+    // Like the macOS dock menu: translucent slate glass with a faint light
+    // edge, roomy rows, grey section headings, and a tail pointing at the icon.
+    readonly property color fill: Qt.rgba(0.17, 0.19, 0.23, 0.86)
+    readonly property int tail: window.position === "bottom" ? Style.space(9) : 0
+    width: Math.min(Style.space(360), Math.max(Style.space(220), menuColumn.implicitWidth)) + padding * 2
     height: menuColumn.implicitHeight + padding * 2
     x: window.popupX(window.menuSlot, menu)
-    y: window.popupY(window.menuSlot, menu)
+    y: window.popupY(window.menuSlot, menu) - tail
     radius: Style.space(10)
-    color: Qt.rgba(0.16, 0.16, 0.17, 0.82)
-    borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.16), 1)
-    padding: Style.space(5)
+    color: fill
+    borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.18), 1)
+    padding: Style.space(6)
 
     readonly property var windows: item ? item.windows : []
 
@@ -826,6 +838,12 @@ PanelWindow {
 
       // The app's open windows: a check marks the front one, a diamond a
       // minimized one, as in the macOS dock menu.
+      MenuRow {
+        visible: window.downloadsMenu
+        text: "Open “Downloads”"
+        onTriggered: Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir))
+      }
+
       MenuRow {
         visible: window.trashMenu && !window.trashConfirm
         text: "Open"
@@ -869,7 +887,7 @@ PanelWindow {
       }
 
       Repeater {
-        model: window.settingsMenu || window.trashMenu ? [] : menu.windows
+        model: window.settingsMenu || window.trashMenu || window.downloadsMenu ? [] : menu.windows
 
         delegate: MenuRow {
           required property var modelData
@@ -880,7 +898,7 @@ PanelWindow {
         }
       }
 
-      MenuSeparator { visible: !window.settingsMenu && !window.trashMenu && menu.windows.length > 0 }
+      MenuSeparator { visible: !window.settingsMenu && !window.trashMenu && !window.downloadsMenu && menu.windows.length > 0 }
 
       MenuRow {
         visible: menu.hasEntry && menu.running
@@ -888,9 +906,17 @@ PanelWindow {
         onTriggered: window.dock.launch(menu.item)
       }
 
+      MenuSeparator { visible: menu.hasEntry && menu.running }
+
+      MenuHeader {
+        visible: menu.hasEntry
+        text: "Options"
+      }
+
+      // As in macOS's Options: a check shows the app is kept in the dock.
       MenuRow {
         visible: menu.hasEntry
-        text: menu.item && menu.item.pinned ? Commons.I18n.t("dock.removeFromDock") : Commons.I18n.t("dock.keepInDock")
+        text: Commons.I18n.t("dock.keepInDock")
         checked: !!menu.item && menu.item.pinned
         onTriggered: window.dock.setPinned(menu.item.key, !menu.item.pinned)
       }
@@ -902,6 +928,33 @@ PanelWindow {
         text: Commons.I18n.t("dock.quit")
         onTriggered: window.dock.quit(menu.item)
       }
+    }
+  }
+
+  Canvas {
+    id: menuTail
+    visible: menu.visible && menu.tail > 0 && !!window.menuSlot
+    width: menu.tail * 2
+    height: menu.tail
+    x: window.menuSlot ? window.menuSlot.mapToItem(window.contentItem, window.menuSlot.width / 2, 0).x - width / 2 : 0
+    y: menu.y + menu.height - 1
+    onVisibleChanged: requestPaint()
+    onPaint: {
+      var ctx = getContext("2d")
+      ctx.reset()
+      ctx.fillStyle = menu.fill
+      ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.18)
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, 0)
+      ctx.lineTo(width / 2, height)
+      ctx.lineTo(width, 0)
+      ctx.fill()
+      ctx.beginPath()
+      ctx.moveTo(0.5, 0.5)
+      ctx.lineTo(width / 2, height - 0.5)
+      ctx.lineTo(width - 0.5, 0.5)
+      ctx.stroke()
     }
   }
 
@@ -1144,6 +1197,26 @@ PanelWindow {
   }
 
   // A thin rule between groups of rows, inset like the macOS menu's.
+  // A grey, unclickable section heading ("Options", "Display as").
+  component MenuHeader: Item {
+    property string text
+    width: parent ? parent.width : 0
+    implicitWidth: Style.space(28) + headerText.implicitWidth + Style.space(18)
+    height: visible ? Style.space(28) : 0
+
+    Text {
+      id: headerText
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(28)
+      textFormat: Text.PlainText
+      text: parent.text
+      color: Qt.rgba(1, 1, 1, 0.42)
+      font.family: "Adwaita Sans"
+      font.pixelSize: Math.round(15 * Style.fontScale)
+    }
+  }
+
   component MenuSeparator: Item {
     width: parent ? parent.width : 0
     height: visible ? Style.space(11) : 0
@@ -1165,12 +1238,12 @@ PanelWindow {
     property bool keepOpen: false
     signal triggered()
 
-    readonly property int gutter: Style.space(22)
+    readonly property int gutter: Style.space(28)
 
     width: parent ? parent.width : 0
-    implicitWidth: gutter + rowText.implicitWidth + Style.space(14)
-    height: visible ? Style.space(24) : 0
-    radius: Style.space(5)
+    implicitWidth: gutter + rowText.implicitWidth + Style.space(18)
+    height: visible ? Style.space(30) : 0
+    radius: Style.space(6)
     color: rowMouse.containsMouse ? "#0a84ff" : "transparent"
 
     Text {
@@ -1182,7 +1255,7 @@ PanelWindow {
       text: row.mark
       color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
       font.family: "Adwaita Sans"
-      font.pixelSize: row.mark === "◆" ? Style.font.caption : Style.font.body
+      font.pixelSize: row.mark === "◆" ? Math.round(10 * Style.fontScale) : Math.round(15 * Style.fontScale)
     }
 
     Text {
