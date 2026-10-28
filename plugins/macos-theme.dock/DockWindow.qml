@@ -978,7 +978,7 @@ PanelWindow {
     }
   }
 
-  // One row of the fan: a light frosted label, then the file's icon. Rows
+  // One row of the fan: a dark frosted label (dark mode), then the file's icon. Rows
   // further from the dock lean a little to the right, as the macOS fan bends.
   component FanRow: Item {
     id: fanRow
@@ -994,8 +994,8 @@ PanelWindow {
     height: stack.rowHeight
 
     // The fan bends right and tilts more the further a row is from the dock.
-    readonly property real bend: Math.round(fanIndex * fanIndex * Style.space(1) * 1.1)
-    readonly property real tilt: -(2 + fanIndex * 1.3)
+    readonly property real bend: Math.round(fanIndex * fanIndex * Style.space(1) * 0.6)
+    readonly property real tilt: 1 + fanIndex * 0.55
 
     Item {
       id: rowBody
@@ -1016,9 +1016,9 @@ PanelWindow {
         width: Math.min(stack.labelRoom, labelText.implicitWidth + Style.space(18))
         height: labelText.implicitHeight + Style.space(6)
         radius: Style.space(5)
-        color: fanMouse.containsMouse ? "#0a84ff" : Qt.rgba(0.9, 0.9, 0.92, 0.9)
+        color: fanMouse.containsMouse ? "#0a84ff" : Qt.rgba(0.11, 0.11, 0.12, 0.82)
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.5)
+        border.color: Qt.rgba(1, 1, 1, 0.14)
 
         Text {
           id: labelText
@@ -1027,7 +1027,7 @@ PanelWindow {
           textFormat: Text.PlainText
           text: fanRow.label
           elide: Text.ElideMiddle
-          color: fanMouse.containsMouse ? "#ffffff" : "#2b2b2e"
+          color: "#ffffff"
           font.family: "Adwaita Sans"
           font.pixelSize: Math.round(13 * Style.fontScale)
         }
