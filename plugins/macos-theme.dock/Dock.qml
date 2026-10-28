@@ -14,7 +14,45 @@ Item {
   property var shell: null
   property var manifest: null
 
-  readonly property var appLibrary: shell ? shell.appLibrary : null
+  // Omarchy hands its app library only to "menu" plugins, so as a service the
+  // dock gets none, and New Window, launching and the app grid did nothing.
+  // Fall back to a small library that launches the way Omarchy's does.
+  readonly property var appLibrary: shell && shell.appLibrary ? shell.appLibrary : localLibrary
+
+  QtObject {
+    id: localLibrary
+
+    signal appsChanged()
+
+    function entryName(entry) { return entry ? String(entry.name || entry.id || "") : "" }
+    function entrySubtext(entry) { return entry ? String(entry.genericName || entry.comment || "") : "" }
+    function iconSource(icon) { return Quickshell.iconPath(String(icon || ""), true) }
+    function refreshIcons() {}
+    function remove(desktopId, name) {}
+
+    function sortedEntries(query) {
+      var needle = String(query || "").toLowerCase()
+      return (DesktopEntries.applications.values || []).filter(function(entry) {
+        if (!entry || entry.noDisplay) return false
+        return !needle || String(entry.name || "").toLowerCase().indexOf(needle) >= 0
+      }).sort(function(a, b) {
+        return String(a.name || "").localeCompare(String(b.name || ""))
+      })
+    }
+
+    // Terminal apps go through Omarchy's TUI launcher, the rest through
+    // gtk-launch in their own scope, as Omarchy's app library does.
+    function launch(desktopId, name) {
+      var id = String(desktopId || "")
+      if (!id) return
+      var entry = DesktopEntries.byId(id)
+      if (entry && entry.runInTerminal && entry.command && entry.command.length > 0) {
+        Util.execDetached("omarchy-launch-tui " + entry.command.map(function(word) { return Util.shellQuote(word) }).join(" "))
+        return
+      }
+      Util.execDetached("uwsm-app -- gtk-launch " + Util.shellQuote(id + ".desktop"))
+    }
+  }
   // A user plugin is handed the bar and idle settings but not the dock's, so
   // read the dock section of shell.json (and Omarchy's defaults) directly and
   // follow the file as `omarchy dock` changes it. Without this, pins, position

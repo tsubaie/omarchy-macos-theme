@@ -862,12 +862,14 @@ PanelWindow {
   property Item stackSlot: null
   property var stackFiles: []
   property var stackCollect: []
+  property int stackTotal: 0
   readonly property string downloadsDir: Quickshell.env("HOME") + "/Downloads"
 
   function openStack(slot) {
     window.closeMenu()
     window.stackSlot = slot
     window.stackCollect = []
+    window.stackTotal = -1
     stackList.running = true
     window.stackOpen = true
   }
@@ -875,11 +877,13 @@ PanelWindow {
   Process {
     id: stackList
     // Newest first; -p marks folders with a trailing slash.
-    command: ["sh", "-c", "cd \"$HOME/Downloads\" 2>/dev/null && ls -t -A -p | head -n 12"]
+    // The first line is how many items Downloads holds; then the newest ten.
+    command: ["sh", "-c", "cd \"$HOME/Downloads\" 2>/dev/null && ls -A | wc -l && ls -t -A -p | head -n 10"]
     stdout: SplitParser {
       onRead: function(line) {
         // Names are shown as plain text and only ever passed quoted to xdg-open.
-        if (line.length > 0 && line.length < 512) window.stackCollect.push(line)
+        if (window.stackTotal < 0) window.stackTotal = parseInt(line, 10) || 0
+        else if (line.length > 0 && line.length < 512) window.stackCollect.push(line)
       }
     }
     onExited: window.stackFiles = window.stackCollect.slice()
@@ -925,10 +929,12 @@ PanelWindow {
     readonly property int labelRoom: Style.space(260)
     // Oldest at the top, newest at the bottom next to the dock.
     readonly property var files: window.stackFiles.slice(0, 10).reverse()
+    // Room for the curve and tilt of the rows furthest from the dock.
+    readonly property int lean: Style.space(140)
 
     visible: window.contentShown && opacity > 0
     opacity: window.stackOpen ? 1 : 0
-    width: labelRoom + Style.space(10) + icon + Style.space(40)
+    width: labelRoom + Style.space(10) + icon + lean
     height: fanColumn.implicitHeight
     // The icon column sits right above the Downloads icon.
     x: window.stackSlot ? window.stackSlot.mapToItem(window.contentItem, window.stackSlot.width / 2, 0).x - (labelRoom + Style.space(10) + icon / 2) : 0
@@ -948,8 +954,7 @@ PanelWindow {
 
       // "Open in Files" at the top of the fan.
       FanRow {
-        label: "Open in Files"
-        iconSource: Quickshell.iconPath("folder-open", true) || Quickshell.iconPath("folder", true)
+        label: window.stackTotal > stack.files.length ? (window.stackTotal - stack.files.length) + " More in Files" : "Open in Files"
         arrow: true
         index: stack.files.length
         onActivated: {
@@ -973,7 +978,7 @@ PanelWindow {
     }
   }
 
-  // One row of the fan: a dark rounded label, then the file's icon. Rows
+  // One row of the fan: a light frosted label, then the file's icon. Rows
   // further from the dock lean a little to the right, as the macOS fan bends.
   component FanRow: Item {
     id: fanRow
@@ -988,61 +993,94 @@ PanelWindow {
     width: stack.width
     height: stack.rowHeight
 
-    readonly property real bend: Math.round(fanIndex * fanIndex * Style.space(1) * 0.45)
+    // The fan bends right and tilts more the further a row is from the dock.
+    readonly property real bend: Math.round(fanIndex * fanIndex * Style.space(1) * 1.1)
+    readonly property real tilt: -(2 + fanIndex * 1.3)
 
-    Row {
+    Item {
+      id: rowBody
       x: fanRow.bend
+      width: stack.labelRoom + Style.space(10) + stack.icon
       height: parent.height
-      spacing: Style.space(10)
-      layoutDirection: Qt.LeftToRight
 
-      Item {
-        width: stack.labelRoom
-        height: parent.height
+      transform: Rotation {
+        origin.x: rowBody.width - stack.icon / 2
+        origin.y: rowBody.height / 2
+        angle: fanRow.tilt
+      }
 
-        Rectangle {
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          width: Math.min(stack.labelRoom, labelText.implicitWidth + Style.space(20))
-          height: labelText.implicitHeight + Style.space(8)
-          radius: height / 2
-          color: fanMouse.containsMouse ? "#0a84ff" : Qt.rgba(0.12, 0.12, 0.13, 0.85)
-          border.width: 1
-          border.color: Qt.rgba(1, 1, 1, 0.12)
+      Rectangle {
+        anchors.right: rowIcon.left
+        anchors.rightMargin: Style.space(10)
+        anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(stack.labelRoom, labelText.implicitWidth + Style.space(18))
+        height: labelText.implicitHeight + Style.space(6)
+        radius: Style.space(5)
+        color: fanMouse.containsMouse ? "#0a84ff" : Qt.rgba(0.9, 0.9, 0.92, 0.9)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.5)
 
-          Text {
-            id: labelText
-            anchors.centerIn: parent
-            width: Math.min(implicitWidth, stack.labelRoom - Style.space(20))
-            textFormat: Text.PlainText
-            text: fanRow.label + (fanRow.arrow ? "  ›" : "")
-            elide: Text.ElideMiddle
-            color: "#ffffff"
-            font.family: "Adwaita Sans"
-            font.pixelSize: Math.round(13 * Style.fontScale)
-            font.weight: fanRow.arrow ? Font.DemiBold : Font.Normal
-          }
+        Text {
+          id: labelText
+          anchors.centerIn: parent
+          width: Math.min(implicitWidth, stack.labelRoom - Style.space(18))
+          textFormat: Text.PlainText
+          text: fanRow.label
+          elide: Text.ElideMiddle
+          color: fanMouse.containsMouse ? "#ffffff" : "#2b2b2e"
+          font.family: "Adwaita Sans"
+          font.pixelSize: Math.round(13 * Style.fontScale)
         }
       }
 
-      Image {
+      Item {
+        id: rowIcon
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         width: stack.icon
         height: stack.icon
-        sourceSize: Qt.size(stack.icon * 2, stack.icon * 2)
-        source: fanRow.iconSource
-        fillMode: Image.PreserveAspectFit
-        asynchronous: true
-        smooth: true
-        mipmap: true
         scale: fanMouse.containsMouse ? 1.08 : 1
         Behavior on scale { NumberAnimation { duration: Style.duration(100); easing.type: Easing.OutCubic } }
+
+        Image {
+          visible: !fanRow.arrow
+          anchors.fill: parent
+          sourceSize: Qt.size(stack.icon * 2, stack.icon * 2)
+          source: fanRow.arrow ? "" : fanRow.iconSource
+          fillMode: Image.PreserveAspectFit
+          asynchronous: true
+          smooth: true
+          mipmap: true
+        }
+
+        // The round "more" button at the top of the fan.
+        Rectangle {
+          visible: fanRow.arrow
+          anchors.centerIn: parent
+          width: Math.round(parent.width * 0.86)
+          height: width
+          radius: width / 2
+          color: Qt.rgba(0.72, 0.74, 0.78, 0.92)
+          border.width: 1
+          border.color: Qt.rgba(1, 1, 1, 0.55)
+
+          Text {
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: "\uf064"
+            color: "#ffffff"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: Math.round(parent.width * 0.46)
+          }
+        }
       }
     }
 
     MouseArea {
       id: fanMouse
-      anchors.fill: parent
+      x: rowBody.x
+      width: rowBody.width
+      height: parent.height
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: fanRow.activated()
