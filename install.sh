@@ -6,6 +6,7 @@
 #   ./install.sh --dictation-hud  + Voxtype dictation pill
 #   ./install.sh --dock           + macOS dock (running dots, Downloads stack, Trash)
 #   ./install.sh --icons          + MacTahoe macOS icon theme (from GitHub)
+#   ./install.sh --switcher       + macOS app switcher on Alt+Tab
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -33,19 +34,21 @@ GTK_LINE="@import url(\"file://$OMARCHY_PATH/default/gtk/glass.css\");"
 OSD_ID="macos-theme.osd"
 HUD_ID="macos-theme.dictation-hud"
 DOCK_ID="macos-theme.dock"
+SWITCHER_ID="macos-theme.switcher"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false with_dock=false with_icons=false uninstall=false
+with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false uninstall=false
 for arg in "$@"; do
   case "$arg" in
     --osd) with_osd=true ;;
     --dictation-hud) with_hud=true ;;
     --dock) with_dock=true ;;
     --icons) with_icons=true ;;
-    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true ;;
+    --switcher) with_switcher=true ;;
+    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true ;;
     --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -76,6 +79,11 @@ if $uninstall; then
     omarchy plugin enable omarchy.dock >/dev/null 2>&1 || true
     rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
     say "Removed the macOS dock and restored Omarchy's own"
+  fi
+  if [[ -d $PLUGINS_DIR/$SWITCHER_ID ]]; then
+    omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
+    rm -rf "${PLUGINS_DIR:?}/$SWITCHER_ID"
+    say "Removed the app switcher (Alt+Tab is back to your own binding after: hyprctl reload)"
   fi
   if [[ -d $PLUGINS_DIR/$HUD_ID ]]; then
     omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
@@ -161,6 +169,10 @@ if $with_dock; then
   install_plugin "$DOCK_ID"
   omarchy plugin disable omarchy.dock >/dev/null 2>&1 || true
   say "Installed the macOS dock (minimized windows sit after a divider at its end)"
+fi
+if $with_switcher; then
+  install_plugin "$SWITCHER_ID"
+  say "Installed the app switcher (Alt+Tab while this theme is active)"
 fi
 if $with_hud; then
   install_plugin "$HUD_ID"

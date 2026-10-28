@@ -20,6 +20,7 @@ Optional extras:
 - **Volume capsule** (`--osd`): the volume and brightness popup as a frosted pill with a white slider.
 - **macOS dock** (`--dock`): a dot under every running app, then a divider with Downloads, each minimized window on its own, and Trash at the end. Click a minimized window to bring it back. Downloads fans your newest downloads up in a column (click one to open it, or "Open in Files" at the top), and right-clicking Trash offers Open and Empty Trash (it asks first).
 - **macOS icons** (`--icons`): installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from GitHub (default color only, into your home folder) and switches to it, so app icons, Files, and the dock's Trash and Downloads look like macOS.
+- **App switcher** (`--switcher`): Alt+Tab like Cmd+Tab on a Mac. Every running app across all workspaces, most recent first, as large icons on frosted glass. Tab / Shift+Tab move while Alt is held, letting go of Alt switches (going to the app's workspace), Esc cancels.
 - **Dictation HUD** (`--dictation-hud`): a frosted pill with a red mic and moving bars while [Voxtype](https://voxtype.io) is recording, and "Transcribing" with pulsing dots after.
 
 ## Install
@@ -28,7 +29,7 @@ Optional extras:
 git clone https://github.com/tsubaie/omarchy-macos-theme.git
 cd omarchy-macos-theme
 ./install.sh            # theme only
-./install.sh --all      # theme + volume capsule + dock + icons + dictation HUD
+./install.sh --all      # theme + volume capsule + dock + icons + app switcher + dictation HUD
 ```
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps.

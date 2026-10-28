@@ -43,7 +43,7 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOut
 -- Frosted glass behind the bar (it is almost clear, so blur every pixel of it)
 -- and behind the dock, menus, launcher, notifications and popups.
 hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popups = true, ignore_alpha = 0.0 })
-hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud)$" }, blur = true, ignore_alpha = 0.3 })
+hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher)$" }, blur = true, ignore_alpha = 0.3 })
 
 -- Menus, popups and the launcher pop in with the same spring as windows.
 hl.animation({ leaf = "layersIn", enabled = true, speed = 3.5, bezier = "macSpring", style = "popin 92%" })
@@ -134,4 +134,13 @@ o.window = function(match, rules)
     if next(rules) == nil then return end
   end
   return add_window_rule(match, rules)
+end
+
+-- Alt+Tab opens the macOS app switcher when its plugin is installed: Tab and
+-- Shift+Tab move while Alt is held, letting go of Alt switches.
+local switcher = io.open((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/omarchy/plugins/macos-theme.switcher/manifest.json", "r")
+if switcher then
+  switcher:close()
+  o.rebind("ALT + TAB", "App switcher", "omarchy-shell -q macos-switcher next")
+  o.rebind("ALT + SHIFT + TAB", "App switcher (previous)", "omarchy-shell -q macos-switcher prev")
 end
