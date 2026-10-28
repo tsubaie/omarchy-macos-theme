@@ -44,7 +44,8 @@ PanelWindow {
   // maximized window hides the dock the same way, so it can still be called up.
   readonly property bool autohide: !!dock && (dock.autohide || fullscreenMode === 1)
   property bool revealed: false
-  readonly property bool menuOpen: menuItem !== null || settingsMenu
+  // Any popup of the dock: a click anywhere else closes it (the focus grab).
+  readonly property bool menuOpen: menuItem !== null || settingsMenu || trashMenu || downloadsMenu || stackOpen
   readonly property bool tucked: autohide && !(revealed || menuOpen || dragging || insertIndex >= 0)
   readonly property bool contentShown: shown && !tucked
 

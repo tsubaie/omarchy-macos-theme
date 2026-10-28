@@ -82,6 +82,8 @@ Item {
         iconFont: String(row.iconFont || ""),
         action: String(row.action || ""),
         route: row.action ? "" : String(row.target || id),
+        // A plain submenu: Spotlight lists what is inside instead of it.
+        container: !row.action && !row.target && !row.provider,
         search: [row.label].concat(row.aliases || [], row.description ? [row.description] : []).join(" ")
       })
     }
@@ -167,6 +169,8 @@ Item {
     root.pointerMoved = false
     if (!q) { root.results = []; return }
     var out = []
+    var direct = {}
+    var childScores = {}
     // Omarchy actions, slightly below apps on an equal match.
     for (var m = 0; m < root.menuItems.length; m++) {
       var item = root.menuItems[m]
@@ -179,7 +183,23 @@ Item {
       if (ms < 30) continue
       var used = root.recent.indexOf("menu:" + item.id)
       if (used >= 0) ms += Math.max(4, 20 - used)
-      out.push({ menu: item, score: ms, name: item.label })
+      if (item.container) {
+        // "update" lists Update's actions (Update › Omarchy...), not the menu.
+        var prefix = item.id + "."
+        for (var c = 0; c < root.menuItems.length; c++) {
+          var child = root.menuItems[c]
+          if (child.container || child.id.indexOf(prefix) !== 0) continue
+          var depth = child.id.split(".").length - item.id.split(".").length
+          childScores[child.id] = Math.max(childScores[child.id] || 0, ms - 4 - depth * 3)
+        }
+        continue
+      }
+      direct[item.id] = Math.max(direct[item.id] || 0, ms)
+    }
+    for (var mi = 0; mi < root.menuItems.length; mi++) {
+      var row = root.menuItems[mi]
+      var best = Math.max(direct[row.id] || 0, childScores[row.id] || 0)
+      if (best > 0) out.push({ menu: row, score: best, name: row.label })
     }
     var values = DesktopEntries.applications.values || []
     for (var i = 0; i < values.length; i++) {
