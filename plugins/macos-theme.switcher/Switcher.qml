@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -171,15 +172,48 @@ Item {
       }
     }
 
+    // Soft shadow under the glass.
+    Rectangle {
+      anchors.centerIn: card
+      anchors.verticalCenterOffset: Style.space(10)
+      width: card.width
+      height: card.height
+      radius: card.radius
+      color: "#000000"
+      opacity: 0.35
+      layer.enabled: true
+      layer.effect: MultiEffect {
+        blurEnabled: true
+        blur: 1.0
+        blurMax: 48
+      }
+    }
+
+    // Liquid Glass: a see-through sheet (Hyprland blurs what is behind it),
+    // a sheen that is brightest at the top, a bright outer rim and a faint
+    // inner one.
     Rectangle {
       id: card
       anchors.centerIn: parent
-      width: row.width + Style.space(24)
-      height: row.height + Style.space(24)
-      radius: Style.space(26)
-      color: Qt.rgba(0.12, 0.12, 0.13, 0.62)
+      width: row.width + Style.space(28)
+      height: row.height + Style.space(28)
+      radius: Style.space(30)
+      color: Qt.rgba(0.15, 0.15, 0.17, 0.38)
       border.width: 1
-      border.color: Qt.rgba(1, 1, 1, 0.16)
+      border.color: Qt.rgba(1, 1, 1, 0.32)
+
+      Rectangle {
+        anchors.fill: parent
+        anchors.margins: 1
+        radius: parent.radius - 1
+        gradient: Gradient {
+          GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.16) }
+          GradientStop { position: 0.45; color: Qt.rgba(1, 1, 1, 0.04) }
+          GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.08) }
+        }
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
+      }
 
       // Swallow clicks on the card so they do not cancel.
       MouseArea { anchors.fill: parent }
@@ -200,13 +234,18 @@ Item {
             width: root.tile
             height: root.tile + nameText.height + Style.space(6)
 
+            // The selected app sits on a small pane of brighter glass.
             Rectangle {
+              visible: tileItem.selected
               width: root.tile
               height: root.tile
-              radius: Style.space(18)
-              color: Qt.rgba(1, 1, 1, tileItem.selected ? 0.16 : 0)
-              border.width: tileItem.selected ? 1 : 0
-              border.color: Qt.rgba(1, 1, 1, 0.12)
+              radius: Style.space(20)
+              gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.26) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.12) }
+              }
+              border.width: 1
+              border.color: Qt.rgba(1, 1, 1, 0.34)
             }
 
             Image {
