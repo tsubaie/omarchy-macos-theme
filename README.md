@@ -18,7 +18,7 @@ A dark macOS look for [Omarchy](https://omarchy.org), following Apple's Liquid G
 Optional extras:
 
 - **Volume capsule** (`--osd`): the volume and brightness popup as a frosted pill with a white slider.
-- **macOS dock** (`--dock`): a dot under every running app, then a divider with Downloads, each minimized window on its own, and Trash at the end. Click a minimized window to bring it back; Downloads and Trash open in Files.
+- **macOS dock** (`--dock`): a dot under every running app, then a divider with Downloads, each minimized window on its own, and Trash at the end. Click a minimized window to bring it back. Downloads slides up a stack of your newest downloads (click one to open it, or "Open in Files"), and Trash opens in Files.
 - **Dictation HUD** (`--dictation-hud`): a frosted pill with a red mic and moving bars while [Voxtype](https://voxtype.io) is recording, and "Transcribing" with pulsing dots after.
 
 ## Install

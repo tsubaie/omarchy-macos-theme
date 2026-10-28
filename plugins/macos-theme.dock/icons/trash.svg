@@ -1,26 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
     <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#d9dde3" stop-opacity="0.55"/>
-      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.85"/>
-      <stop offset="1" stop-color="#bfc5cd" stop-opacity="0.55"/>
+      <stop offset="0" stop-color="#c3c8cf"/>
+      <stop offset="0.35" stop-color="#f4f5f7"/>
+      <stop offset="0.6" stop-color="#e9ebee"/>
+      <stop offset="1" stop-color="#b4bac2"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0.12"/>
+      <stop offset="0.3" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.1"/>
     </linearGradient>
     <linearGradient id="inside" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#6b7178"/>
-      <stop offset="1" stop-color="#9aa1a9"/>
+      <stop offset="0" stop-color="#5f656c"/>
+      <stop offset="1" stop-color="#8f969e"/>
     </linearGradient>
-    <clipPath id="bin"><path d="M26 30h76l-8 82c-0.4 3.4-3.3 6-6.7 6H40.7c-3.4 0-6.3-2.6-6.7-6z"/></clipPath>
+    <pattern id="holes" width="7" height="8" patternUnits="userSpaceOnUse">
+      <rect x="1.4" y="1.5" width="4.2" height="5" rx="1.6" fill="#7b828a"/>
+    </pattern>
+    <clipPath id="bin"><path d="M27 30h74l-7.6 80.5c-0.4 4-3.8 7.5-7.8 7.5H42.4c-4 0-7.4-3.5-7.8-7.5z"/></clipPath>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.32"/>
     </filter>
   </defs>
   <g filter="url(#shadow)">
-    <path d="M26 30h76l-8 82c-0.4 3.4-3.3 6-6.7 6H40.7c-3.4 0-6.3-2.6-6.7-6z" fill="url(#body)"/>
-    <g clip-path="url(#bin)" stroke="#8e959d" stroke-opacity="0.55" stroke-width="2" fill="none">
-      <path d="M38 32l4 86M50 32l2 86M64 32v86M78 32l-2 86M90 32l-4 86"/>
-      <path d="M24 52h80M24 74h80M24 96h80" stroke-opacity="0.35"/>
+    <path d="M27 30h74l-7.6 80.5c-0.4 4-3.8 7.5-7.8 7.5H42.4c-4 0-7.4-3.5-7.8-7.5z" fill="url(#body)"/>
+    <g clip-path="url(#bin)">
+      <rect x="20" y="40" width="88" height="70" fill="url(#holes)" opacity="0.75"/>
+      <rect x="20" y="28" width="88" height="92" fill="url(#shade)"/>
+      <rect x="20" y="108" width="88" height="12" fill="#a9afb7"/>
     </g>
-    <ellipse cx="64" cy="30" rx="40" ry="8" fill="url(#inside)"/>
-    <ellipse cx="64" cy="30" rx="40" ry="8" fill="none" stroke="#f4f6f8" stroke-width="3"/>
+    <ellipse cx="64" cy="30" rx="37" ry="7.5" fill="url(#inside)"/>
+    <ellipse cx="64" cy="30" rx="37" ry="7.5" fill="none" stroke="#fbfbfc" stroke-width="3.2"/>
+    <ellipse cx="64" cy="31.2" rx="37" ry="7.5" fill="none" stroke="#9aa0a8" stroke-width="0.8" opacity="0.6"/>
   </g>
 </svg>

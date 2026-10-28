@@ -58,7 +58,10 @@ PanelWindow {
   readonly property real idleOpacity: 0.7
   // Room inward of the dock for its menus: the tallest, the apps button's,
   // has five rows.
-  readonly property int popupRoom: Style.spacing.popupRowHeight * 5 + Style.spacing.sm * 2 + Style.normalBorderWidth * 2 + gap * 2
+  readonly property int popupRoom: Math.max(Style.spacing.popupRowHeight * 5 + Style.spacing.sm * 2 + Style.normalBorderWidth * 2 + gap * 2, stackRoom)
+  // The Downloads stack: four columns, three rows, a title and a footer.
+  readonly property int stackTile: Math.round(96 * Style.fontScale)
+  readonly property int stackRoom: stackTile * 4 + Style.space(120)
   // Icons pop away from the screen edge.
   readonly property int popOrigin: position === "top" ? Item.Top
     : position === "left" ? Item.Left
@@ -167,6 +170,7 @@ PanelWindow {
   }
 
   function closeMenu() {
+    window.stackOpen = false
     window.menuItem = null
     window.settingsMenu = false
     window.menuSlot = null
@@ -215,6 +219,7 @@ PanelWindow {
 
     Region { item: window.shown && window.autohide ? edgeTrigger : null }
     Region { item: menu.visible ? menu : null }
+    Region { item: stack.visible ? stack : null }
   }
 
   onAutohideChanged: window.revealed = false
@@ -349,7 +354,7 @@ PanelWindow {
 
       PlaceSlot {
         iconSource: Qt.resolvedUrl("icons/downloads.svg")
-        command: "xdg-open \"$HOME/Downloads\""
+        stack: true
       }
 
       Repeater {
@@ -390,8 +395,14 @@ PanelWindow {
 
     property url iconSource
     property string command
+    property bool stack: false
 
     mouse.onClicked: function(event) {
+      if (placeSlot.stack) {
+        if (window.stackOpen) window.closeMenu()
+        else window.openStack(placeSlot)
+        return
+      }
       window.closeMenu()
       Util.execDetached(placeSlot.command)
     }
@@ -744,6 +755,217 @@ PanelWindow {
         visible: menu.running
         text: Commons.I18n.t("dock.quit")
         onTriggered: window.dock.quit(menu.item)
+      }
+    }
+  }
+
+  // Downloads stack, as on macOS: the newest downloads slide up above the dock
+  // in a grid; a click opens one, and "Open in Files" opens the folder.
+  property bool stackOpen: false
+  property Item stackSlot: null
+  property var stackFiles: []
+  property var stackCollect: []
+  readonly property string downloadsDir: Quickshell.env("HOME") + "/Downloads"
+
+  function openStack(slot) {
+    window.closeMenu()
+    window.stackSlot = slot
+    window.stackCollect = []
+    stackList.running = true
+    window.stackOpen = true
+  }
+
+  Process {
+    id: stackList
+    // Newest first; -p marks folders with a trailing slash.
+    command: ["sh", "-c", "cd \"$HOME/Downloads\" 2>/dev/null && ls -t -A -p | head -n 12"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        // Names are shown as plain text and only ever passed quoted to xdg-open.
+        if (line.length > 0 && line.length < 512) window.stackCollect.push(line)
+      }
+    }
+    onExited: window.stackFiles = window.stackCollect.slice()
+  }
+
+  // Leaving both the stack and the dock for a moment closes it.
+  Timer {
+    interval: 900
+    running: window.stackOpen && !stackHover.hovered && !bodyHover.hovered
+    onTriggered: window.stackOpen = false
+  }
+
+  function stackIcon(name) {
+    if (name.charAt(name.length - 1) === "/") return Quickshell.iconPath("folder", true)
+    var dot = name.lastIndexOf(".")
+    var ext = dot > 0 ? name.substr(dot + 1).toLowerCase() : ""
+    if (["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg"].indexOf(ext) >= 0)
+      return "file://" + encodeURI(window.downloadsDir + "/") + encodeURIComponent(name)
+    var byExt = {
+      pdf: "application-pdf", zip: "package-x-generic", tar: "package-x-generic", gz: "package-x-generic",
+      xz: "package-x-generic", "7z": "package-x-generic", rar: "package-x-generic", deb: "package-x-generic",
+      mp4: "video-x-generic", mkv: "video-x-generic", mov: "video-x-generic", webm: "video-x-generic",
+      mp3: "audio-x-generic", wav: "audio-x-generic", flac: "audio-x-generic", m4a: "audio-x-generic",
+      txt: "text-x-generic", md: "text-x-generic", docx: "x-office-document", xlsx: "x-office-spreadsheet",
+      pptx: "x-office-presentation", appimage: "application-x-executable"
+    }
+    return Quickshell.iconPath(byExt[ext] || "text-x-generic", true) || Quickshell.iconPath("text-x-generic", true)
+  }
+
+  function openDownload(name) {
+    window.stackOpen = false
+    Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir + "/" + name.replace(/\/$/, "")))
+  }
+
+  BorderSurface {
+    id: stack
+
+    readonly property int columns: 4
+    readonly property int tile: window.stackTile
+
+    visible: window.contentShown && opacity > 0
+    opacity: window.stackOpen ? 1 : 0
+    width: stackColumn.implicitWidth + padding * 2
+    height: stackColumn.implicitHeight + padding * 2
+    x: window.popupX(window.stackSlot, stack)
+    y: window.popupY(window.stackSlot, stack)
+    radius: Math.round(Style.cornerRadius * 1.4)
+    color: Commons.Color.popups.background
+    borderSpec: Border.surfaceSpec("popups", "border", Commons.Color.popups.border, Style.normalBorderWidth)
+    padding: Style.spacing.md
+
+    // Slides up out of the dock as it fades in, and settles back on the way out.
+    transform: Translate {
+      y: window.stackOpen ? 0 : (window.position === "top" ? -Style.space(14) : Style.space(14))
+      Behavior on y { NumberAnimation { duration: Style.duration(window.stackOpen ? 200 : 140); easing.type: Easing.OutCubic } }
+    }
+    Behavior on opacity { NumberAnimation { duration: Style.duration(window.stackOpen ? 180 : 120); easing.type: Easing.OutCubic } }
+
+    HoverHandler { id: stackHover }
+
+    Column {
+      id: stackColumn
+      x: stack.padding
+      y: stack.padding
+      spacing: Style.spacing.sm
+
+      Text {
+        textFormat: Text.PlainText
+        text: "Downloads"
+        font.family: Style.font.family
+        font.pixelSize: Style.font.title
+        font.bold: true
+        color: Commons.Color.popups.text
+        leftPadding: Style.spacing.xs
+      }
+
+      Text {
+        visible: window.stackFiles.length === 0
+        textFormat: Text.PlainText
+        text: "No downloads"
+        width: stack.tile * stack.columns
+        horizontalAlignment: Text.AlignHCenter
+        topPadding: Style.space(24)
+        bottomPadding: Style.space(24)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.body
+        color: Commons.Color.popups.text
+        opacity: 0.6
+      }
+
+      Grid {
+        columns: stack.columns
+        Repeater {
+          model: window.stackFiles
+          delegate: Item {
+            id: tileItem
+            required property string modelData
+            width: stack.tile
+            height: stack.tile + Style.space(10)
+
+            Rectangle {
+              anchors.fill: parent
+              anchors.margins: Style.space(2)
+              radius: Style.space(8)
+              color: Commons.Color.popups.text
+              opacity: tileMouse.containsMouse ? 0.1 : 0
+            }
+
+            Image {
+              id: tileIcon
+              anchors.horizontalCenter: parent.horizontalCenter
+              y: Style.space(8)
+              width: Math.round(stack.tile * 0.56)
+              height: width
+              sourceSize: Qt.size(width * 2, width * 2)
+              source: window.stackIcon(tileItem.modelData)
+              fillMode: Image.PreserveAspectFit
+              asynchronous: true
+              smooth: true
+              mipmap: true
+            }
+
+            Text {
+              anchors.top: tileIcon.bottom
+              anchors.topMargin: Style.space(4)
+              anchors.horizontalCenter: parent.horizontalCenter
+              width: stack.tile - Style.space(10)
+              textFormat: Text.PlainText
+              text: tileItem.modelData.replace(/\/$/, "")
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WrapAnywhere
+              maximumLineCount: 2
+              elide: Text.ElideMiddle
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: Commons.Color.popups.text
+            }
+
+            MouseArea {
+              id: tileMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: window.openDownload(tileItem.modelData)
+            }
+          }
+        }
+      }
+
+      Item {
+        width: Math.max(stack.tile * stack.columns, openAll.width)
+        height: openAll.height
+
+        Rectangle {
+          id: openAll
+          anchors.right: parent.right
+          width: openAllText.implicitWidth + Style.space(24)
+          height: openAllText.implicitHeight + Style.space(10)
+          radius: height / 2
+          color: Commons.Color.popups.text
+          opacity: openAllMouse.containsMouse ? 0.22 : 0.12
+
+          MouseArea {
+            id: openAllMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              window.stackOpen = false
+              Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir))
+            }
+          }
+        }
+
+        Text {
+          id: openAllText
+          anchors.centerIn: openAll
+          textFormat: Text.PlainText
+          text: "Open in Files"
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          color: Commons.Color.popups.text
+        }
       }
     }
   }

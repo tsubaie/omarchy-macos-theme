@@ -1,26 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
     <linearGradient id="back" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4aa8ee"/>
-      <stop offset="1" stop-color="#1f7fd6"/>
+      <stop offset="0" stop-color="#3f9fea"/>
+      <stop offset="1" stop-color="#1d78d0"/>
     </linearGradient>
     <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7cc8fb"/>
-      <stop offset="1" stop-color="#3b9cf0"/>
-    </linearGradient>
-    <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2a86d8"/>
-      <stop offset="1" stop-color="#1d6fc0"/>
+      <stop offset="0" stop-color="#83cdfc"/>
+      <stop offset="1" stop-color="#46a6f2"/>
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
       <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
     </filter>
+    <filter id="emboss" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="0.4" flood-color="#ffffff" flood-opacity="0.45"/>
+    </filter>
   </defs>
   <g filter="url(#shadow)">
-    <path d="M14 30c0-4.4 3.6-8 8-8h26c2.5 0 4.8 1.2 6.4 3.2l4.2 5.6c0.8 1 2 1.6 3.2 1.6H106c4.4 0 8 3.6 8 8v4H14z" fill="url(#back)"/>
-    <rect x="14" y="38" width="100" height="70" rx="9" fill="url(#front)"/>
-    <rect x="14" y="38" width="100" height="2" rx="1" fill="#ffffff" opacity="0.45"/>
+    <path d="M12 32c0-4.4 3.6-8 8-8h27c2.6 0 5 1.2 6.5 3.3l3.8 5.2c0.8 1.1 2 1.7 3.3 1.7H108c4.4 0 8 3.6 8 8v4H12z" fill="url(#back)"/>
+    <rect x="12" y="40" width="104" height="70" rx="8" fill="url(#front)"/>
+    <rect x="13" y="40.5" width="102" height="1.6" rx="0.8" fill="#ffffff" opacity="0.6"/>
   </g>
-  <path d="M64 54v28m0 0l-12-12m12 12l12-12" fill="none" stroke="url(#arrow)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M64 55v27" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.35"/>
+  <g filter="url(#emboss)" fill="none" stroke="#2a83d6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="64" cy="75" r="19" stroke-width="4.5"/>
+    <path d="M64 64v21m-8.5-8.5L64 85l8.5-8.5" stroke-width="4.5"/>
+  </g>
 </svg>
