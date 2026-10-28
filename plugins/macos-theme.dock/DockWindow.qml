@@ -1302,10 +1302,10 @@ PanelWindow {
     width: parent ? parent.width : 0
     height: visible ? Style.space(11) : 0
 
-    // Edge to edge, as in the macOS menu.
+    // Inset from both sides.
     Rectangle {
       anchors.centerIn: parent
-      width: parent.width + Style.space(10)
+      width: parent.width - Style.space(20)
       height: 1
       color: Qt.rgba(1, 1, 1, 0.16)
     }
