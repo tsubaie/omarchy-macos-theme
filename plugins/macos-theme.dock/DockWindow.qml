@@ -1053,16 +1053,45 @@ PanelWindow {
           mipmap: true
         }
 
-        // The round "more" button at the top of the fan.
+        // The round "more" button at the top of the fan, in Liquid Glass:
+        // translucent, lighter at the top, a bright rim and a soft shine.
         Rectangle {
+          id: glassButton
           visible: fanRow.arrow
           anchors.centerIn: parent
           width: Math.round(parent.width * 0.86)
           height: width
           radius: width / 2
-          color: Qt.rgba(0.72, 0.74, 0.78, 0.92)
+          gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, fanMouse.containsMouse ? 0.5 : 0.38) }
+            GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, fanMouse.containsMouse ? 0.24 : 0.16) }
+            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, fanMouse.containsMouse ? 0.3 : 0.22) }
+          }
           border.width: 1
-          border.color: Qt.rgba(1, 1, 1, 0.55)
+          border.color: Qt.rgba(1, 1, 1, 0.7)
+
+          // The shine across the top half.
+          Rectangle {
+            x: parent.width * 0.16
+            y: parent.height * 0.07
+            width: parent.width * 0.68
+            height: parent.height * 0.4
+            radius: height / 2
+            gradient: Gradient {
+              GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.55) }
+              GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
+            }
+          }
+
+          Text {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 1
+            textFormat: Text.PlainText
+            text: "\uf064"
+            color: Qt.rgba(0, 0, 0, 0.25)
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: Math.round(parent.width * 0.44)
+          }
 
           Text {
             anchors.centerIn: parent
@@ -1070,7 +1099,7 @@ PanelWindow {
             text: "\uf064"
             color: "#ffffff"
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: Math.round(parent.width * 0.46)
+            font.pixelSize: Math.round(parent.width * 0.44)
           }
         }
       }
