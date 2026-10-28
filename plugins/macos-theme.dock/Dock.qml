@@ -37,6 +37,9 @@ Item {
         return !needle || String(entry.name || "").toLowerCase().indexOf(needle) >= 0
       }).sort(function(a, b) {
         return String(a.name || "").localeCompare(String(b.name || ""))
+      }).map(function(entry) {
+        // The app grid reads each result as { entry }, like Omarchy's library.
+        return { entry: entry }
       })
     }
 

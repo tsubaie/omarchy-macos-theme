@@ -373,12 +373,14 @@ PanelWindow {
       PlaceSlot {
         iconSources: window.placeIcons("folder-download")
         stack: true
+        tip: "Downloads"
       }
 
       PlaceSlot {
         iconSources: window.placeIcons(window.trashFull ? "user-trash-full" : "user-trash")
         command: "gio open trash:///"
         trash: true
+        tip: "Trash"
       }
     }
   }
@@ -464,6 +466,7 @@ PanelWindow {
   // the same menu as the pinned apps, where it can be kept in the dock.
   component UnpinnedSlot: Slot {
     id: unpinnedSlot
+    tip: window.appName(unpinnedSlot.modelData)
 
     required property var modelData
 
@@ -514,6 +517,43 @@ PanelWindow {
       : (window.slotSize - size) / 2
   }
 
+  // The app name over the hovered icon, hidden while a menu or the stack is open.
+  property Item tipSlot: null
+
+  function appName(item) {
+    if (!item || !window.dock) return ""
+    var entry = window.dock.entryFor(item)
+    if (entry && entry.name) return String(entry.name)
+    var first = item.windows && item.windows.length > 0 ? item.windows[0] : null
+    return first && first.toplevel ? String(first.toplevel.title || "") : String(item.key || "")
+  }
+
+  Rectangle {
+    id: tipLabel
+
+    readonly property string text: window.tipSlot ? window.tipSlot.tip : ""
+
+    visible: window.contentShown && text !== "" && !menu.visible && !window.stackOpen && !window.dragging
+    width: tipText.implicitWidth + Style.space(20)
+    height: tipText.implicitHeight + Style.space(8)
+    radius: Style.space(6)
+    color: Qt.rgba(0.11, 0.11, 0.12, 0.88)
+    border.width: 1
+    border.color: Qt.rgba(1, 1, 1, 0.14)
+    x: window.tipSlot ? window.popupX(window.tipSlot, tipLabel) : 0
+    y: window.tipSlot ? window.popupY(window.tipSlot, tipLabel) - Style.space(4) : 0
+
+    Text {
+      id: tipText
+      anchors.centerIn: parent
+      textFormat: Text.PlainText
+      text: tipLabel.text
+      color: "#ffffff"
+      font.family: "Adwaita Sans"
+      font.pixelSize: Math.round(13 * Style.fontScale)
+    }
+  }
+
   component Slot: Item {
     id: slot
 
@@ -522,6 +562,14 @@ PanelWindow {
     property bool hovered: mouse.containsMouse && !window.hoverStale && !window.dragging
     property bool pressed: mouse.pressed
     property alias mouse: mouse
+    // The name shown above the icon on hover, as in the macOS dock.
+    property string tip: ""
+
+    onHoveredChanged: {
+      if (hovered) window.tipSlot = slot
+      else if (window.tipSlot === slot) window.tipSlot = null
+    }
+    Component.onDestruction: if (window.tipSlot === slot) window.tipSlot = null
 
     width: window.slotSize
     height: window.slotSize
@@ -537,6 +585,7 @@ PanelWindow {
 
   component AppsSlot: Slot {
     id: appsSlot
+    tip: "Applications"
 
     property real displayedShift: window.insertIndex >= 0 ? -window.slotSize / 2 : 0
 
@@ -595,6 +644,7 @@ PanelWindow {
 
   component AppSlot: Slot {
     id: appSlot
+    tip: window.appName(appSlot.modelData)
 
     required property int index
     required property string key
