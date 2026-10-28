@@ -4,7 +4,8 @@
 #   ./install.sh                  theme only
 #   ./install.sh --osd            + frosted volume/brightness capsule
 #   ./install.sh --dictation-hud  + Voxtype dictation pill
-#   ./install.sh --dock           + minimized windows at the end of the dock
+#   ./install.sh --dock           + macOS dock (running dots, Downloads stack, Trash)
+#   ./install.sh --icons          + MacTahoe macOS icon theme (from GitHub)
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -35,15 +36,16 @@ DOCK_ID="macos-theme.dock"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false with_dock=false uninstall=false
+with_osd=false with_hud=false with_dock=false with_icons=false uninstall=false
 for arg in "$@"; do
   case "$arg" in
     --osd) with_osd=true ;;
     --dictation-hud) with_hud=true ;;
     --dock) with_dock=true ;;
-    --all) with_osd=true; with_hud=true; with_dock=true ;;
+    --icons) with_icons=true ;;
+    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true ;;
     --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -84,6 +86,10 @@ if $uninstall; then
   remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
   rm -rf "$THEME_DIR"
   say "Removed the theme. Backups of edited files end in .bak.$STAMP"
+  if [[ -d $HOME/.local/share/icons/MacTahoe ]]; then
+    echo "    MacTahoe icons are still installed. Remove them with:"
+    echo "      rm -rf ~/.local/share/icons/MacTahoe ~/.local/share/icons/MacTahoe-light ~/.local/share/icons/MacTahoe-dark"
+  fi
   exit 0
 fi
 
@@ -96,6 +102,23 @@ fi
 mkdir -p "$THEME_DIR"
 cp -r "$REPO/theme/." "$THEME_DIR/"
 say "Installed the theme to $THEME_DIR"
+
+# 1b. MacTahoe icons (GPL-3.0, github.com/vinceliuice/MacTahoe-icon-theme):
+# only the default color, into your home folder, no password needed.
+if $with_icons; then
+  tmp=$(mktemp -d)
+  if git clone -q --depth 1 https://github.com/vinceliuice/MacTahoe-icon-theme.git "$tmp/MacTahoe" &&
+    bash "$tmp/MacTahoe/install.sh" -t default >/dev/null; then
+    say "Installed the MacTahoe icon theme to ~/.local/share/icons"
+  else
+    echo "Could not install MacTahoe icons; keeping the default icons." >&2
+  fi
+  rm -rf "$tmp"
+fi
+# Use MacTahoe whenever it is installed (here or system-wide).
+if [[ -d $HOME/.local/share/icons/MacTahoe-dark || -d /usr/share/icons/MacTahoe-dark ]]; then
+  echo "MacTahoe-dark" > "$THEME_DIR/icons.theme"
+fi
 
 # 2. Load the theme's look.lua last, after your own looknfeel settings.
 mkdir -p "$(dirname "$LOOKNFEEL")"
@@ -153,7 +176,8 @@ fi
 # 5. Apply. Re-applying the active theme would move to its next wallpaper, so
 # when it is already active, refresh it in place instead.
 if [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; then
-  cp -r "$REPO/theme/." "$HOME/.local/state/omarchy/current/theme/"
+  cp -r "$THEME_DIR/." "$HOME/.local/state/omarchy/current/theme/"
+  omarchy-theme-set-gnome >/dev/null 2>&1 || true
   hyprctl reload >/dev/null
   omarchy restart shell >/dev/null 2>&1 || true
 else

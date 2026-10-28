@@ -353,7 +353,7 @@ PanelWindow {
       }
 
       PlaceSlot {
-        iconSource: Qt.resolvedUrl("icons/downloads.svg")
+        iconSources: window.placeIcons("folder-download")
         stack: true
       }
 
@@ -365,7 +365,7 @@ PanelWindow {
       }
 
       PlaceSlot {
-        iconSource: Qt.resolvedUrl(window.trashFull ? "icons/trash-full.svg" : "icons/trash.svg")
+        iconSources: window.placeIcons(window.trashFull ? "user-trash-full" : "user-trash")
         command: "gio open trash:///"
       }
     }
@@ -389,11 +389,25 @@ PanelWindow {
     onTriggered: trashCheck.running = true
   }
 
-  // Downloads and Trash, as on the right of the macOS dock: each opens in Files.
+  // Downloads and Trash prefer MacTahoe's light icons, which are what the macOS
+  // dock shows in dark mode too (MacTahoe-dark draws a dark bin), then fall back
+  // to the current icon theme.
+  function placeIcons(name) {
+    var file = "/MacTahoe/places/scalable/" + name + ".svg"
+    return [
+      "file://" + Quickshell.env("HOME") + "/.local/share/icons" + file,
+      "file:///usr/share/icons" + file,
+      Quickshell.iconPath(name, true)
+    ]
+  }
+
+  // Downloads and Trash, as on the right of the macOS dock.
   component PlaceSlot: Slot {
     id: placeSlot
 
-    property url iconSource
+    property var iconSources: []
+    property int iconTry: 0
+    onIconSourcesChanged: iconTry = 0
     property string command
     property bool stack: false
 
@@ -413,7 +427,9 @@ PanelWindow {
       width: window.iconSize
       height: window.iconSize
       sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
-      source: placeSlot.iconSource
+      // Try each candidate until one loads.
+      source: placeSlot.iconSources[placeSlot.iconTry] || ""
+      onStatusChanged: if (status === Image.Error && placeSlot.iconTry < placeSlot.iconSources.length - 1) placeSlot.iconTry++
       fillMode: Image.PreserveAspectFit
       asynchronous: true
       smooth: true

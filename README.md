@@ -19,6 +19,7 @@ Optional extras:
 
 - **Volume capsule** (`--osd`): the volume and brightness popup as a frosted pill with a white slider.
 - **macOS dock** (`--dock`): a dot under every running app, then a divider with Downloads, each minimized window on its own, and Trash at the end. Click a minimized window to bring it back. Downloads slides up a stack of your newest downloads (click one to open it, or "Open in Files"), and Trash opens in Files.
+- **macOS icons** (`--icons`): installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from GitHub (default color only, into your home folder) and switches to it, so app icons, Files, and the dock's Trash and Downloads look like macOS.
 - **Dictation HUD** (`--dictation-hud`): a frosted pill with a red mic and moving bars while [Voxtype](https://voxtype.io) is recording, and "Transcribing" with pulsing dots after.
 
 ## Install
@@ -27,7 +28,7 @@ Optional extras:
 git clone https://github.com/tsubaie/omarchy-macos-theme.git
 cd omarchy-macos-theme
 ./install.sh            # theme only
-./install.sh --all      # theme + volume capsule + dock + dictation HUD
+./install.sh --all      # theme + volume capsule + dock + icons + dictation HUD
 ```
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps.
@@ -71,6 +72,7 @@ Bar, menu and popup colors and transparency are in `shell.toml` in the same fold
 
 - Wallpapers: [photo by Pawel Czerwinski on Unsplash](https://unsplash.com/photos/ZkzobNDayXo) and [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4), used under the [Unsplash License](https://unsplash.com/license).
 - The volume capsule and dock are modified copies of Omarchy's own on-screen display and dock ([Omarchy](https://github.com/basecamp/omarchy), MIT License).
+- Icons: [MacTahoe icon theme](https://github.com/vinceliuice/MacTahoe-icon-theme) by vinceliuice (GPL-3.0), downloaded from its own repository by `--icons`, not bundled here.
 - Colors follow Apple's published dark-mode system colors. This project isn't affiliated with or endorsed by Apple. macOS and Liquid Glass are trademarks of Apple Inc.
 
 ## License
