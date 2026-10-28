@@ -21,6 +21,7 @@ Optional extras:
 - **macOS dock** (`--dock`): a dot under every running app, then a divider with Downloads, each minimized window on its own, and Trash at the end. Click a minimized window to bring it back. Downloads fans your newest downloads up in a column (click one to open it, or "Open in Files" at the top), and right-clicking Trash offers Open and Empty Trash (it asks first).
 - **macOS icons** (`--icons`): installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from GitHub (default color only, into your home folder) and switches to it, so app icons, Files, and the dock's Trash and Downloads look like macOS.
 - **App switcher** (`--switcher`): Alt+Tab like Cmd+Tab on a Mac. Every running app across all workspaces, most recent first, as large icons on frosted glass. Tab / Shift+Tab move while Alt is held, letting go of Alt switches (going to the app's workspace), Esc cancels. Apps with several windows show a dot per window; press Down (or `) to list them and pick one.
+  Super+Tab is the same for workspaces: each workspace appears as a miniature with its windows drawn live, Tab / Shift+Tab move while Super is held, and letting go of Super switches.
 - **Dictation HUD** (`--dictation-hud`): a frosted pill with a red mic and moving bars while [Voxtype](https://voxtype.io) is recording, and "Transcribing" with pulsing dots after.
 
 ## Install

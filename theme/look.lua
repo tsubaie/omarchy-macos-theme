@@ -136,11 +136,14 @@ o.window = function(match, rules)
   return add_window_rule(match, rules)
 end
 
--- Alt+Tab opens the macOS app switcher when its plugin is installed: Tab and
--- Shift+Tab move while Alt is held, letting go of Alt switches.
+-- Alt+Tab opens the macOS app switcher and Super+Tab the workspace switcher
+-- when the plugin is installed: Tab and Shift+Tab move while the modifier is
+-- held, letting go of it switches.
 local switcher = io.open((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/omarchy/plugins/macos-theme.switcher/manifest.json", "r")
 if switcher then
   switcher:close()
   o.rebind("ALT + TAB", "App switcher", "omarchy-shell -q macos-switcher next")
   o.rebind("ALT + SHIFT + TAB", "App switcher (previous)", "omarchy-shell -q macos-switcher prev")
+  o.rebind("SUPER + TAB", "Workspace switcher", "omarchy-shell -q macos-spaces next")
+  o.rebind("SUPER + SHIFT + TAB", "Workspace switcher (previous)", "omarchy-shell -q macos-spaces prev")
 end

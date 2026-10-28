@@ -6,7 +6,7 @@
 #   ./install.sh --dictation-hud  + Voxtype dictation pill
 #   ./install.sh --dock           + macOS dock (running dots, Downloads stack, Trash)
 #   ./install.sh --icons          + MacTahoe macOS icon theme (from GitHub)
-#   ./install.sh --switcher       + macOS app switcher on Alt+Tab
+#   ./install.sh --switcher       + app switcher (Alt+Tab) and workspace switcher (Super+Tab)
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -172,7 +172,7 @@ if $with_dock; then
 fi
 if $with_switcher; then
   install_plugin "$SWITCHER_ID"
-  say "Installed the app switcher (Alt+Tab while this theme is active)"
+  say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
 fi
 if $with_hud; then
   install_plugin "$HUD_ID"

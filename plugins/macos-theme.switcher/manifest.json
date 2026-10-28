@@ -1,11 +1,13 @@
 {
   "schemaVersion": 1,
   "id": "macos-theme.switcher",
-  "name": "macOS app switcher",
+  "name": "macOS app and workspace switcher",
   "version": "1.0.0",
-  "description": "Alt+Tab app switcher in the macOS style: every running app, most recent first, on frosted glass.",
+  "description": "Alt+Tab app switcher and Super+Tab workspace switcher with live previews, in the macOS style.",
   "license": "MIT",
-  "kinds": ["panel"],
+  "kinds": [
+    "panel"
+  ],
   "keepLoaded": true,
   "entryPoints": {
     "panel": "Switcher.qml"

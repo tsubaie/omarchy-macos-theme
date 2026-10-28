@@ -29,6 +29,9 @@ Item {
   readonly property int tile: Math.round(104 * Style.fontScale)
   readonly property int iconSize: Math.round(80 * Style.fontScale)
 
+  // Super+Tab: the workspace switcher with live previews.
+  Spaces {}
+
   ShellIpc {
     target: "macos-switcher"
     function next(): string { root.step(1); return "ok" }
