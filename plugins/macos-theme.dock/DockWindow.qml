@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
+import Qt.labs.folderlistmodel
 import "DockModel.js" as DockModel
 
 // One screen's dock. It stays mapped and only hides its contents, so switching
@@ -310,7 +311,7 @@ PanelWindow {
     Grid {
       id: slots
       anchors.centerIn: parent
-      columns: window.vertical ? 1 : appRepeater.count + 1 + (minimizedRepeater.count > 0 ? 1 + minimizedRepeater.count : 0)
+      columns: window.vertical ? 1 : appRepeater.count + 1 + 1 + minimizedRepeater.count + 2
 
       AppsSlot {}
 
@@ -321,9 +322,9 @@ PanelWindow {
         delegate: AppSlot {}
       }
 
-      // macOS-style: a divider, then each minimized window on its own.
+      // macOS-style: a divider, then Downloads, each minimized window on its
+      // own, and Trash at the very end.
       Item {
-        visible: minimizedRepeater.count > 0
         width: window.vertical ? window.slotSize : Style.space(13)
         height: window.vertical ? Style.space(13) : window.slotSize
 
@@ -336,12 +337,60 @@ PanelWindow {
         }
       }
 
+      PlaceSlot {
+        iconName: "folder-download"
+        command: "xdg-open \"$HOME/Downloads\""
+      }
+
       Repeater {
         id: minimizedRepeater
         model: window.dock ? window.dock.minimizedWindows : []
 
         delegate: MinimizedSlot {}
       }
+
+      PlaceSlot {
+        iconName: trashFiles.count > 0 ? "user-trash-full" : "user-trash"
+        command: "gio open trash:///"
+      }
+    }
+  }
+
+  // Watches the Trash so its icon shows when there is something in it.
+  FolderListModel {
+    id: trashFiles
+    folder: "file://" + Quickshell.env("HOME") + "/.local/share/Trash/files"
+    showDirs: true
+    showHidden: true
+  }
+
+  // Downloads and Trash, as on the right of the macOS dock: each opens in Files.
+  component PlaceSlot: Slot {
+    id: placeSlot
+
+    property string iconName
+    property string command
+
+    mouse.onClicked: function(event) {
+      window.closeMenu()
+      Util.execDetached(placeSlot.command)
+    }
+
+    Image {
+      x: window.iconInset
+      y: window.iconInset
+      width: window.iconSize
+      height: window.iconSize
+      sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+      source: Quickshell.iconPath(placeSlot.iconName, true)
+      fillMode: Image.PreserveAspectFit
+      asynchronous: true
+      smooth: true
+      mipmap: true
+      scale: placeSlot.hovered ? 1.15 : 1
+      transformOrigin: window.popOrigin
+
+      Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
     }
   }
 
@@ -383,6 +432,23 @@ PanelWindow {
         mipmap: true
       }
     }
+  }
+
+  // The macOS running indicator: a small dot between the icon and the dock's edge.
+  component RunningDot: Rectangle {
+    readonly property int size: Math.max(4, Math.round(window.iconSize * 0.11))
+    readonly property real edge: window.iconInset / 2 - size / 2
+
+    width: size
+    height: size
+    radius: size / 2
+    color: Commons.Color.bar.text
+    x: window.position === "left" ? edge
+      : window.position === "right" ? window.slotSize - size - edge
+      : (window.slotSize - size) / 2
+    y: window.position === "top" ? edge
+      : window.position === "bottom" ? window.slotSize - size - edge
+      : (window.slotSize - size) / 2
   }
 
   component Slot: Item {
@@ -555,8 +621,8 @@ PanelWindow {
       else window.dock.activate(appSlot.modelData)
     }
 
-    // Running apps are drawn in full, pinned ones that are not running faded,
-    // and one that is starting pulses between the two.
+    // Like macOS: every app is drawn in full, and a dot on the dock's edge marks
+    // the running ones. One that is starting pulses its dot.
     Image {
       x: window.iconInset
       y: window.iconInset
@@ -568,7 +634,6 @@ PanelWindow {
       asynchronous: true
       smooth: true
       mipmap: true
-      opacity: appSlot.launching ? appSlot.pulse : (appSlot.windowCount > 0 ? 1 : window.idleOpacity)
       transform: Translate {
         x: window.vertical ? 0 : appSlot.displayedShift
         y: window.vertical ? appSlot.displayedShift : 0
@@ -579,6 +644,15 @@ PanelWindow {
       Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
     }
 
+    RunningDot {
+      visible: appSlot.windowCount > 0 || appSlot.launching
+      opacity: appSlot.launching ? appSlot.pulse : 1
+      transform: Translate {
+        x: window.vertical ? 0 : appSlot.displayedShift
+        y: window.vertical ? appSlot.displayedShift : 0
+      }
+    }
+
     // With animations off it holds still rather than spinning through
     // zero-length steps.
     SequentialAnimation {
@@ -586,7 +660,7 @@ PanelWindow {
       loops: Animation.Infinite
       onRunningChanged: if (!running) appSlot.pulse = 1
 
-      NumberAnimation { target: appSlot; property: "pulse"; from: 1; to: window.idleOpacity; duration: Style.duration(500); easing.type: Easing.InOutSine }
+      NumberAnimation { target: appSlot; property: "pulse"; from: 1; to: 0.25; duration: Style.duration(500); easing.type: Easing.InOutSine }
       NumberAnimation { target: appSlot; property: "pulse"; to: 1; duration: Style.duration(500); easing.type: Easing.InOutSine }
     }
   }
