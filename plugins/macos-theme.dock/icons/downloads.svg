@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="back" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4aa8ee"/>
+      <stop offset="1" stop-color="#1f7fd6"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7cc8fb"/>
+      <stop offset="1" stop-color="#3b9cf0"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a86d8"/>
+      <stop offset="1" stop-color="#1d6fc0"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M14 30c0-4.4 3.6-8 8-8h26c2.5 0 4.8 1.2 6.4 3.2l4.2 5.6c0.8 1 2 1.6 3.2 1.6H106c4.4 0 8 3.6 8 8v4H14z" fill="url(#back)"/>
+    <rect x="14" y="38" width="100" height="70" rx="9" fill="url(#front)"/>
+    <rect x="14" y="38" width="100" height="2" rx="1" fill="#ffffff" opacity="0.45"/>
+  </g>
+  <path d="M64 54v28m0 0l-12-12m12 12l12-12" fill="none" stroke="url(#arrow)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M64 55v27" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.35"/>
+</svg>

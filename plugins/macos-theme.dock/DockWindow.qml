@@ -5,7 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
-import Qt.labs.folderlistmodel
+import Quickshell.Io
 import "DockModel.js" as DockModel
 
 // One screen's dock. It stays mapped and only hides its contents, so switching
@@ -297,6 +297,16 @@ PanelWindow {
     // frame back instead of being uploaded again.
     opacity: window.shown ? 1 : 0
 
+    // The macOS dock platter: a rounded sheet of frosted glass behind the icons,
+    // with a faint light edge. Hyprland blurs what is behind it.
+    Rectangle {
+      anchors.fill: parent
+      radius: Math.round(window.slotSize * 0.3)
+      color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.4)
+      border.width: 1
+      border.color: Qt.rgba(1, 1, 1, 0.16)
+    }
+
     HoverHandler {
       id: bodyHover
       onHoveredChanged: if (!hovered && window.autohide) hideTimer.restart()
@@ -338,7 +348,7 @@ PanelWindow {
       }
 
       PlaceSlot {
-        iconName: "folder-download"
+        iconSource: Qt.resolvedUrl("icons/downloads.svg")
         command: "xdg-open \"$HOME/Downloads\""
       }
 
@@ -350,25 +360,35 @@ PanelWindow {
       }
 
       PlaceSlot {
-        iconName: trashFiles.count > 0 ? "user-trash-full" : "user-trash"
+        iconSource: Qt.resolvedUrl(window.trashFull ? "icons/trash-full.svg" : "icons/trash.svg")
         command: "gio open trash:///"
       }
     }
   }
 
-  // Watches the Trash so its icon shows when there is something in it.
-  FolderListModel {
-    id: trashFiles
-    folder: "file://" + Quickshell.env("HOME") + "/.local/share/Trash/files"
-    showDirs: true
-    showHidden: true
+  // Whether the Trash has anything in it, checked every few seconds while the
+  // dock shows, so its icon can show the paper inside.
+  property bool trashFull: false
+
+  Process {
+    id: trashCheck
+    command: ["sh", "-c", "[ -n \"$(ls -A \"$HOME/.local/share/Trash/files\" 2>/dev/null)\" ]"]
+    onExited: function(code) { window.trashFull = code === 0 }
+  }
+
+  Timer {
+    interval: 5000
+    repeat: true
+    running: window.shown
+    triggeredOnStart: true
+    onTriggered: trashCheck.running = true
   }
 
   // Downloads and Trash, as on the right of the macOS dock: each opens in Files.
   component PlaceSlot: Slot {
     id: placeSlot
 
-    property string iconName
+    property url iconSource
     property string command
 
     mouse.onClicked: function(event) {
@@ -382,7 +402,7 @@ PanelWindow {
       width: window.iconSize
       height: window.iconSize
       sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
-      source: Quickshell.iconPath(placeSlot.iconName, true)
+      source: placeSlot.iconSource
       fillMode: Image.PreserveAspectFit
       asynchronous: true
       smooth: true
