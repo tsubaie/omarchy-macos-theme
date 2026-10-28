@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -172,48 +171,17 @@ Item {
       }
     }
 
-    // Soft shadow under the glass.
-    Rectangle {
-      anchors.centerIn: card
-      anchors.verticalCenterOffset: Style.space(10)
-      width: card.width
-      height: card.height
-      radius: card.radius
-      color: "#000000"
-      opacity: 0.35
-      layer.enabled: true
-      layer.effect: MultiEffect {
-        blurEnabled: true
-        blur: 1.0
-        blurMax: 48
-      }
-    }
-
-    // Liquid Glass: a see-through sheet (Hyprland blurs what is behind it),
-    // a sheen that is brightest at the top, a bright outer rim and a faint
-    // inner one.
+    // Like the macOS switcher: a borderless sheet of tinted glass (Hyprland
+    // blurs what is behind it), with the same padding above and below the
+    // icons; the selected app's name sits in the bottom padding.
     Rectangle {
       id: card
+      readonly property int pad: Math.round(root.tile * 0.36)
       anchors.centerIn: parent
-      width: row.width + Style.space(28)
-      height: row.height + Style.space(28)
+      width: row.width + pad * 2
+      height: row.height + pad * 2
       radius: Style.space(30)
-      color: Qt.rgba(0.15, 0.15, 0.17, 0.38)
-      border.width: 1
-      border.color: Qt.rgba(1, 1, 1, 0.32)
-
-      Rectangle {
-        anchors.fill: parent
-        anchors.margins: 1
-        radius: parent.radius - 1
-        gradient: Gradient {
-          GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.16) }
-          GradientStop { position: 0.45; color: Qt.rgba(1, 1, 1, 0.04) }
-          GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.08) }
-        }
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.08)
-      }
+      color: Qt.rgba(0.2, 0.2, 0.23, 0.34)
 
       // Swallow clicks on the card so they do not cancel.
       MouseArea { anchors.fill: parent }
@@ -232,20 +200,15 @@ Item {
             readonly property bool selected: tileItem.index === root.index
 
             width: root.tile
-            height: root.tile + nameText.height + Style.space(6)
+            height: root.tile
 
-            // The selected app sits on a small pane of brighter glass.
+            // The selected app sits on a darker rounded square, as on macOS.
             Rectangle {
               visible: tileItem.selected
               width: root.tile
               height: root.tile
-              radius: Style.space(20)
-              gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.26) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.12) }
-              }
-              border.width: 1
-              border.color: Qt.rgba(1, 1, 1, 0.34)
+              radius: Style.space(16)
+              color: Qt.rgba(0, 0, 0, 0.28)
             }
 
             Image {
@@ -263,14 +226,14 @@ Item {
 
             Text {
               id: nameText
-              y: root.tile + Style.space(2)
+              y: root.tile + Style.space(6)
               width: root.tile
               horizontalAlignment: Text.AlignHCenter
               textFormat: Text.PlainText
               text: tileItem.modelData.name
               visible: tileItem.selected
               elide: Text.ElideRight
-              color: "#ffffff"
+              color: Qt.rgba(1, 1, 1, 0.85)
               font.family: "Adwaita Sans"
               font.pixelSize: Math.round(13 * Style.fontScale)
             }
