@@ -108,4 +108,18 @@ if hl.plugin.hyprbars then
   }) do
     hl.plugin.hyprbars.add_button({ bg_color = b.color, fg_color = b.fg, size = 14, icon = b.icon, action = b.action })
   end
+
+  -- Omarchy sets up its own title bars for floating workspaces after this file
+  -- loads, and again when a workspace turns floating. Keep ours: ignore any
+  -- later title-bar options and buttons. Each config reload starts Lua fresh.
+  hl.plugin.hyprbars.add_button = function() end
+  local apply_config = hl.config
+  hl.config = function(options)
+    if type(options) == "table" and type(options.plugin) == "table" and options.plugin.hyprbars ~= nil then
+      options.plugin.hyprbars = nil
+      if next(options.plugin) == nil then options.plugin = nil end
+      if next(options) == nil then return end
+    end
+    return apply_config(options)
+  end
 end
