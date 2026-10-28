@@ -1008,6 +1008,12 @@ PanelWindow {
         origin.y: rowBody.height / 2
         angle: fanRow.tilt
       }
+      // A tilted row is drawn as one smoothed, multisampled layer, so the
+      // edges of icons and labels stay clean instead of stair-stepped.
+      antialiasing: true
+      layer.enabled: true
+      layer.smooth: true
+      layer.samples: 8
 
       Rectangle {
         anchors.right: rowIcon.left
@@ -1051,6 +1057,7 @@ PanelWindow {
           asynchronous: true
           smooth: true
           mipmap: true
+          antialiasing: true
         }
 
         // The round "more" button at the top of the fan, in Liquid Glass:
