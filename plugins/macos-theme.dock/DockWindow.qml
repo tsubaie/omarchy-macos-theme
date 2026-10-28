@@ -719,14 +719,18 @@ PanelWindow {
     readonly property bool running: !!item && item.windows.length > 0
 
     visible: window.contentShown && (!!item || window.settingsMenu)
-    width: Math.max(Style.space(140), menuColumn.implicitWidth) + padding * 2
+    // Like the macOS dock menu: frosted dark glass, a faint light edge, and
+    // rows that light up blue under the pointer.
+    width: Math.min(Style.space(320), Math.max(Style.space(200), menuColumn.implicitWidth)) + padding * 2
     height: menuColumn.implicitHeight + padding * 2
     x: window.popupX(window.menuSlot, menu)
     y: window.popupY(window.menuSlot, menu)
-    radius: Style.cornerRadius
-    color: Commons.Color.popups.background
-    borderSpec: Border.surfaceSpec("popups", "border", Commons.Color.popups.border, Style.normalBorderWidth)
-    padding: Style.spacing.sm
+    radius: Style.space(10)
+    color: Qt.rgba(0.16, 0.16, 0.17, 0.82)
+    borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.16), 1)
+    padding: Style.space(5)
+
+    readonly property var windows: item ? item.windows : []
 
     Column {
       id: menuColumn
@@ -754,6 +758,22 @@ PanelWindow {
         onTriggered: Util.execDetached("omarchy-dock autohide " + (window.autohide ? "off" : "on"))
       }
 
+      // The app's open windows: a check marks the front one, a diamond a
+      // minimized one, as in the macOS dock menu.
+      Repeater {
+        model: window.settingsMenu ? [] : menu.windows
+
+        delegate: MenuRow {
+          required property var modelData
+
+          text: String(modelData.toplevel && modelData.toplevel.title || "") || Commons.I18n.t("dock.newWindow")
+          mark: modelData.minimized ? "◆" : (modelData.toplevel && modelData.toplevel.activated ? "✓" : "")
+          onTriggered: window.dock.bringForward(modelData)
+        }
+      }
+
+      MenuSeparator { visible: !window.settingsMenu && menu.windows.length > 0 }
+
       MenuRow {
         visible: menu.hasEntry && menu.running
         text: Commons.I18n.t("dock.newWindow")
@@ -763,8 +783,11 @@ PanelWindow {
       MenuRow {
         visible: menu.hasEntry
         text: menu.item && menu.item.pinned ? Commons.I18n.t("dock.removeFromDock") : Commons.I18n.t("dock.keepInDock")
+        checked: !!menu.item && menu.item.pinned
         onTriggered: window.dock.setPinned(menu.item.key, !menu.item.pinned)
       }
+
+      MenuSeparator { visible: menu.running }
 
       MenuRow {
         visible: menu.running
@@ -985,39 +1008,60 @@ PanelWindow {
     }
   }
 
+  // A thin rule between groups of rows, inset like the macOS menu's.
+  component MenuSeparator: Item {
+    width: parent ? parent.width : 0
+    height: visible ? Style.space(11) : 0
+
+    Rectangle {
+      anchors.centerIn: parent
+      width: parent.width - Style.space(20)
+      height: 1
+      color: Qt.rgba(1, 1, 1, 0.14)
+    }
+  }
+
   component MenuRow: Rectangle {
     id: row
 
     property string text: ""
     property bool checked: false
+    property string mark: checked ? "✓" : ""
     signal triggered()
 
+    readonly property int gutter: Style.space(22)
+
     width: parent ? parent.width : 0
-    height: visible ? Style.spacing.popupRowHeight : 0
-    radius: Style.cornerRadius
-    color: rowMouse.containsMouse ? Style.hoverFill : "transparent"
+    implicitWidth: gutter + rowText.implicitWidth + Style.space(14)
+    height: visible ? Style.space(24) : 0
+    radius: Style.space(5)
+    color: rowMouse.containsMouse ? "#0a84ff" : "transparent"
 
     Text {
+      visible: row.mark !== ""
       anchors.verticalCenter: parent.verticalCenter
-      anchors.left: parent.left
-      anchors.leftMargin: Style.spacing.controlPaddingX
+      width: row.gutter
+      horizontalAlignment: Text.AlignHCenter
       textFormat: Text.PlainText
-      text: row.text
-      color: Commons.Color.popups.text
-      font.family: Style.font.family
-      font.pixelSize: Style.font.body
+      text: row.mark
+      color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
+      font.family: "Adwaita Sans"
+      font.pixelSize: row.mark === "◆" ? Style.font.caption : Style.font.body
     }
 
     Text {
-      visible: row.checked
+      id: rowText
       anchors.verticalCenter: parent.verticalCenter
+      anchors.left: parent.left
+      anchors.leftMargin: row.gutter
       anchors.right: parent.right
-      anchors.rightMargin: Style.spacing.controlPaddingX
+      anchors.rightMargin: Style.space(10)
+      elide: Text.ElideRight
       textFormat: Text.PlainText
-      text: "✓"
-      color: Commons.Color.accent
-      font.family: Style.font.family
-      font.pixelSize: Style.font.body
+      text: row.text
+      color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
+      font.family: "Adwaita Sans"
+      font.pixelSize: Math.round(13 * Style.fontScale)
     }
 
     MouseArea {
