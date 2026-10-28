@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Install (or remove) the macOS theme for Omarchy.
+#
+#   ./install.sh                  theme only
+#   ./install.sh --osd            + frosted volume/brightness capsule
+#   ./install.sh --dictation-hud  + Voxtype dictation pill
+#   ./install.sh --all            everything
+#   ./install.sh --uninstall      undo all of the above
+#
+# Why a script and not `omarchy theme install <url>`: themes installed from git
+# have their .lua files and ghostty.conf stripped for safety, and those carry
+# the glass, title bars and gaps. This copies the theme in as a local theme.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
+THEME_DIR="$CONFIG/omarchy/themes/macos"
+# Outside themes/, or every backup would show up in the theme picker.
+BACKUP_DIR="$CONFIG/omarchy/macos-theme-backups"
+PLUGINS_DIR="$CONFIG/omarchy/plugins"
+LOOKNFEEL="$CONFIG/hypr/looknfeel.lua"
+GTK_CSS="$CONFIG/gtk-4.0/gtk.css"
+OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
+STAMP="$(date +%s)"
+
+LOADER_COMMENT="-- macOS theme: per-theme look overrides (look.lua). Added by omarchy-macos-theme."
+LOADER_LINE='require("default.hypr.require_optional").module("omarchy.current.theme.look")'
+GTK_COMMENT="/* macOS theme: blur behind see-through GTK windows. Added by omarchy-macos-theme. */"
+GTK_LINE="@import url(\"file://$OMARCHY_PATH/default/gtk/glass.css\");"
+
+OSD_ID="macos-theme.osd"
+HUD_ID="macos-theme.dictation-hud"
+
+say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
+
+with_osd=false with_hud=false uninstall=false
+for arg in "$@"; do
+  case "$arg" in
+    --osd) with_osd=true ;;
+    --dictation-hud) with_hud=true ;;
+    --all) with_osd=true; with_hud=true ;;
+    --uninstall) uninstall=true ;;
+    -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
+  esac
+done
+
+command -v omarchy >/dev/null || { echo "This needs Omarchy (the omarchy command was not found)." >&2; exit 1; }
+
+# Remove a line and the comment line above it, keeping a backup.
+remove_lines() {
+  local file="$1" comment="$2" line="$3"
+  [[ -f $file ]] && grep -qF "$line" "$file" || return 0
+  cp "$file" "$file.bak.$STAMP"
+  grep -vxF -e "$comment" -e "$line" "$file.bak.$STAMP" > "$file"
+}
+
+if $uninstall; then
+  if [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; then
+    echo "Switch to another theme first (omarchy theme set <name>), then run --uninstall again." >&2
+    exit 1
+  fi
+  if [[ -d $PLUGINS_DIR/$OSD_ID ]]; then
+    omarchy plugin disable "$OSD_ID" >/dev/null 2>&1 || true
+    omarchy plugin enable omarchy.osd >/dev/null 2>&1 || true
+    rm -rf "${PLUGINS_DIR:?}/$OSD_ID"
+    say "Removed the volume capsule and restored Omarchy's own"
+  fi
+  if [[ -d $PLUGINS_DIR/$HUD_ID ]]; then
+    omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
+    rm -rf "${PLUGINS_DIR:?}/$HUD_ID"
+    say "Removed the dictation HUD (turn Voxtype's own overlay back on with: voxtype config set osd.enabled true)"
+  fi
+  remove_lines "$LOOKNFEEL" "$LOADER_COMMENT" "$LOADER_LINE"
+  remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
+  rm -rf "$THEME_DIR"
+  say "Removed the theme. Backups of edited files end in .bak.$STAMP"
+  exit 0
+fi
+
+# 1. The theme, as a local theme (so its .lua and ghostty.conf are kept).
+if [[ -d $THEME_DIR ]]; then
+  mkdir -p "$BACKUP_DIR"
+  mv "$THEME_DIR" "$BACKUP_DIR/macos.$STAMP"
+  say "Backed up your existing macos theme to $BACKUP_DIR/macos.$STAMP"
+fi
+mkdir -p "$THEME_DIR"
+cp -r "$REPO/theme/." "$THEME_DIR/"
+say "Installed the theme to $THEME_DIR"
+
+# 2. Load the theme's look.lua last, after your own looknfeel settings.
+mkdir -p "$(dirname "$LOOKNFEEL")"
+touch "$LOOKNFEEL"
+if ! grep -qF 'omarchy.current.theme.look' "$LOOKNFEEL"; then
+  cp "$LOOKNFEEL" "$LOOKNFEEL.bak.$STAMP"
+  printf '\n%s\n%s\n' "$LOADER_COMMENT" "$LOADER_LINE" >> "$LOOKNFEEL"
+  say "Added the look.lua loader to $LOOKNFEEL"
+fi
+
+# 3. Let GTK apps such as Files ask Hyprland for blur.
+mkdir -p "$(dirname "$GTK_CSS")"
+touch "$GTK_CSS"
+if ! grep -qF 'default/gtk/glass.css' "$GTK_CSS"; then
+  cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
+  printf '%s\n%s\n' "$GTK_COMMENT" "$GTK_LINE" >> "$GTK_CSS"
+  say "Added GTK blur to $GTK_CSS (reopen GTK apps to see it)"
+fi
+
+# 4. Optional plugins.
+install_plugin() {
+  rm -rf "${PLUGINS_DIR:?}/$1"
+  mkdir -p "$PLUGINS_DIR"
+  cp -r "$REPO/plugins/$1" "$PLUGINS_DIR/$1"
+  # The shell only knows plugins it has scanned, and the rescan finishes in the
+  # background, so retry the enable for a few seconds.
+  omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+  local tries=0
+  until omarchy plugin enable "$1" >/dev/null 2>&1; do
+    (( ++tries < 20 )) || { echo "Could not enable $1; try: omarchy plugin enable $1" >&2; return 1; }
+    sleep 0.25
+  done
+}
+if $with_osd; then
+  install_plugin "$OSD_ID"
+  omarchy plugin disable omarchy.osd >/dev/null 2>&1 || true
+  say "Installed the frosted volume capsule (replaces Omarchy's own popup)"
+fi
+if $with_hud; then
+  install_plugin "$HUD_ID"
+  say "Installed the dictation HUD"
+  if command -v voxtype >/dev/null; then
+    echo "    Voxtype draws its own overlay too. To show only the HUD, run:"
+    echo "      voxtype config set osd.enabled false && systemctl --user restart voxtype"
+  else
+    echo "    Voxtype isn't installed; the HUD stays hidden until it is."
+  fi
+fi
+
+# 5. Apply.
+omarchy theme set macos
+say "Done. The bar, menus and popups pick up the theme now; restart the shell if they don't: omarchy restart shell"

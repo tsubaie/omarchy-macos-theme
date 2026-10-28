@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.dictation-hud",
+  "name": "Dictation HUD",
+  "version": "1.0.0",
+  "description": "macOS-style frosted pill showing Voxtype recording and transcribing.",
+  "license": "MIT",
+  "kinds": ["panel"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Hud.qml"
+  }
+}

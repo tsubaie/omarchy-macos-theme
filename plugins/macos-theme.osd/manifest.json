@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.osd",
+  "name": "macOS volume capsule",
+  "version": "1.0.0",
+  "description": "Omarchy's on-screen display restyled as a frosted macOS capsule with a white slider.",
+  "license": "MIT",
+  "kinds": ["panel"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Osd.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.osd"
+  }
+}
