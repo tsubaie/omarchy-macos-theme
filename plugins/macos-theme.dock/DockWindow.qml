@@ -127,7 +127,7 @@ PanelWindow {
   // The slot a point along the dock falls before, counting from the first app.
   function slotIndexAt(point) {
     var along = window.vertical ? point.y : point.x
-    var first = window.slotSize
+    var first = window.platterPadding
     var count = window.dock ? window.dock.itemModel.count : 0
     return Math.max(0, Math.min(count, Math.round((along - first) / window.slotSize)))
   }
@@ -337,8 +337,6 @@ PanelWindow {
       anchors.centerIn: parent
       columns: window.vertical ? 1 : appRepeater.count + 1 + 1 + unpinnedRepeater.count + 2
 
-      AppsSlot {}
-
       Repeater {
         id: appRepeater
         model: window.dock ? window.dock.itemModel : null
@@ -380,6 +378,9 @@ PanelWindow {
         trash: true
         tip: "Trash"
       }
+
+      // The all-apps grid sits at the far end, like Launchpad in the macOS dock.
+      AppsSlot {}
     }
   }
 
@@ -585,7 +586,7 @@ PanelWindow {
     id: appsSlot
     tip: "Applications"
 
-    property real displayedShift: window.insertIndex >= 0 ? -window.slotSize / 2 : 0
+    property real displayedShift: 0
 
     Behavior on displayedShift {
       enabled: window.animateShifts
