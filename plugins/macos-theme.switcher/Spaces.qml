@@ -20,6 +20,17 @@ Item {
   property int pendingStep: 1
   property var collect: []
   property string wallpaper: ""
+  // Workspaces in the order they were last visited, newest first.
+  property var visited: []
+
+  Connections {
+    target: Hyprland
+    function onFocusedWorkspaceChanged() {
+      var ws = Hyprland.focusedWorkspace
+      if (!ws || !(ws.id > 0)) return
+      root.visited = [ws.id].concat(root.visited.filter(function(id) { return id !== ws.id })).slice(0, 50)
+    }
+  }
 
   // Large miniatures, shrunk only as far as needed to fit the screen.
   property int screenWidth: 1920
@@ -94,17 +105,26 @@ Item {
         out.push(space)
       }
       space.windows.push({ address: c.address, x: c.at[0], y: c.at[1], w: c.size[0], h: c.size[1], floating: c.floating })
+      // A workspace is as recent as its most recently focused window.
+      var rank = typeof c.focusHistoryID === "number" ? c.focusHistoryID : 9999
+      space.rank = Math.min(space.rank === undefined ? 9999 : space.rank, rank)
     })
     // Tiled windows first, floating ones on top, as on screen.
     out.forEach(function(s) { s.windows.sort(function(a, b) { return (a.floating ? 1 : 0) - (b.floating ? 1 : 0) }) })
-    out.sort(function(a, b) { return a.id - b.id })
+    // Most recently used first, the current workspace leading, so a quick
+    // Super+Tab toggles between the last two workspaces, like Alt+Tab does
+    // between apps.
+    out.forEach(function(s) {
+      var seen = root.visited.indexOf(s.id)
+      // Visited workspaces first, in visit order; then the rest by window focus.
+      s.order = s.id === active.id ? -1 : (seen >= 0 ? seen : 1000 + s.rank)
+    })
+    out.sort(function(a, b) { return a.order - b.order })
     root.spaces = out
 
-    var current = -1
-    for (var i = 0; i < out.length; i++) if (out[i].id === active.id) current = i
     if (out.length === 0) { root.close(); return }
-    if (current < 0) root.index = 0
-    else root.index = (current + (root.pendingStep < 0 ? -1 : 1) + out.length) % out.length
+    if (root.pendingStep < 0) root.index = out.length - 1
+    else root.index = out.length > 1 ? 1 : 0
     if (root.commitWhenLoaded) root.commit()
   }
 

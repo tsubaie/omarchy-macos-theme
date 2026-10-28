@@ -138,6 +138,27 @@ PanelWindow {
   // The Trash's own menu (Open / Empty Trash), and its confirm step.
   property bool trashMenu: false
   property bool downloadsMenu: false
+  // Downloads "Display as": the fan ("stack") or opening the folder, kept
+  // across restarts in a small state file.
+  property string downloadsAs: "stack"
+  readonly property string dockStateFile: Quickshell.env("HOME") + "/.local/state/omarchy/macos-dock-downloads"
+
+  FileView {
+    path: window.dockStateFile
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: window.downloadsAs = text().trim() === "folder" ? "folder" : "stack"
+  }
+
+  function setDownloadsAs(mode) {
+    window.downloadsAs = mode
+    Util.execDetached("mkdir -p " + Util.shellQuote(Quickshell.env("HOME") + "/.local/state/omarchy") + " && printf %s " + Util.shellQuote(mode) + " > " + Util.shellQuote(window.dockStateFile))
+  }
+
+  // The open submenu: its rows and the row it hangs from.
+  property var submenuRows: []
+  property Item submenuAnchor: null
   property bool trashConfirm: false
 
   onWorkspaceIdChanged: if (dock) dock.readMode(workspaceId)
@@ -190,6 +211,8 @@ PanelWindow {
     window.trashMenu = false
     window.downloadsMenu = false
     window.trashConfirm = false
+    window.submenuRows = []
+    window.submenuAnchor = null
     window.menuItem = null
     window.settingsMenu = false
     window.menuSlot = null
@@ -239,6 +262,7 @@ PanelWindow {
     Region { item: window.shown && window.autohide ? edgeTrigger : null }
     Region { item: menu.visible ? menu : null }
     Region { item: menuTail.visible ? menuTail : null }
+    Region { item: submenu.visible ? submenu : null }
     Region { item: stack.visible ? stack : null }
   }
 
@@ -442,7 +466,10 @@ PanelWindow {
         return
       }
       if (placeSlot.stack) {
-        if (window.stackOpen) window.closeMenu()
+        if (window.downloadsAs === "folder") {
+          window.closeMenu()
+          Util.execDetached("xdg-open " + Util.shellQuote(window.downloadsDir))
+        } else if (window.stackOpen) window.closeMenu()
         else window.openStack(placeSlot)
         return
       }
@@ -797,16 +824,16 @@ PanelWindow {
     visible: window.contentShown && (!!item || window.settingsMenu || window.trashMenu || window.downloadsMenu)
     // Like the macOS dock menu: translucent slate glass with a faint light
     // edge, roomy rows, grey section headings, and a tail pointing at the icon.
-    readonly property color fill: Qt.rgba(0.17, 0.19, 0.23, 0.86)
+    readonly property color fill: Qt.rgba(0.16, 0.19, 0.24, 0.72)
     readonly property int tail: window.position === "bottom" ? Style.space(9) : 0
-    width: Math.min(Style.space(360), Math.max(Style.space(220), menuColumn.implicitWidth)) + padding * 2
+    width: Math.min(Style.space(380), Math.max(Style.space(230), menuColumn.implicitWidth)) + padding * 2
     height: menuColumn.implicitHeight + padding * 2
     x: window.popupX(window.menuSlot, menu)
     y: window.popupY(window.menuSlot, menu) - tail
     radius: Style.space(10)
     color: fill
     borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.18), 1)
-    padding: Style.space(6)
+    padding: Style.space(5)
 
     readonly property var windows: item ? item.windows : []
 
@@ -838,6 +865,33 @@ PanelWindow {
 
       // The app's open windows: a check marks the front one, a diamond a
       // minimized one, as in the macOS dock menu.
+      MenuHeader { visible: window.downloadsMenu; text: "Display as" }
+      MenuRow {
+        visible: window.downloadsMenu
+        text: "Folder"
+        checked: window.downloadsAs === "folder"
+        onTriggered: window.setDownloadsAs("folder")
+      }
+      MenuRow {
+        visible: window.downloadsMenu
+        text: "Stack"
+        checked: window.downloadsAs !== "folder"
+        onTriggered: window.setDownloadsAs("stack")
+      }
+      MenuSeparator { visible: window.downloadsMenu }
+      MenuHeader { visible: window.downloadsMenu; text: "View content as" }
+      MenuRow {
+        visible: window.downloadsMenu
+        text: "Fan"
+        checked: true
+      }
+      MenuSeparator { visible: window.downloadsMenu }
+      MenuRow {
+        visible: window.downloadsMenu
+        text: "Options"
+        submenu: [["Show in Files", function() { Util.execDetached("xdg-open " + Util.shellQuote(Quickshell.env("HOME"))) }]]
+      }
+      MenuSeparator { visible: window.downloadsMenu }
       MenuRow {
         visible: window.downloadsMenu
         text: "Open “Downloads”"
@@ -908,17 +962,12 @@ PanelWindow {
 
       MenuSeparator { visible: menu.hasEntry && menu.running }
 
-      MenuHeader {
-        visible: menu.hasEntry
-        text: "Options"
-      }
-
-      // As in macOS's Options: a check shows the app is kept in the dock.
+      // As in macOS: Options opens a submenu, where a check shows the app is
+      // kept in the dock.
       MenuRow {
         visible: menu.hasEntry
-        text: Commons.I18n.t("dock.keepInDock")
-        checked: !!menu.item && menu.item.pinned
-        onTriggered: window.dock.setPinned(menu.item.key, !menu.item.pinned)
+        text: "Options"
+        submenu: [[Commons.I18n.t("dock.keepInDock"), function() { window.dock.setPinned(menu.item.key, !menu.item.pinned) }, !!menu.item && menu.item.pinned]]
       }
 
       MenuSeparator { visible: menu.running }
@@ -927,6 +976,37 @@ PanelWindow {
         visible: menu.running
         text: Commons.I18n.t("dock.quit")
         onTriggered: window.dock.quit(menu.item)
+      }
+    }
+  }
+
+  BorderSurface {
+    id: submenu
+    visible: menu.visible && window.submenuRows.length > 0 && !!window.submenuAnchor
+    width: Math.max(Style.space(200), submenuColumn.implicitWidth) + padding * 2
+    height: submenuColumn.implicitHeight + padding * 2
+    x: menu.x + menu.width - Style.space(4)
+    // Level with the row it opens from (rows sit directly in the menu's column).
+    y: window.submenuAnchor ? menu.y + menuColumn.y + window.submenuAnchor.y - padding : 0
+    radius: Style.space(10)
+    color: menu.fill
+    borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.18), 1)
+    padding: Style.space(5)
+
+    Column {
+      id: submenuColumn
+      x: submenu.contentLeftInset
+      y: submenu.contentTopInset
+      width: submenu.width - submenu.contentLeftInset - submenu.contentRightInset
+
+      Repeater {
+        model: window.submenuRows
+        delegate: MenuRow {
+          required property var modelData
+          text: modelData[0]
+          checked: modelData[2] === true
+          onTriggered: modelData[1]()
+        }
       }
     }
   }
@@ -1201,19 +1281,20 @@ PanelWindow {
   component MenuHeader: Item {
     property string text
     width: parent ? parent.width : 0
-    implicitWidth: Style.space(28) + headerText.implicitWidth + Style.space(18)
-    height: visible ? Style.space(28) : 0
+    implicitWidth: Style.space(30) + headerText.implicitWidth + Style.space(22)
+    height: visible ? Style.space(29) : 0
 
     Text {
       id: headerText
       anchors.verticalCenter: parent.verticalCenter
       anchors.left: parent.left
-      anchors.leftMargin: Style.space(28)
+      anchors.leftMargin: Style.space(30)
       textFormat: Text.PlainText
       text: parent.text
-      color: Qt.rgba(1, 1, 1, 0.42)
+      color: Qt.rgba(1, 1, 1, 0.4)
       font.family: "Adwaita Sans"
-      font.pixelSize: Math.round(15 * Style.fontScale)
+      font.pixelSize: Math.round(16 * Style.fontScale)
+      font.weight: Font.Medium
     }
   }
 
@@ -1221,11 +1302,12 @@ PanelWindow {
     width: parent ? parent.width : 0
     height: visible ? Style.space(11) : 0
 
+    // Edge to edge, as in the macOS menu.
     Rectangle {
       anchors.centerIn: parent
-      width: parent.width - Style.space(20)
+      width: parent.width + Style.space(10)
       height: 1
-      color: Qt.rgba(1, 1, 1, 0.14)
+      color: Qt.rgba(1, 1, 1, 0.16)
     }
   }
 
@@ -1236,14 +1318,17 @@ PanelWindow {
     property bool checked: false
     property string mark: checked ? "✓" : ""
     property bool keepOpen: false
+    // Rows for a submenu: [text, action, checked]. A row with one opens it.
+    property var submenu: []
     signal triggered()
 
-    readonly property int gutter: Style.space(28)
+    readonly property int gutter: Style.space(30)
+    readonly property bool hasSubmenu: submenu.length > 0
 
     width: parent ? parent.width : 0
-    implicitWidth: gutter + rowText.implicitWidth + Style.space(18)
-    height: visible ? Style.space(30) : 0
-    radius: Style.space(6)
+    implicitWidth: gutter + rowText.implicitWidth + Style.space(hasSubmenu ? 48 : 22)
+    height: visible ? Style.space(29) : 0
+    radius: Style.space(5)
     color: rowMouse.containsMouse ? "#0a84ff" : "transparent"
 
     Text {
@@ -1255,7 +1340,8 @@ PanelWindow {
       text: row.mark
       color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
       font.family: "Adwaita Sans"
-      font.pixelSize: row.mark === "◆" ? Math.round(10 * Style.fontScale) : Math.round(15 * Style.fontScale)
+      font.pixelSize: row.mark === "◆" ? Math.round(10 * Style.fontScale) : Math.round(16 * Style.fontScale)
+      font.weight: Font.DemiBold
     }
 
     Text {
@@ -1270,7 +1356,19 @@ PanelWindow {
       text: row.text
       color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
       font.family: "Adwaita Sans"
-      font.pixelSize: Math.round(13 * Style.fontScale)
+      font.pixelSize: Math.round(16 * Style.fontScale)
+      font.weight: Font.Medium
+    }
+
+    Text {
+      visible: row.hasSubmenu
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(10)
+      textFormat: Text.PlainText
+      text: "▶"
+      color: "#ffffff"
+      font.pixelSize: Math.round(12 * Style.fontScale)
     }
 
     MouseArea {
@@ -1279,7 +1377,19 @@ PanelWindow {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       enabled: row.enabled
+      onContainsMouseChanged: {
+        if (!containsMouse) return
+        if (row.hasSubmenu) {
+          window.submenuRows = row.submenu
+          window.submenuAnchor = row
+        } else if (window.submenuAnchor && window.submenuAnchor.parent === row.parent) {
+          // Moving to another row of the same menu closes the submenu.
+          window.submenuRows = []
+          window.submenuAnchor = null
+        }
+      }
       onClicked: {
+        if (row.hasSubmenu) return
         row.triggered()
         if (!row.keepOpen) window.closeMenu()
       }
