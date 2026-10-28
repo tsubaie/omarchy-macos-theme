@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="disc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9a9aa0"/>
+      <stop offset="1" stop-color="#5c5c62"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.08"/>
+    </linearGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="1.2" stdDeviation="1.2" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="arrowShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="0.8" stdDeviation="0.6" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="28" fill="url(#disc)" filter="url(#drop)"/>
+  <circle cx="32" cy="32" r="27.3" fill="none" stroke="url(#rim)" stroke-width="1.4"/>
+  <path filter="url(#arrowShadow)" fill="#ffffff" stroke="#ffffff" stroke-width="2.4" stroke-linejoin="round"
+        d="M18.5 43.5 C19 33.2 25.6 27.4 36.2 27.4 V21.2 C36.2 20.1 37.5 19.6 38.3 20.3 L47.4 28.6 C47.9 29.1 47.9 29.9 47.4 30.4 L38.3 38.7 C37.5 39.4 36.2 38.9 36.2 37.8 V32.4 C28.4 32.4 23.3 35.6 20.4 44.1 C20.1 45 18.5 44.8 18.5 43.5 Z"/>
+</svg>

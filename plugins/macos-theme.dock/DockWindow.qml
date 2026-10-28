@@ -61,7 +61,7 @@ PanelWindow {
   // has five rows.
   readonly property int popupRoom: Math.max(Style.spacing.popupRowHeight * 5 + Style.spacing.sm * 2 + Style.normalBorderWidth * 2 + gap * 2, stackRoom)
   // The Downloads fan: up to ten files plus "Open in Files".
-  readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(6)) * 11 + Style.space(24))
+  readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(10)) * 11 + Style.space(24))
   // Icons pop away from the screen edge.
   readonly property int popOrigin: position === "top" ? Item.Top
     : position === "left" ? Item.Left
@@ -925,7 +925,7 @@ PanelWindow {
     id: stack
 
     readonly property int icon: Math.round(window.iconSize * 1.05)
-    readonly property int rowHeight: icon + Style.space(6)
+    readonly property int rowHeight: icon + Style.space(10)
     readonly property int labelRoom: Style.space(260)
     // Oldest at the top, newest at the bottom next to the dock.
     readonly property var files: window.stackFiles.slice(0, 10).reverse()
@@ -934,7 +934,7 @@ PanelWindow {
 
     visible: window.contentShown && opacity > 0
     opacity: window.stackOpen ? 1 : 0
-    width: labelRoom + Style.space(10) + icon + lean
+    width: labelRoom + Style.space(10) + icon + Style.space(6) + lean
     height: fanColumn.implicitHeight
     // The icon column sits right above the Downloads icon.
     x: window.stackSlot ? window.stackSlot.mapToItem(window.contentItem, window.stackSlot.width / 2, 0).x - (labelRoom + Style.space(10) + icon / 2) : 0
@@ -1000,11 +1000,14 @@ PanelWindow {
     Item {
       id: rowBody
       x: fanRow.bend
-      width: stack.labelRoom + Style.space(10) + stack.icon
+      // Clear margin inside the layer: a layer's own edge is not smoothed when
+      // it is rotated, so nothing may touch it.
+      readonly property int pad: Style.space(6)
+      width: stack.labelRoom + Style.space(10) + stack.icon + pad
       height: parent.height
 
       transform: Rotation {
-        origin.x: rowBody.width - stack.icon / 2
+        origin.x: rowBody.width - rowBody.pad - stack.icon / 2
         origin.y: rowBody.height / 2
         angle: fanRow.tilt
       }
@@ -1042,6 +1045,7 @@ PanelWindow {
       Item {
         id: rowIcon
         anchors.right: parent.right
+        anchors.rightMargin: rowBody.pad
         anchors.verticalCenter: parent.verticalCenter
         width: stack.icon
         height: stack.icon
@@ -1060,54 +1064,20 @@ PanelWindow {
           antialiasing: true
         }
 
-        // The round "more" button at the top of the fan, in Liquid Glass:
-        // translucent, lighter at the top, a bright rim and a soft shine.
-        Rectangle {
-          id: glassButton
+        // The round "more" button at the top of the fan, drawn like the
+        // macOS one: a softly lit gray disc with a rounded white arrow.
+        Image {
           visible: fanRow.arrow
           anchors.centerIn: parent
-          width: Math.round(parent.width * 0.86)
+          width: Math.round(parent.width * 0.9)
           height: width
-          radius: width / 2
-          gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, fanMouse.containsMouse ? 0.5 : 0.38) }
-            GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, fanMouse.containsMouse ? 0.24 : 0.16) }
-            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, fanMouse.containsMouse ? 0.3 : 0.22) }
-          }
-          border.width: 1
-          border.color: Qt.rgba(1, 1, 1, 0.7)
-
-          // The shine across the top half.
-          Rectangle {
-            x: parent.width * 0.16
-            y: parent.height * 0.07
-            width: parent.width * 0.68
-            height: parent.height * 0.4
-            radius: height / 2
-            gradient: Gradient {
-              GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.55) }
-              GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
-            }
-          }
-
-          Text {
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: 1
-            textFormat: Text.PlainText
-            text: "\uf064"
-            color: Qt.rgba(0, 0, 0, 0.25)
-            font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: Math.round(parent.width * 0.44)
-          }
-
-          Text {
-            anchors.centerIn: parent
-            textFormat: Text.PlainText
-            text: "\uf064"
-            color: "#ffffff"
-            font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: Math.round(parent.width * 0.44)
-          }
+          sourceSize: Qt.size(width * 2, width * 2)
+          source: fanRow.arrow ? Qt.resolvedUrl("icons/more.svg") : ""
+          fillMode: Image.PreserveAspectFit
+          smooth: true
+          mipmap: true
+          antialiasing: true
+          opacity: fanMouse.containsMouse ? 1 : 0.94
         }
       }
     }
