@@ -928,7 +928,8 @@ PanelWindow {
     id: stackList
     // Newest first; -p marks folders with a trailing slash.
     // The first line is how many items Downloads holds; then the newest ten.
-    command: ["sh", "-c", "cd \"$HOME/Downloads\" 2>/dev/null && ls -A | wc -l && ls -t -A -p | head -n 10"]
+    // Hidden files stay out, as in the macOS stack.
+    command: ["sh", "-c", "cd \"$HOME/Downloads\" 2>/dev/null && ls | wc -l && ls -t -p | head -n 10"]
     stdout: SplitParser {
       onRead: function(line) {
         // Names are shown as plain text and only ever passed quoted to xdg-open.
