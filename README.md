@@ -13,7 +13,7 @@ A dark macOS look for [Omarchy](https://omarchy.org), following Apple's Liquid G
 - **Spotlight-style launcher and menus**: the selected row in blue, with no dimming behind.
 - **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces.
 - **Ghostty**: a frosted background with solid text.
-- **Wallpaper**: a full-resolution (6000×4000) photo by Martin Martz.
+- **Wallpapers**: two full-resolution (6000×4000) photos, by Pawel Czerwinski (the default) and Martin Martz. Cycle between them with `omarchy theme bg next`.
 
 Optional extras:
 
@@ -68,10 +68,10 @@ Bar, menu and popup colors and transparency are in `shell.toml` in the same fold
 
 ## Credits
 
-- Wallpaper: [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4), used under the [Unsplash License](https://unsplash.com/license).
+- Wallpapers: [photo by Pawel Czerwinski on Unsplash](https://unsplash.com/photos/ZkzobNDayXo) and [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4), used under the [Unsplash License](https://unsplash.com/license).
 - The volume capsule is a restyled copy of Omarchy's own on-screen display ([Omarchy](https://github.com/basecamp/omarchy), MIT License).
 - Colors follow Apple's published dark-mode system colors. This project isn't affiliated with or endorsed by Apple. macOS and Liquid Glass are trademarks of Apple Inc.
 
 ## License
 
-MIT, except the wallpaper, which follows the Unsplash License.
+MIT, except the wallpapers, which follow the Unsplash License.
