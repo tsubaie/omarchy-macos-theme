@@ -15,8 +15,37 @@ Item {
   property var manifest: null
 
   readonly property var appLibrary: shell ? shell.appLibrary : null
-  readonly property var dockConfig: shell && shell.shellConfig && shell.shellConfig.dock ? shell.shellConfig.dock : ({})
-  readonly property var defaultDockConfig: shell && shell.defaultsConfig && shell.defaultsConfig.dock ? shell.defaultsConfig.dock : ({})
+  // A user plugin is handed the bar and idle settings but not the dock's, so
+  // read the dock section of shell.json (and Omarchy's defaults) directly and
+  // follow the file as `omarchy dock` changes it. Without this, pins, position
+  // and auto-hide never survive a shell restart.
+  readonly property var dockConfig: shell && shell.shellConfig && shell.shellConfig.dock ? shell.shellConfig.dock : root.fileDock
+  readonly property var defaultDockConfig: shell && shell.defaultsConfig && shell.defaultsConfig.dock ? shell.defaultsConfig.dock : root.fileDefaultDock
+  property var fileDock: ({})
+  property var fileDefaultDock: ({})
+
+  function dockSection(text) {
+    try {
+      var parsed = JSON.parse(String(text || ""))
+      return parsed && typeof parsed.dock === "object" && parsed.dock !== null ? parsed.dock : ({})
+    } catch (e) {
+      return ({})
+    }
+  }
+
+  FileView {
+    path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/shell.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.fileDock = root.dockSection(text())
+  }
+
+  FileView {
+    path: (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/config/omarchy/shell.json"
+    printErrors: false
+    onLoaded: root.fileDefaultDock = root.dockSection(text())
+  }
   readonly property string position: DockModel.normalizePosition(dockConfig.position)
   readonly property bool vertical: DockModel.isVertical(position)
   readonly property bool autohide: dockConfig.autohide === true
