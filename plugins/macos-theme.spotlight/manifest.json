@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.spotlight",
+  "name": "Spotlight launcher",
+  "version": "1.0.0",
+  "description": "Spotlight-style app launcher on Super+Space: a frosted search bar with a Top Hit and app results.",
+  "license": "MIT",
+  "kinds": ["panel"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Spotlight.qml"
+  }
+}

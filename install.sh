@@ -7,6 +7,7 @@
 #   ./install.sh --dock           + macOS dock (running dots, Downloads stack, Trash)
 #   ./install.sh --icons          + MacTahoe macOS icon theme (from GitHub)
 #   ./install.sh --switcher       + app switcher (Alt+Tab) and workspace switcher (Super+Tab)
+#   ./install.sh --spotlight      + Spotlight-style app launcher (Super+Space)
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -35,10 +36,11 @@ OSD_ID="macos-theme.osd"
 HUD_ID="macos-theme.dictation-hud"
 DOCK_ID="macos-theme.dock"
 SWITCHER_ID="macos-theme.switcher"
+SPOTLIGHT_ID="macos-theme.spotlight"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false uninstall=false
+with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false with_spotlight=false uninstall=false
 for arg in "$@"; do
   case "$arg" in
     --osd) with_osd=true ;;
@@ -46,9 +48,10 @@ for arg in "$@"; do
     --dock) with_dock=true ;;
     --icons) with_icons=true ;;
     --switcher) with_switcher=true ;;
-    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true ;;
+    --spotlight) with_spotlight=true ;;
+    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true; with_spotlight=true ;;
     --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -79,6 +82,11 @@ if $uninstall; then
     omarchy plugin enable omarchy.dock >/dev/null 2>&1 || true
     rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
     say "Removed the macOS dock and restored Omarchy's own"
+  fi
+  if [[ -d $PLUGINS_DIR/$SPOTLIGHT_ID ]]; then
+    omarchy plugin disable "$SPOTLIGHT_ID" >/dev/null 2>&1 || true
+    rm -rf "${PLUGINS_DIR:?}/$SPOTLIGHT_ID"
+    say "Removed Spotlight (Super+Space is back to Omarchy's menu after: hyprctl reload)"
   fi
   if [[ -d $PLUGINS_DIR/$SWITCHER_ID ]]; then
     omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
@@ -173,6 +181,10 @@ fi
 if $with_switcher; then
   install_plugin "$SWITCHER_ID"
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
+fi
+if $with_spotlight; then
+  install_plugin "$SPOTLIGHT_ID"
+  say "Installed Spotlight (Super+Space while this theme is active)"
 fi
 if $with_hud; then
   install_plugin "$HUD_ID"
