@@ -103,7 +103,7 @@ if hl.plugin.hyprbars then
   -- Left to right: close, minimize, zoom.
   for _, b in ipairs({
     { color = "rgb(ff5f57)", fg = "rgb(4d0000)", icon = "", action = "hyprctl dispatch 'hl.dsp.window.close({ " .. window .. " })'" },
-    { color = "rgb(febc2e)", fg = "rgb(7a4500)", icon = "", action = "omarchy-hyprland-window-minimize %WINDOW%" },
+    { color = "rgb(febc2e)", fg = "rgb(7a4500)", icon = "", action = 'bash "$HOME/.local/state/omarchy/current/theme/minimize.sh" %WINDOW%' },
     { color = "rgb(28c840)", fg = "rgb(004d00)", icon = "", action = "hyprctl dispatch 'hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"toggle\", " .. window .. " })'" },
   }) do
     hl.plugin.hyprbars.add_button({ bg_color = b.color, fg_color = b.fg, size = 14, icon = b.icon, action = b.action })

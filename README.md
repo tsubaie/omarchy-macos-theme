@@ -62,7 +62,7 @@ Bar, menu and popup colors and transparency are in `shell.toml` in the same fold
 ## Good to know
 
 - Needs Omarchy 4 (Lua Hyprland config). The title bars use the plugin Omarchy ships for floating workspaces.
-- The yellow button minimizes only on floating workspaces, because that's how Omarchy's minimize works.
+- The yellow button minimizes only on floating workspaces, because that's how Omarchy's minimize works. There the window shrinks into the dock, and its dock icon brings it back.
 - Title bars fade with their window, so on glass windows they are about 80% opaque. Hyprland fades a window as a whole.
 - Apps that draw their own title bar (like Brave or Files) show the macOS strip above it.
 
