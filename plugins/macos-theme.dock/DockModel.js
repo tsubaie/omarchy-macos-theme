@@ -37,7 +37,8 @@ function pinnedIds(dockConfig, defaultsConfig) {
 function isDockWindow(window) {
   if (!window || !window.key) return false
   if (window.minimized === true) return true
-  return window.hasEntry === true && window.workspaceId >= 1
+  // A window with no app at all still shows, as macOS shows every running app.
+  return (window.hasEntry === true || window.standalone === true) && window.workspaceId >= 1
 }
 
 // Minimizing moves a window to this special workspace, and the dock brings it

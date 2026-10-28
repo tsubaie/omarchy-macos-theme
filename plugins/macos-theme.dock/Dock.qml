@@ -51,6 +51,27 @@ Item {
     return id ? DesktopEntries.byId(id) : null
   }
 
+  // A window with no app id can still name its app in its title, as in
+  // "Untitled 1 — RusTXT". Match the longest app name the title ends with.
+  function entryForTitle(title) {
+    title = String(title || "")
+    if (!title) return null
+    var best = null
+    var values = DesktopEntries.applications.values
+    for (var i = 0; i < values.length; i++) {
+      var name = String(values[i].name || "")
+      if (name.length < 3 || values[i].noDisplay) continue
+      var at = title.length - name.length
+      var bounded = at === 0 || /[\s\-—–|:·]/.test(title.charAt(at - 1))
+      if (at >= 0 && title.substr(at) === name && bounded && (!best || name.length > best.name.length)) best = values[i]
+    }
+    return best
+  }
+
+  function entryForWindow(toplevel) {
+    return toplevel.appId ? root.entryForAppId(toplevel.appId) : root.entryForTitle(toplevel.title)
+  }
+
   // A pinned app that is not installed has nothing to launch, so it is left
   // out until it is. Windows are matched to the desktop entry that claims them.
   readonly property var items: {
@@ -63,12 +84,13 @@ Item {
     var toplevels = Hyprland.toplevels.values
     for (var i = 0; i < toplevels.length; i++) {
       var toplevel = toplevels[i].wayland
-      if (!toplevel || !toplevel.appId || toplevel.parent) continue
-      var entry = root.entryForAppId(toplevel.appId)
+      if (!toplevel || toplevel.parent) continue
+      var entry = root.entryForWindow(toplevel)
       var workspace = toplevels[i].workspace
       windows.push({
-        key: entry ? entry.id : toplevel.appId,
+        key: entry ? entry.id : (toplevel.appId || "window:" + toplevels[i].address),
         hasEntry: !!entry && !entry.noDisplay,
+        standalone: !entry && !toplevel.appId,
         workspaceId: workspace ? workspace.id : -1,
         minimized: !!workspace && DockModel.isMinimizedWorkspace(workspace.name),
         address: toplevels[i].address,
@@ -89,9 +111,9 @@ Item {
       var workspace = toplevels[i].workspace
       var toplevel = toplevels[i].wayland
       if (!workspace || !DockModel.isMinimizedWorkspace(workspace.name) || !toplevel || toplevel.parent) continue
-      var entry = toplevel.appId ? root.entryForAppId(toplevel.appId) : null
+      var entry = root.entryForWindow(toplevel)
       out.push({
-        key: entry ? entry.id : (toplevel.appId || "application-x-executable"),
+        key: entry ? entry.id : (toplevel.appId || "window:" + toplevels[i].address),
         title: String(toplevel.title || ""),
         minimized: true,
         address: toplevels[i].address,
@@ -175,7 +197,8 @@ Item {
 
   function iconFor(item) {
     var entry = entryFor(item)
-    var icon = entry && entry.icon ? entry.icon : (item ? item.key : "")
+    var key = item ? String(item.key) : ""
+    var icon = entry && entry.icon ? entry.icon : (key.indexOf("window:") === 0 ? "application-x-executable" : key)
     return root.appLibrary ? root.appLibrary.iconSource(icon) : Quickshell.iconPath(icon, true)
   }
 
