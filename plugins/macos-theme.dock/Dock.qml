@@ -340,7 +340,13 @@ Item {
     steps.push("hl.dsp.focus({ " + target + " })")
     steps.push("hl.dsp.window.alter_zorder({ mode = \"top\", " + target + " })")
     var dispatch = function(step) { return "hyprctl dispatch " + Util.shellQuote(step) }
-    var command = steps.map(dispatch).join(" && ")
+    // Like a click in the macOS dock, this leaves the pointer where it is:
+    // Hyprland's warp to the focused window is off just for this focus, then
+    // back to the user's own setting.
+    var warps = "warps=$(hyprctl -j getoption cursor:no_warps | jq -r .bool); "
+      + "hyprctl eval 'hl.config({ cursor = { no_warps = true } })'; "
+    var unwarp = "; hyprctl eval \"hl.config({ cursor = { no_warps = $warps } })\""
+    var command = warps + steps.map(dispatch).join(" && ") + unwarp
     if (after.length > 0) command += "; sleep 0.4; " + after.map(dispatch).join("; ")
     // A window the genie took away comes back out of its icon the same way.
     var screen = window.minimized ? Quickshell.screens.find(function(each) {
