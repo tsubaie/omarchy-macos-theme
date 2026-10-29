@@ -10,8 +10,16 @@ const script = path.join(__dirname, "..", "install.sh")
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "macos-theme-test-"))
 const bin = path.join(home, "bin")
 fs.mkdirSync(bin)
-// `omarchy theme current` prints $THEME; every other omarchy call succeeds quietly.
-fs.writeFileSync(path.join(bin, "omarchy"), '#!/bin/sh\n[ "$1 $2" = "theme current" ] && echo "$THEME"\nexit 0\n', { mode: 0o755 })
+// `omarchy theme current` prints $THEME, `plugin clone` makes an empty menu clone, and every
+// other omarchy call succeeds quietly.
+fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
+[ "$1 $2" = "theme current" ] && echo "$THEME"
+if [ "$1 $2" = "plugin clone" ]; then
+  mkdir -p "$XDG_CONFIG_HOME/omarchy/plugins/me.menu" && touch "$XDG_CONFIG_HOME/omarchy/plugins/me.menu/Menu.qml"
+  echo "Cloned omarchy.menu to $XDG_CONFIG_HOME/omarchy/plugins/me.menu and switched"
+fi
+exit 0
+`, { mode: 0o755 })
 
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
@@ -33,6 +41,11 @@ try {
   assert.strictEqual(s.features.theme, false)
   assert.ok(fs.existsSync(path.join(home, ".config/omarchy/plugins/macos-theme.dock/manifest.json")))
 
+  // The wide menu on a computer with no menu clone yet makes one (and says when it can't patch it).
+  const menu = run("--add", "wide-menu")
+  assert.strictEqual(menu.status, 0, menu.stderr)
+  assert.match(menu.stderr, /Could not patch/)
+
   // --remove takes out only that piece.
   assert.strictEqual(run("--remove", "rows").status, 0)
   s = status()
@@ -40,8 +53,20 @@ try {
   assert.strictEqual(s.features.dock, true)
   assert.ok(!fs.readFileSync(path.join(home, ".config/gtk-4.0/gtk.css"), "utf8").includes("current/theme/gtk.css"))
 
+  // Installing the theme again keeps wallpapers of your own; removing it keeps it in a backup.
+  const themeDir = path.join(home, ".config/omarchy/themes/macos")
+  assert.strictEqual(run("--add", "theme").status, 0)
+  fs.writeFileSync(path.join(themeDir, "backgrounds/mine.jpg"), "")
+  assert.strictEqual(run("--add", "theme").status, 0)
+  assert.ok(fs.existsSync(path.join(themeDir, "backgrounds/mine.jpg")))
+  assert.ok(fs.existsSync(path.join(themeDir, "look.lua")))
+  assert.strictEqual(run("--remove", "theme").status, 0)
+  assert.strictEqual(status().features.theme, false)
+  const kept = fs.readdirSync(path.join(home, ".config/omarchy/macos-theme-backups"))
+  assert.ok(kept.some((d) => fs.existsSync(path.join(home, ".config/omarchy/macos-theme-backups", d, "backgrounds/mine.jpg"))))
+
   // The theme can't be removed while it is the current theme.
-  fs.mkdirSync(path.join(home, ".config/omarchy/themes/macos"), { recursive: true })
+  fs.mkdirSync(themeDir, { recursive: true })
   env.THEME = "Macos"
   s = status()
   assert.strictEqual(s.active, true)

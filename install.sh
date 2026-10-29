@@ -204,8 +204,10 @@ remove_icons() {
 remove_theme() {
   remove_lines "$LOOKNFEEL" "$LOADER_COMMENT" "$LOADER_LINE"
   remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
-  rm -rf "$THEME_DIR"
-  say "Removed the theme"
+  # Kept, not deleted: it may hold wallpapers and files of your own.
+  mkdir -p "$BACKUP_DIR"
+  mv "$THEME_DIR" "$BACKUP_DIR/macos.$STAMP"
+  say "Removed the theme (kept in $BACKUP_DIR/macos.$STAMP)"
 }
 
 if (( ${#remove[@]} )); then
@@ -235,6 +237,8 @@ if want theme; then
   fi
   mkdir -p "$THEME_DIR"
   cp -r "$REPO/theme/." "$THEME_DIR/"
+  # Wallpapers and files you added stay; the theme's own files are the new ones.
+  [[ -d $BACKUP_DIR/macos.$STAMP ]] && cp -rn "$BACKUP_DIR/macos.$STAMP/." "$THEME_DIR/"
   say "Installed the theme to $THEME_DIR"
 fi
 
@@ -355,7 +359,8 @@ fi
 if want wide-menu; then
   # Clone the menu of the Omarchy version installed here, then patch it (width,
   # magnifying glass, "Search"), so it matches this Omarchy's menu otherwise.
-  menu_dir=$(ls -d "$PLUGINS_DIR"/*.menu 2>/dev/null | while read -r d; do grep -q '"clonedFrom": "omarchy.menu"' "$d/manifest.json" 2>/dev/null && echo "$d"; done | head -n1)
+  # No clone yet fails the lookup, which only means making one.
+  menu_dir=$(ls -d "$PLUGINS_DIR"/*.menu 2>/dev/null | while read -r d; do grep -q '"clonedFrom": "omarchy.menu"' "$d/manifest.json" 2>/dev/null && echo "$d"; done | head -n1) || true
   if [[ -z $menu_dir ]]; then
     menu_dir=$(omarchy plugin clone omarchy.menu 2>/dev/null | sed -n 's/^Cloned omarchy.menu to \(.*\) and switched.*/\1/p')
   fi
