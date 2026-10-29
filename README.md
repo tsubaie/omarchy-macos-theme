@@ -75,7 +75,7 @@ Omarchy's dock, which appears on floating workspaces, reworked to behave like th
 
 ### macOS icons (`--icons`)
 
-Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from its GitHub repository (default color, into your home folder, no password) and switches to it. App icons, Files, and the dock's Trash and Downloads then look like macOS.
+Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from its GitHub repository (default color, into your home folder, no password) and switches to it. App icons, Files, and the dock's Trash and Downloads then look like macOS. As in Finder, folders in Files lists are small blue folders and the sidebar uses gray outlines (MacTahoe draws small folders as outlines; the script swaps in its color folders at those sizes).
 
 ### App and workspace switchers (`--switcher`)
 

@@ -128,6 +128,20 @@ if $with_icons; then
   if git clone -q --depth 1 https://github.com/vinceliuice/MacTahoe-icon-theme.git "$tmp/MacTahoe" &&
     bash "$tmp/MacTahoe/install.sh" -t default >/dev/null; then
     say "Installed the MacTahoe icon theme to ~/.local/share/icons"
+    # Finder lists folders as small blue icons, but MacTahoe draws them as gray
+    # outlines below 32px: use its color folders at those sizes too. The sidebar
+    # uses -symbolic icons, so give the folders that have none (Projects) one.
+    for t in "$HOME"/.local/share/icons/MacTahoe{,-dark,-light}; do
+      [[ -d $t/places/scalable ]] || continue
+      for f in "$t"/{places,mimes}/{16,22,24}/{folder,inode-directory}*.svg; do
+        [[ -f $t/places/scalable/${f##*/} ]] && cp --remove-destination "$t/places/scalable/${f##*/}" "$f"
+      done
+      for f in "$t"/places/scalable/folder-*.svg; do
+        sym=$t/places/symbolic/$(basename "$f" .svg)-symbolic.svg
+        [[ -e $sym || ! -f $t/places/symbolic/folder-symbolic.svg ]] || cp "$t/places/symbolic/folder-symbolic.svg" "$sym"
+      done
+      gtk-update-icon-cache -f -q "$t" 2>/dev/null || true
+    done
   else
     echo "Could not install MacTahoe icons; keeping the default icons." >&2
   fi
