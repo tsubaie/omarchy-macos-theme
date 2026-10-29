@@ -29,6 +29,10 @@ cd omarchy-macos-theme
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, and whether the theme is current |
 
+### App
+
+[Omarchy Sync](https://github.com/tsubaie/OmaSync) has a **macOS Theme** page that does all of this without a terminal: a switch for each piece, **Apply** to install or remove what changed, and **Update** to get the latest version. It downloads this repository to `~/.local/share/omarchy-macos-theme` and runs the same `install.sh` (`--add`, `--remove` and `--status --json`), so the page and the script always agree.
+
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps. Re-running the script updates everything in place and keeps your wallpaper.
 
 ## Features
