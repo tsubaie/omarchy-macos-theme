@@ -32,6 +32,7 @@ try {
   assert.deepStrictEqual(Object.keys(s.features), pieces)
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(s.active, false)
+  assert.deepStrictEqual(s.settings, { glass: 0.7, magnification: 1.75 })
 
   // --add installs only what it names.
   assert.strictEqual(run("--add", "rows", "--add", "dock").status, 0)
@@ -60,7 +61,22 @@ try {
   assert.strictEqual(run("--add", "theme").status, 0)
   assert.ok(fs.existsSync(path.join(themeDir, "backgrounds/mine.jpg")))
   assert.ok(fs.existsSync(path.join(themeDir, "look.lua")))
-  assert.strictEqual(run("--remove", "theme").status, 0)
+
+  // Settings: glass goes into look.lua and stays through a reinstall; magnification
+  // goes into the dock's section of shell.json, next to what was there.
+  const shellJson = path.join(home, ".config/omarchy/shell.json")
+  fs.writeFileSync(shellJson, JSON.stringify({ dock: { position: "left" } }))
+  assert.strictEqual(run("--set", "glass=0.85", "--set", "magnification=1.2").status, 0)
+  assert.deepStrictEqual(status().settings, { glass: 0.85, magnification: 1.2 })
+  assert.match(fs.readFileSync(path.join(themeDir, "look.lua"), "utf8"), /o\.window\("\.\*", \{ opacity = "0\.85 0\.85" \}\)/)
+  assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).dock.position, "left")
+  assert.strictEqual(run("--add", "theme").status, 0)
+  assert.strictEqual(status().settings.glass, 0.85)
+  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3"]) {
+    assert.strictEqual(run("--set", bad).status, 1, bad)
+  }
+  const removed = run("--remove", "theme")
+  assert.strictEqual(removed.status, 0, removed.stdout + removed.stderr)
   assert.strictEqual(status().features.theme, false)
   const kept = fs.readdirSync(path.join(home, ".config/omarchy/macos-theme-backups"))
   assert.ok(kept.some((d) => fs.existsSync(path.join(home, ".config/omarchy/macos-theme-backups", d, "backgrounds/mine.jpg"))))

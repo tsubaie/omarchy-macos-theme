@@ -27,11 +27,13 @@ cd omarchy-macos-theme
 | `--uninstall` | Undo everything (switch to another theme first) |
 | `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud` or `menubar` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
-| `--status [--json]` | Which pieces are installed, and whether the theme is current |
+| `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
+| `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
+| `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
 
 ### App
 
-[Omarchy Sync](https://github.com/tsubaie/OmaSync) has a **macOS Theme** page that does all of this without a terminal: a switch for each piece, **Apply** to install or remove what changed, and **Update** to get the latest version. It downloads this repository to `~/.local/share/omarchy-macos-theme` and runs the same `install.sh` (`--add`, `--remove` and `--status --json`), so the page and the script always agree.
+[Omarchy Sync](https://github.com/tsubaie/OmaSync) has a **macOS Theme** page that does all of this without a terminal: a switch for each piece, sliders for the glass and the dock's magnification, **Apply** to install, remove or set what changed, and **Update** to get the latest version. It downloads this repository to `~/.local/share/omarchy-macos-theme` and runs the same `install.sh` (`--add`, `--remove`, `--set` and `--status --json`), so the page and the script always agree.
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps. Re-running the script updates everything in place and keeps your wallpaper.
 

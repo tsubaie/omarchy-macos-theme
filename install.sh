@@ -14,7 +14,9 @@
 #
 #   ./install.sh --add dock       only that piece, without the theme
 #   ./install.sh --remove dock    remove only that piece
-#   ./install.sh --status [--json]  which pieces are installed
+#   ./install.sh --status [--json]  which pieces are installed, and the settings
+#   ./install.sh --set glass=0.8  how solid windows are, 0.5 to 1 (1 is solid)
+#   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
@@ -30,6 +32,7 @@ BACKUP_DIR="$CONFIG/omarchy/macos-theme-backups"
 PLUGINS_DIR="$CONFIG/omarchy/plugins"
 LOOKNFEEL="$CONFIG/hypr/looknfeel.lua"
 GTK_CSS="$CONFIG/gtk-4.0/gtk.css"
+SHELL_JSON="$CONFIG/omarchy/shell.json"
 OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
 STAMP="$(date +%s)"
 
@@ -53,7 +56,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar"
-declare -A add=() remove=()
+declare -A add=() remove=() settings=()
 status=false json=false legacy=false
 (( $# )) || legacy=true
 while (( $# )); do
@@ -71,10 +74,16 @@ while (( $# )); do
       if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
       shift ;;
     # MacTahoe stays, as it always has: it may serve other themes too.
+    --set)
+      [[ ${2:-} =~ ^(glass|magnification)=([0-9]+(\.[0-9]+)?)$ ]] &&
+        awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN { exit !(k == "glass" ? v >= 0.5 && v <= 1 : v >= 1 && v <= 2) }' ||
+        { echo "Unknown setting: ${2:-} (glass=0.5 to 1, or magnification=1 to 2)" >&2; exit 1; }
+      settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+      shift ;;
     --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
     --status) status=true ;;
     --json) json=true ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
   shift
@@ -109,18 +118,41 @@ installed() {
 
 active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
 
+# Glass is the opacity look.lua gives every window; magnification is a key of
+# the dock's section of shell.json, which the dock follows live.
+GLASS_RULE='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
+glass() { sed -nE "s/$GLASS_RULE.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null || true; }
+set_glass() { sed -i -E "s/$GLASS_RULE/\1$1 $1/" "$THEME_DIR/look.lua"; }
+magnification() {
+  local m
+  m=$(jq '.dock.magnification | numbers' "$SHELL_JSON" 2>/dev/null) || true
+  echo "${m:-1.75}"
+}
+set_magnification() {
+  # A missing shell.json means Omarchy's defaults, as `omarchy dock` treats it.
+  local src=$SHELL_JSON tmp
+  [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
+  mkdir -p "$(dirname "$SHELL_JSON")"
+  tmp=$(mktemp)
+  jq -S --argjson m "$1" '.dock.magnification = $m' "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
+}
+
 if $status; then
   if $json; then
     out=""
     for f in $FEATURES; do
       out+="$([[ -n $out ]] && echo ,)\"$f\":$(installed "$f" && echo true || echo false)"
     done
-    printf '{"active":%s,"features":{%s}}\n' "$(active && echo true || echo false)" "$out"
+    g=$(glass)
+    printf '{"active":%s,"features":{%s},"settings":{"glass":%s,"magnification":%s}}\n' \
+      "$(active && echo true || echo false)" "$out" "${g:-0.7}" "$(magnification)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
       printf '%-14s %s\n' "$f" "$(installed "$f" && echo installed || echo "not installed")"
     done
+    g=$(glass)
+    printf '%-14s %s\n' glass "${g:-0.7}" magnification "$(magnification)"
   fi
   exit 0
 fi
@@ -201,13 +233,21 @@ remove_icons() {
   fi
   say "Removed the MacTahoe icons"
 }
+# Moves the theme folder aside into a backup of its own, named in $kept (two
+# runs in the same second must not land in one folder).
+kept=""
+keep_theme() {
+  mkdir -p "$BACKUP_DIR"
+  kept=$(mktemp -d "$BACKUP_DIR/macos.$STAMP.XXX")
+  mv -T "$THEME_DIR" "$kept"
+}
+
 remove_theme() {
   remove_lines "$LOOKNFEEL" "$LOADER_COMMENT" "$LOADER_LINE"
   remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
   # Kept, not deleted: it may hold wallpapers and files of your own.
-  mkdir -p "$BACKUP_DIR"
-  mv "$THEME_DIR" "$BACKUP_DIR/macos.$STAMP"
-  say "Removed the theme (kept in $BACKUP_DIR/macos.$STAMP)"
+  keep_theme
+  say "Removed the theme (kept in $kept)"
 }
 
 if (( ${#remove[@]} )); then
@@ -223,22 +263,24 @@ if (( ${#remove[@]} )); then
   if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
     echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons"
   fi
-  (( ${#add[@]} )) || exit 0
+  (( ${#add[@]} + ${#settings[@]} )) || exit 0
 fi
 
 want() { [[ -n ${add[$1]:-} ]]; }
 
 # 1. The theme, as a local theme (so its .lua and ghostty.conf are kept).
 if want theme; then
+  old_glass=$(glass)
   if [[ -d $THEME_DIR ]]; then
-    mkdir -p "$BACKUP_DIR"
-    mv "$THEME_DIR" "$BACKUP_DIR/macos.$STAMP"
-    say "Backed up your existing macos theme to $BACKUP_DIR/macos.$STAMP"
+    keep_theme
+    say "Backed up your existing macos theme to $kept"
   fi
   mkdir -p "$THEME_DIR"
   cp -r "$REPO/theme/." "$THEME_DIR/"
   # Wallpapers and files you added stay; the theme's own files are the new ones.
-  [[ -d $BACKUP_DIR/macos.$STAMP ]] && cp -rn "$BACKUP_DIR/macos.$STAMP/." "$THEME_DIR/"
+  [[ -n $kept ]] && cp -rn "$kept/." "$THEME_DIR/"
+  # So does the glass you chose.
+  [[ -n $old_glass ]] && set_glass "$old_glass"
   say "Installed the theme to $THEME_DIR"
 fi
 
@@ -382,8 +424,20 @@ if want dictation-hud; then
   fi
 fi
 
+# 4b. Settings.
+if [[ -n ${settings[glass]:-} ]]; then
+  installed theme || { echo "Install the theme first (--add theme), then set its glass." >&2; exit 1; }
+  set_glass "${settings[glass]}"
+  say "Set the glass to ${settings[glass]}"
+fi
+if [[ -n ${settings[magnification]:-} ]]; then
+  set_magnification "${settings[magnification]}"
+  say "Set the dock's magnification to ${settings[magnification]}"
+fi
+
 # 5. Apply: refresh the active theme in place, or switch to it when it was asked for.
-if active; then
+# The dock follows shell.json itself, so magnification alone needs no refresh.
+if active && { (( ${#add[@]} )) || [[ -n ${settings[glass]:-} ]]; }; then
   refresh
 elif want theme; then
   omarchy theme set macos
