@@ -43,6 +43,9 @@ Item {
   readonly property int headerHeight: Math.max(Style.space(36), Style.font.heading + Style.spacing.controlPaddingY * 2)
   readonly property int headerSpacing: Style.spacing.xl
   readonly property int screenMargin: Style.space(40)
+  // The dock menu's slate glass, nearly opaque: these popups sit on the grid,
+  // which Hyprland cannot blur, so a see-through one is lost in the icons.
+  readonly property color popupFill: Qt.rgba(0.17, 0.17, 0.19, 0.95)
 
   // The card fits whole columns, and the grid sits centered in it so any
   // leftover width splits evenly on both sides.
@@ -212,7 +215,7 @@ Item {
         onClicked: root.menuEntry = null
       }
 
-      ConfirmDialog {
+      Alert {
         id: uninstallConfirm
 
         anchors.fill: parent
@@ -220,13 +223,6 @@ Item {
         z: 10
         message: Commons.I18n.t("common.uninstallConfirm").arg(root.uninstallEntry && root.appLibrary ? root.appLibrary.entryName(root.uninstallEntry) : "")
         confirmText: Commons.I18n.t("common.uninstall")
-        background: Commons.Color.menu.background
-        foreground: Commons.Color.menu.text
-        scrim: Commons.Color.menu.scrim
-        selectedBackground: Commons.Color.menu.selectedBackground
-        selectedText: Commons.Color.menu.selectedText
-        fontFamily: Style.font.menuFamily
-        cornerRadius: Style.cornerRadius
         onCanceled: root.cancelUninstall()
         onConfirmed: root.confirmUninstall()
       }
@@ -446,10 +442,10 @@ Item {
         ? Math.max(Style.gapsOut, root.menuPoint.x - width)
         : Math.min(root.menuPoint.x, panel.width - width - Style.gapsOut)
       y: Math.min(root.menuPoint.y, panel.height - height - Style.gapsOut)
-      radius: Style.cornerRadius
-      color: Commons.Color.popups.background
-      borderSpec: Border.surfaceSpec("popups", "border", Commons.Color.popups.border, Style.normalBorderWidth)
-      padding: Style.spacing.sm
+      radius: Style.space(10)
+      color: root.popupFill
+      borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.18), 1)
+      padding: Style.space(5)
 
       Column {
         id: menuColumn
@@ -484,6 +480,107 @@ Item {
     }
   }
 
+  // A macOS alert: the question over two rounded buttons, the default one in
+  // blue, the destructive one in red. Keys work as in Omarchy's ConfirmDialog.
+  component Alert: Item {
+    id: alert
+
+    property bool opened: false
+    property string message: ""
+    property string cancelText: Commons.I18n.t("common.cancel")
+    property string confirmText: Commons.I18n.t("common.confirm")
+    property int selectedIndex: 1
+    signal canceled()
+    signal confirmed()
+
+    function handleKey(event) {
+      if (!alert.opened) return false
+      if (event.key === Qt.Key_Escape) alert.canceled()
+      else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) alert.selectedIndex = alert.selectedIndex === 0 ? 1 : 0
+      else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        if (alert.selectedIndex === 0) alert.canceled()
+        else alert.confirmed()
+      } else return false
+      return true
+    }
+
+    visible: opened
+
+    Rectangle {
+      anchors.fill: parent
+      color: Qt.rgba(0, 0, 0, 0.35)
+      MouseArea { anchors.fill: parent; onClicked: alert.canceled() }
+    }
+
+    BorderSurface {
+      id: alertCard
+      anchors.centerIn: parent
+      width: Style.space(300)
+      height: alertColumn.implicitHeight + Style.space(20) * 2
+      radius: Style.space(12)
+      color: root.popupFill
+      borderSpec: Border.surfaceSpec("popups", "border", Qt.rgba(1, 1, 1, 0.18), 1)
+
+      MouseArea { anchors.fill: parent }
+
+      Column {
+        id: alertColumn
+        anchors.centerIn: parent
+        width: parent.width - Style.space(20) * 2
+        spacing: Style.space(18)
+
+        Text {
+          width: parent.width
+          textFormat: Text.PlainText
+          text: alert.message
+          horizontalAlignment: Text.AlignHCenter
+          wrapMode: Text.WordWrap
+          color: Commons.Color.menu.text
+          font.family: "Inter"
+          font.weight: Font.DemiBold
+          font.pixelSize: Style.font.title
+        }
+
+        Row {
+          width: parent.width
+          spacing: Style.space(8)
+
+          Repeater {
+            model: [alert.cancelText, alert.confirmText]
+
+            delegate: Rectangle {
+              required property int index
+              required property string modelData
+              readonly property bool selected: alert.selectedIndex === index
+
+              width: (parent.width - Style.space(8)) / 2
+              height: Style.space(30)
+              radius: Style.space(7)
+              color: selected ? "#0a84ff" : Qt.rgba(1, 1, 1, buttonMouse.containsMouse ? 0.2 : 0.13)
+
+              Text {
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: parent.modelData
+                color: parent.selected ? "#ffffff" : parent.index === 1 ? "#ff453a" : Commons.Color.menu.text
+                font.family: "Inter"
+                font.pixelSize: Style.font.body
+              }
+
+              MouseArea {
+                id: buttonMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: parent.index === 0 ? alert.canceled() : alert.confirmed()
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   component MenuRow: Rectangle {
     id: row
 
@@ -491,9 +588,9 @@ Item {
     signal triggered()
 
     width: parent ? parent.width : 0
-    height: visible ? Style.spacing.popupRowHeight : 0
-    radius: Style.cornerRadius
-    color: rowMouse.containsMouse ? Style.hoverFill : "transparent"
+    height: visible ? Style.space(29) : 0
+    radius: Style.space(5)
+    color: rowMouse.containsMouse ? "#0a84ff" : "transparent"
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
@@ -501,7 +598,7 @@ Item {
       anchors.leftMargin: Style.spacing.controlPaddingX
       textFormat: Text.PlainText
       text: row.text
-      color: Commons.Color.popups.text
+      color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
       font.family: "Inter"
       font.pixelSize: Style.font.body
     }

@@ -63,7 +63,7 @@ Omarchy's dock, which appears on floating workspaces, reworked to behave like th
 
   ![App menu](docs/screenshots/dock-menu.png)
 
-- **Downloads**: click to fan your newest downloads up in a column, with "Open in Files" at the top. Right-click for Display as Folder or Stack, and Open "Downloads". Hidden files stay out.
+- **Downloads**: two sheets of paper peek out of the folder when it has files in it. Click to fan your newest downloads up in a column, with "Open in Files" at the top. Right-click for Display as Folder or Stack, and Open "Downloads". Hidden files stay out.
 
   <img src="docs/screenshots/downloads-fan.png" alt="Downloads fan" width="420"> <img src="docs/screenshots/downloads-menu.png" alt="Downloads menu" width="420">
 

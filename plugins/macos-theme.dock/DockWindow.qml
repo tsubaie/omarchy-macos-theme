@@ -45,7 +45,10 @@ PanelWindow {
   readonly property bool autohide: !!dock && (dock.autohide || fullscreenMode === 1)
   property bool revealed: false
   // Any popup of the dock: a click anywhere else closes it (the focus grab).
-  readonly property bool menuOpen: menuItem !== null || settingsMenu || trashMenu || downloadsMenu || stackOpen
+  // A dock menu proper, which turns magnification off; the Downloads fan
+  // leaves it on.
+  readonly property bool popupOpen: menuItem !== null || settingsMenu || trashMenu || downloadsMenu
+  readonly property bool menuOpen: popupOpen || stackOpen
   readonly property bool tucked: autohide && !(revealed || menuOpen || dragging || insertIndex >= 0)
   readonly property bool contentShown: shown && !tucked
 
@@ -71,7 +74,7 @@ PanelWindow {
   readonly property real magnifyRange: slotSize * 3
   // Where the pointer is along the dock, from the start of the slots.
   property real pointerAlong: 0
-  readonly property bool magnifying: (magnifyHover.hovered || bodyHover.hovered) && contentShown && !menuOpen && !dragging && insertIndex < 0 && !hoverStale
+  readonly property bool magnifying: (magnifyHover.hovered || bodyHover.hovered) && contentShown && !popupOpen && !dragging && insertIndex < 0 && !hoverStale
   // Eases the effect in and out; the pointer itself is followed directly.
   property real magnifyAmount: magnifying ? 1 : 0
   Behavior on magnifyAmount { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
@@ -474,12 +477,25 @@ PanelWindow {
     onExited: function(code) { window.trashFull = code === 0 }
   }
 
+  // Whether Downloads holds anything (hidden files aside), for its icon.
+  property bool downloadsFull: false
+
+  Process {
+    id: downloadsCheck
+    command: ["sh", "-c", "[ -n \"$(ls \"$HOME/Downloads\" 2>/dev/null)\" ]"]
+    onExited: function(code) { window.downloadsFull = code === 0 }
+  }
+
+
   Timer {
     interval: 5000
     repeat: true
     running: window.shown
     triggeredOnStart: true
-    onTriggered: trashCheck.running = true
+    onTriggered: {
+      trashCheck.running = true
+      downloadsCheck.running = true
+    }
   }
 
   // Downloads and Trash prefer MacTahoe's light icons, which are what the macOS
@@ -541,6 +557,45 @@ PanelWindow {
         IconScale { factor: placeSlot.magScale },
         Translate { x: window.vertical ? 0 : placeSlot.magShift; y: window.vertical ? placeSlot.magShift : 0 }
       ]
+    }
+
+    // A Downloads folder with files in it has two sheets peeking out of its
+    // top, between its back and its front, so a glance tells it is not empty.
+    Item {
+      visible: placeSlot.stack && window.downloadsFull
+      x: window.iconInset
+      y: window.iconInset
+      width: window.iconSize
+      height: window.iconSize
+      transform: [
+        IconScale { factor: placeSlot.magScale },
+        Translate { x: window.vertical ? 0 : placeSlot.magShift; y: window.vertical ? placeSlot.magShift : 0 }
+      ]
+
+      // Cut off where the folder's front begins (MacTahoe draws it at 26.5%).
+      Item {
+        width: parent.width
+        height: Math.round(parent.height * 0.265)
+        clip: true
+
+        Repeater {
+          model: [{ y: 0.1, turn: -5, shade: "#e5e5ea" }, { y: 0.135, turn: 4, shade: "#f5f5f7" }]
+
+          delegate: Rectangle {
+            required property var modelData
+            x: Math.round(window.iconSize * 0.17)
+            y: Math.round(window.iconSize * modelData.y)
+            width: Math.round(window.iconSize * 0.66)
+            height: Math.round(window.iconSize * 0.4)
+            radius: Math.max(1, Math.round(window.iconSize * 0.03))
+            rotation: modelData.turn
+            antialiasing: true
+            color: modelData.shade
+            border.width: 1
+            border.color: Qt.rgba(0, 0, 0, 0.12)
+          }
+        }
+      }
     }
   }
 
@@ -1188,13 +1243,13 @@ PanelWindow {
     height: fanColumn.implicitHeight
     // The icon column sits right above the Downloads icon.
     x: window.stackSlot ? window.stackSlot.mapToItem(window.contentItem, window.stackSlot.width / 2, 0).x - (labelRoom + Style.space(10) + icon / 2) : 0
-    y: window.stackSlot ? body.y - height - window.gap : 0
+    y: window.stackSlot ? body.y - height - window.gap - Math.round(window.iconSize * (window.magnifyPeak - 1)) : 0
 
     transform: Translate {
       y: window.stackOpen ? 0 : Style.space(18)
       Behavior on y { NumberAnimation { duration: Style.duration(window.stackOpen ? 220 : 140); easing.type: Easing.OutCubic } }
     }
-    Behavior on opacity { NumberAnimation { duration: Style.duration(window.stackOpen ? 180 : 120); easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: Style.duration(window.stackOpen ? 180 : 200); easing.type: Easing.OutCubic } }
 
     HoverHandler { id: stackHover }
 
@@ -1261,12 +1316,9 @@ PanelWindow {
         origin.y: rowBody.height / 2
         angle: fanRow.tilt
       }
-      // A tilted row is drawn as one smoothed, multisampled layer, so the
-      // edges of icons and labels stay clean instead of stair-stepped.
+      // Tilted directly rather than through a layer, which drew the labels
+      // at their size and then resampled them soft; text stays sharp this way.
       antialiasing: true
-      layer.enabled: true
-      layer.smooth: true
-      layer.samples: 8
 
       Rectangle {
         anchors.right: rowIcon.left
