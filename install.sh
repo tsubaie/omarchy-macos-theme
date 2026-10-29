@@ -108,8 +108,13 @@ if $uninstall; then
       omarchy plugin disable "$id" >/dev/null 2>&1 || true
       rm -rf "${PLUGINS_DIR:?}/$id"
     done
-    for id in $CONTROL_CENTER_WIDGETS; do
-      omarchy bar move "$id" --before omarchy.clock >/dev/null 2>&1 || true
+    # Omarchy's widgets back to its default bar: the clock in the middle, the
+    # system icons in a row after the tray.
+    omarchy bar move omarchy.clock --section center >/dev/null 2>&1 || true
+    omarchy bar move omarchy.tray --section right --index 0 >/dev/null 2>&1 || true
+    after=omarchy.tray
+    for id in omarchy.keyboard-layout omarchy.agents omarchy.bluetooth omarchy.network omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power; do
+      omarchy bar move "$id" --after "$after" >/dev/null 2>&1 && after=$id
     done
     say "Removed the menu bar look and put the system widgets back on the bar"
   fi
@@ -232,14 +237,29 @@ if $with_menubar; then
   # sits by the clock; the widgets it stands in for go to the tray drawer.
   omarchy bar put macos-theme.app-name --section left >/dev/null 2>&1 || true
   omarchy bar move macos-theme.app-name --before omarchy.workspaces >/dev/null 2>&1 || true
+  omarchy bar move omarchy.clock --section right >/dev/null 2>&1 || true
   omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
   omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
   for id in $CONTROL_CENTER_WIDGETS; do
     omarchy bar move "$id" --section tray >/dev/null 2>&1 || true
   done
+  # Omarchy's other widgets as macOS keeps their like: status in the middle,
+  # the input menu by Control Center, the bell past the clock. Widgets from
+  # other plugins stay where their owner put them.
+  for move in \
+    "omarchy.tray --section right --index 0" \
+    "omarchy.keyboard-layout --before macos-theme.control-center" \
+    "omarchy.agents --section tray" \
+    "omarchy.indicators --section centerBegin" \
+    "omarchy.elsewhen --section centerEnd --index 0" \
+    "omarchy.weather --after omarchy.elsewhen" \
+    "omarchy.system-update --after omarchy.weather" \
+    "jankeesvw.notification-center --after omarchy.clock"; do
+    omarchy bar move $move >/dev/null 2>&1 || true
+  done
   say "Installed the macOS menu bar (Inter, app name, Control Center, a shade for legibility)"
 fi
-fc-list : family | grep -q "^Inter" || echo "    The theme uses the Inter font, which is not installed. Install it with: sudo pacman -S inter-font" >&2
+[[ -n $(fc-list Inter) ]] || echo "    The theme uses the Inter font, which is not installed. Install it with: sudo pacman -S inter-font" >&2
 
 if $with_wide_menu; then
   # Clone the menu of the Omarchy version installed here, then patch it (width,

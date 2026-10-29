@@ -101,7 +101,9 @@ The bar as macOS Tahoe draws it:
 - **Control Center**: one icon by the clock for network (Wi-Fi or Ethernet), Bluetooth and Tailscale with their state, a volume slider, and Display and Power. Each opens Omarchy's own panel for the full controls. The widgets it stands in for move to the bar's tray drawer, which keeps their panels working.
 - **A soft shade** behind the see-through bar, as Tahoe has, so it reads on any wallpaper.
 
-Your other bar widgets stay where they are.
+- **macOS's arrangement** for Omarchy's own widgets. The right end holds only the tray drawer, the keyboard layout, Control Center and the clock, with the notification bell past it if you have it. The status widgets (indicators, world clock, weather, system update) sit in the middle, and the agents widget joins the drawer.
+
+Widgets from other plugins stay where you put them. To show or hide any widget, drag it between the bar and the tray drawer (the "<"). `--uninstall` puts Omarchy's widgets back in its default layout.
 
 ### Spotlight-like menu (`--wide-menu`)
 
