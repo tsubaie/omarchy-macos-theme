@@ -16,6 +16,8 @@
 #   ./install.sh --remove dock    remove only that piece
 #   ./install.sh --status [--json]  which pieces are installed, and the settings
 #   ./install.sh --set glass=0.8  how solid windows are, 0.5 to 1 (1 is solid)
+#   ./install.sh --set web-glass=0.9  the same for browsers, web apps and Electron apps
+#   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
@@ -77,16 +79,18 @@ while (( $# )); do
       shift ;;
     # MacTahoe stays, as it always has: it may serve other themes too.
     --set)
-      [[ ${2:-} =~ ^(glass|magnification)=([0-9]+(\.[0-9]+)?)$ ]] &&
-        awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN { exit !(k == "glass" ? v >= 0.5 && v <= 1 : v >= 1 && v <= 2) }' ||
-        { echo "Unknown setting: ${2:-} (glass=0.5 to 1, or magnification=1 to 2)" >&2; exit 1; }
+      [[ ${2:-} =~ ^(glass|web-glass|magnification|snapping)=([0-9]+(\.[0-9]+)?)$ ]] &&
+        awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" ? v == "0" || v == "1" : v >= 0.5 && v <= 1)
+        }' ||
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
     --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
     --status) status=true ;;
     --json) json=true ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
   shift
@@ -121,11 +125,28 @@ installed() {
 
 active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
 
-# Glass is the opacity look.lua gives every window; magnification is a key of
-# the dock's section of shell.json, which the dock follows live.
-GLASS_RULE='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
-glass() { sed -nE "s/$GLASS_RULE.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null || true; }
-set_glass() { sed -i -E "s/$GLASS_RULE/\1$1 $1/" "$THEME_DIR/look.lua"; }
+# Glass is the opacity look.lua gives every window, web-glass the one it gives
+# browsers and web and Electron apps, and snapping its SNAPPING switch: each a
+# line of look.lua, whose value is the second group of its pattern. The theme's
+# own values are the defaults. Magnification is a key of the dock's section of
+# shell.json, which the dock follows live.
+LOOK_SETTINGS="glass web-glass snapping"
+declare -A LOOK_RULE=(
+  [glass]='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
+  [web-glass]='^(o\.window\("\^\(brave-browser\|[^"]*", \{ opacity = ")([0-9.]+) [0-9.]+'
+  [snapping]='^(local SNAPPING = )([01])'
+)
+declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [magnification]=1.75)
+look_get() {
+  local v
+  v=$(sed -nE "s/${LOOK_RULE[$1]}.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null) || true
+  echo "${v:-${DEFAULT[$1]}}"
+}
+look_set() {
+  local value="$2 $2"
+  [[ $1 == snapping ]] && value=$2
+  sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$THEME_DIR/look.lua"
+}
 magnification() {
   local m
   m=$(jq '.dock.magnification | numbers' "$SHELL_JSON" 2>/dev/null) || true
@@ -146,16 +167,17 @@ if $status; then
     for f in $FEATURES; do
       out+="$([[ -n $out ]] && echo ,)\"$f\":$(installed "$f" && echo true || echo false)"
     done
-    g=$(glass)
-    printf '{"active":%s,"features":{%s},"settings":{"glass":%s,"magnification":%s}}\n' \
-      "$(active && echo true || echo false)" "$out" "${g:-0.7}" "$(magnification)"
+    set_out=""
+    for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s}}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
       printf '%-14s %s\n' "$f" "$(installed "$f" && echo installed || echo "not installed")"
     done
-    g=$(glass)
-    printf '%-14s %s\n' glass "${g:-0.7}" magnification "$(magnification)"
+    for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
+    printf '%-14s %s\n' magnification "$(magnification)"
   fi
   exit 0
 fi
@@ -279,7 +301,10 @@ want() { [[ -n ${add[$1]:-} ]]; }
 
 # 1. The theme, as a local theme (so its .lua and ghostty.conf are kept).
 if want theme; then
-  old_glass=$(glass)
+  declare -A kept_look=()
+  if [[ -f $THEME_DIR/look.lua ]]; then
+    for k in $LOOK_SETTINGS; do kept_look[$k]=$(look_get "$k"); done
+  fi
   if [[ -d $THEME_DIR ]]; then
     keep_theme
     say "Backed up your existing macos theme to $kept"
@@ -288,8 +313,8 @@ if want theme; then
   cp -r "$REPO/theme/." "$THEME_DIR/"
   # Wallpapers and files you added stay; the theme's own files are the new ones.
   [[ -n $kept ]] && cp -rn "$kept/." "$THEME_DIR/"
-  # So does the glass you chose.
-  [[ -n $old_glass ]] && set_glass "$old_glass"
+  # So do the settings you chose.
+  for k in "${!kept_look[@]}"; do look_set "$k" "${kept_look[$k]}"; done
   say "Installed the theme to $THEME_DIR"
 fi
 
@@ -434,11 +459,14 @@ if want dictation-hud; then
 fi
 
 # 4b. Settings.
-if [[ -n ${settings[glass]:-} ]]; then
-  installed theme || { echo "Install the theme first (--add theme), then set its glass." >&2; exit 1; }
-  set_glass "${settings[glass]}"
-  say "Set the glass to ${settings[glass]}"
-fi
+look_changed=false
+for k in $LOOK_SETTINGS; do
+  [[ -n ${settings[$k]:-} ]] || continue
+  installed theme || { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
+  look_set "$k" "${settings[$k]}"
+  look_changed=true
+  say "Set $k to ${settings[$k]}"
+done
 if [[ -n ${settings[magnification]:-} ]]; then
   set_magnification "${settings[magnification]}"
   say "Set the dock's magnification to ${settings[magnification]}"
@@ -446,7 +474,7 @@ fi
 
 # 5. Apply: refresh the active theme in place, or switch to it when it was asked for.
 # The dock follows shell.json itself, so magnification alone needs no refresh.
-if active && { (( ${#add[@]} )) || [[ -n ${settings[glass]:-} ]]; }; then
+if active && { (( ${#add[@]} )) || $look_changed; }; then
   refresh
 elif want theme; then
   omarchy theme set macos

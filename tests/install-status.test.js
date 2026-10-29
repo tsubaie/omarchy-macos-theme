@@ -34,7 +34,7 @@ try {
   assert.deepStrictEqual(Object.keys(s.features), pieces)
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(s.active, false)
-  assert.deepStrictEqual(s.settings, { glass: 0.7, magnification: 1.75 })
+  assert.deepStrictEqual(s.settings, { glass: 0.7, "web-glass": 1, snapping: 1, magnification: 1.75 })
 
   // --add installs only what it names.
   assert.strictEqual(run("--add", "rows", "--add", "dock").status, 0)
@@ -68,13 +68,16 @@ try {
   // goes into the dock's section of shell.json, next to what was there.
   const shellJson = path.join(home, ".config/omarchy/shell.json")
   fs.writeFileSync(shellJson, JSON.stringify({ dock: { position: "left" } }))
-  assert.strictEqual(run("--set", "glass=0.85", "--set", "magnification=1.2").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, magnification: 1.2 })
-  assert.match(fs.readFileSync(path.join(themeDir, "look.lua"), "utf8"), /o\.window\("\.\*", \{ opacity = "0\.85 0\.85" \}\)/)
+  assert.strictEqual(run("--set", "glass=0.85", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "magnification=1.2").status, 0)
+  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, magnification: 1.2 })
+  const look = fs.readFileSync(path.join(themeDir, "look.lua"), "utf8")
+  assert.match(look, /o\.window\("\.\*", \{ opacity = "0\.85 0\.85" \}\)/)
+  assert.match(look, /brave-browser\|.*", \{ opacity = "0\.9 0\.9" \}\)/)
+  assert.match(look, /^local SNAPPING = 0$/m)
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).dock.position, "left")
   assert.strictEqual(run("--add", "theme").status, 0)
-  assert.strictEqual(status().settings.glass, 0.85)
-  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3"]) {
+  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, magnification: 1.2 })
+  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "web-glass=0.1"]) {
     assert.strictEqual(run("--set", bad).status, 1, bad)
   }
   const removed = run("--remove", "theme")
