@@ -180,8 +180,11 @@ function pickWindow(windows, workspaceId) {
   var order = list.map(function(window, index) { return index })
   order.sort(function(a, b) { return rank(list[a]) - rank(list[b]) || a - b })
 
+  // A click on the app in front moves on to its next window. A minimized
+  // window can still report itself active, when nothing took focus from it,
+  // but it is not in front: it comes back first.
   for (var i = 0; i < order.length; i++) {
-    if (list[order[i]].activated) return order[(i + 1) % order.length]
+    if (list[order[i]].activated && !list[order[i]].minimized) return order[(i + 1) % order.length]
   }
   return order[0]
 }
