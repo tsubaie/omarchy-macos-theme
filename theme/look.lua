@@ -207,15 +207,20 @@ end)
 -- not come, as the pointer first moves on alone.
 local SNAP_EDGE = 12
 -- The ends of an edge that give a corner rather than a half, as a share of
--- the screen: KDE's default (ElectricBorderCornerRatio), roomy enough to hit.
-local SNAP_CORNER = 0.25
+-- the screen: thirds, so each corner is as easy to reach as the half between
+-- them (KDE's default is a quarter, which proved hard to hit).
+local SNAP_CORNER = 1 / 3
 -- How often the active window and the pointer are checked, in milliseconds.
 local SNAP_TICK = 40
 local snap_shown = nil
 
-local function snap_zone(cursor, monitor)
+-- The spot a drag is over. The pointer at an edge counts, and so, for the
+-- sides, does the window's own edge reaching the screen's: a window held far
+-- along its title bar is mostly past the edge before the pointer gets there.
+local function snap_zone(cursor, monitor, window)
   local x, y, width, height = usable_area(monitor)
-  local left, right = cursor.x <= x + SNAP_EDGE, cursor.x >= x + width - SNAP_EDGE
+  local left = cursor.x <= x + SNAP_EDGE or window.at.x <= x
+  local right = cursor.x >= x + width - SNAP_EDGE or window.at.x + window.size.x >= x + width
   -- The top edge is the bar's: the pointer stops on it.
   local top = cursor.y <= y + SNAP_EDGE
   local bottom = cursor.y >= y + height - SNAP_EDGE
@@ -354,7 +359,7 @@ local function snap_tick()
       if not snap_drag then
         snap_drag = { unsnapped = unsnap(window) }
       end
-      snap_drag.zone = snap_zone(cursor, window.monitor)
+      snap_drag.zone = snap_zone(cursor, window.monitor, window)
       snap_drag.alone = 0
       show_snap(window, snap_drag.zone)
     elseif snap_drag and not moved and (cx ~= 0 or cy ~= 0) and (snap_drag.alone or 0) < 1 then
