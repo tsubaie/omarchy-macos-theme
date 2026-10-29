@@ -112,6 +112,28 @@ PanelWindow {
     return Qt.point(x, y)
   }
 
+  // Where the icon of the app owning a window sits, in this screen's
+  // coordinates, for the genie to pour it into; the dock's middle if no icon
+  // shows it.
+  function iconRectFor(address) {
+    var bare = String(address || "").replace(/^0x/, "")
+    var repeaters = [appRepeater, unpinnedRepeater]
+    var at = window.origin()
+    for (var r = 0; r < repeaters.length; r++) {
+      for (var i = 0; i < repeaters[r].count; i++) {
+        var slot = repeaters[r].itemAt(i)
+        var item = slot ? slot.modelData : null
+        var windows = item && item.windows ? item.windows : []
+        for (var w = 0; w < windows.length; w++) {
+          if (String(windows[w].address).replace(/^0x/, "") !== bare) continue
+          var p = slot.mapToItem(window.contentItem, window.iconInset, window.iconInset)
+          return Qt.rect(at.x + p.x, at.y + p.y, window.iconSize, window.iconSize)
+        }
+      }
+    }
+    return Qt.rect(at.x + body.x + body.width / 2 - window.iconSize / 2, at.y + body.y + window.iconInset, window.iconSize, window.iconSize)
+  }
+
   // An app from the app grid lands where the pointer is, once it is over the
   // dock or close to it on the inward side.
   function moveExternalDrag(screenX, screenY) {

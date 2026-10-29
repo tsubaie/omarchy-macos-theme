@@ -44,6 +44,8 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOut
 -- and behind the dock, menus, launcher, notifications and popups.
 hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popups = true, ignore_alpha = 0.0 })
 hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher)$" }, blur = true, ignore_alpha = 0.3 })
+-- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
+hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
 
 -- Menus, popups and the launcher pop in with the same spring as windows.
 hl.animation({ leaf = "layersIn", enabled = true, speed = 4.5, bezier = "macSpring", style = "popin 92%" })

@@ -40,7 +40,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 
   ![Title bar](docs/screenshots/title-bar.png)
 
-- **Minimize into the dock**: the yellow button shrinks the window into the dock. This works on floating workspaces, where Omarchy can minimize.
+- **Minimize into the dock** with the macOS genie: the yellow button pours the window into its app's dock icon, and clicking the icon pours it back out to where it was. This works on floating workspaces, where Omarchy can minimize, and needs the dock (`--dock`); without it, windows minimize plainly.
 - **Thin glass edges** instead of colored window borders, soft shadows, 16px rounded corners and roomy gaps (6px between windows, 10px at the edges).
 - **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces.
 - **Striped rows in Files** list view, like Finder, with rounded rows. They come from the theme's `gtk.css`, so they show only while this theme is active.

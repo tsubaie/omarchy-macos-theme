@@ -342,6 +342,16 @@ Item {
     var dispatch = function(step) { return "hyprctl dispatch " + Util.shellQuote(step) }
     var command = steps.map(dispatch).join(" && ")
     if (after.length > 0) command += "; sleep 0.4; " + after.map(dispatch).join("; ")
+    // A window the genie took away comes back out of its icon the same way.
+    var screen = window.minimized ? Quickshell.screens.find(function(each) {
+      return Hyprland.focusedMonitor && each.name === Hyprland.focusedMonitor.name
+    }) : null
+    var overlay = screen ? root.genieOn(screen) : null
+    var dock = screen ? root.dockOn(screen) : null
+    if (overlay && dock && overlay.hasPicture(address)) {
+      overlay.restore(address, dock.iconRectFor(address), function() { Util.execDetached(command) })
+      return
+    }
     Util.execDetached(command)
   }
 
@@ -482,6 +492,49 @@ Item {
     // The layout commands call this after changing a workspace's mode.
     function refresh(): void { root.refresh() }
     function apps(): void { appGrid.toggle() }
+    // The title bar's minimize button: x, y, width and height take in the
+    // title bar, in Hyprland's layout coordinates.
+    function minimize(address: string, x: int, y: int, width: int, height: int, monitor: string): void {
+      root.minimize(address, Qt.rect(x, y, width, height), monitor)
+    }
+  }
+
+  function screenNamed(name) {
+    var screens = Quickshell.screens
+    for (var i = 0; i < screens.length; i++) {
+      if (screens[i].name === name) return screens[i]
+    }
+    return null
+  }
+
+  function genieOn(screen) {
+    var overlays = genies.instances
+    for (var i = 0; i < overlays.length; i++) {
+      if (overlays[i].screen === screen) return overlays[i]
+    }
+    return null
+  }
+
+  // Minimizes the way Omarchy does, with the genie pouring the window into its
+  // dock icon over the top.
+  function minimize(address, rect, monitor) {
+    var hide = function() {
+      Util.execDetached("omarchy-hyprland-window-minimize " + Util.shellQuote(address))
+    }
+    var screen = root.screenNamed(monitor)
+    var overlay = screen ? root.genieOn(screen) : null
+    var dock = screen ? root.dockOn(screen) : null
+    if (!overlay || !dock) {
+      hide()
+      return
+    }
+    var local = Qt.rect(rect.x - screen.x, rect.y - screen.y, rect.width, rect.height)
+    overlay.minimize(address, local, dock.iconRectFor(address), function() {
+      // The hidden window must not animate away under its picture.
+      var target = "window = \"address:" + address + "\""
+      Util.execDetached("hyprctl dispatch " + Util.shellQuote("hl.dsp.window.set_prop({ prop = \"no_anim\", value = \"1\", " + target + " })")
+        + " && omarchy-hyprland-window-minimize " + Util.shellQuote(address))
+    })
   }
 
   // An app dragged out of the app grid: the grid holds the pointer and
@@ -523,6 +576,19 @@ Item {
 
         screen: modelData
         dock: root
+      }
+    }
+  }
+
+  Variants {
+    id: genies
+    model: Quickshell.screens
+
+    delegate: Component {
+      Genie {
+        required property var modelData
+        screen: modelData
+        sourceDir: root.manifest && root.manifest.__sourceDir ? String(root.manifest.__sourceDir) : ""
       }
     }
   }
