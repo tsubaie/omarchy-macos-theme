@@ -10,10 +10,12 @@ const script = path.join(__dirname, "..", "install.sh")
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "macos-theme-test-"))
 const bin = path.join(home, "bin")
 fs.mkdirSync(bin)
-// `omarchy theme current` prints $THEME, `plugin clone` makes an empty menu clone, and every
-// other omarchy call succeeds quietly.
+// `omarchy theme current` prints the theme last set (or $THEME), `theme list` knows two themes,
+// `plugin clone` makes an empty menu clone, and every other omarchy call succeeds quietly.
 fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
-[ "$1 $2" = "theme current" ] && echo "$THEME"
+[ "$1 $2" = "theme current" ] && { cat "$HOME/current" 2>/dev/null || echo "$THEME"; }
+[ "$1 $2" = "theme list" ] && printf 'Macos\\nTokyo Night\\n'
+[ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
 if [ "$1 $2" = "plugin clone" ]; then
   mkdir -p "$XDG_CONFIG_HOME/omarchy/plugins/me.menu" && touch "$XDG_CONFIG_HOME/omarchy/plugins/me.menu/Menu.qml"
   echo "Cloned omarchy.menu to $XDG_CONFIG_HOME/omarchy/plugins/me.menu and switched"
@@ -83,6 +85,7 @@ try {
 
   // The theme can't be removed while it is the current theme.
   fs.mkdirSync(themeDir, { recursive: true })
+  fs.rmSync(path.join(home, "current"), { force: true })
   env.THEME = "Macos"
   s = status()
   assert.strictEqual(s.active, true)
@@ -91,6 +94,16 @@ try {
   assert.strictEqual(refused.status, 1)
   assert.match(refused.stderr, /Switch to another theme first/)
   assert.strictEqual(status().features.theme, true)
+
+  // Removing all of it while it is current switches to the theme named first, one that exists.
+  assert.strictEqual(run("--switch-to", "Nope", "--uninstall").status, 1)
+  assert.strictEqual(status().features.theme, true)
+  const all = run("--switch-to", "Tokyo Night", "--uninstall", "--remove", "icons")
+  assert.strictEqual(all.status, 0, all.stderr)
+  s = status()
+  assert.strictEqual(s.active, false)
+  assert.ok(Object.values(s.features).every((on) => on === false))
+  assert.strictEqual(fs.readFileSync(path.join(home, "current"), "utf8").trim(), "Tokyo Night")
 
   // Unknown pieces are refused.
   assert.strictEqual(run("--remove", "everything").status, 1)

@@ -17,6 +17,8 @@
 #   ./install.sh --status [--json]  which pieces are installed, and the settings
 #   ./install.sh --set glass=0.8  how solid windows are, 0.5 to 1 (1 is solid)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
+#   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
+#                                 switching to that theme first if the macOS theme is current
 #   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
@@ -57,7 +59,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar"
 declare -A add=() remove=() settings=()
-status=false json=false legacy=false
+status=false json=false legacy=false switch_to=""
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -80,10 +82,11 @@ while (( $# )); do
         { echo "Unknown setting: ${2:-} (glass=0.5 to 1, or magnification=1 to 2)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
+    --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
     --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
     --status) status=true ;;
     --json) json=true ;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
   shift
@@ -249,6 +252,12 @@ remove_theme() {
   keep_theme
   say "Removed the theme (kept in $kept)"
 }
+
+if [[ -n $switch_to ]] && active; then
+  omarchy theme list | grep -qxF "$switch_to" || { echo "No theme called $switch_to (see: omarchy theme list)" >&2; exit 1; }
+  omarchy theme set "$switch_to"
+  say "Switched to $switch_to"
+fi
 
 if (( ${#remove[@]} )); then
   if [[ -n ${remove[theme]:-} ]] && active; then

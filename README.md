@@ -29,6 +29,7 @@ cd omarchy-macos-theme
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
 | `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
+| `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
 
 ### App
