@@ -272,12 +272,21 @@ end
 local snapped = {}
 local SNAP_BAR = hl.plugin.hyprbars and 32 or 0
 
-local function snap(window, zone)
+-- Where a snapped window goes to make room when another snaps over part of
+-- its spot, as in macOS and Windows: full screen gives way to the other half,
+-- a half to the other quarter on its side. Missing pairs leave it be.
+local SNAP_MAKE_ROOM = {
+  fill = { left = "right", right = "left", ["top-left"] = "right", ["bottom-left"] = "right", ["top-right"] = "left", ["bottom-right"] = "left" },
+  left = { ["top-left"] = "bottom-left", ["bottom-left"] = "top-left" },
+  right = { ["top-right"] = "bottom-right", ["bottom-right"] = "top-right" },
+}
+
+local function snap(window, zone, others_stay)
   local cell = snap_cell(window.monitor, zone)
   local was = snapped[window.address]
   -- Snapping again from one spot to another keeps the size from before both.
   local own = was and { was.w, was.h } or { window.size.x, window.size.y }
-  snapped[window.address] = { w = own[1], h = own[2], cw = cell[3], ch = cell[4] - SNAP_BAR }
+  snapped[window.address] = { w = own[1], h = own[2], cw = cell[3], ch = cell[4] - SNAP_BAR, zone = zone }
   hl.dispatch(hl.dsp.window.resize({ x = cell[3], y = cell[4] - SNAP_BAR, relative = false, window = window }))
   hl.dispatch(hl.dsp.window.move({ x = cell[1], y = cell[2] + SNAP_BAR, window = window }))
   -- Apps such as the calculator settle on a size of their own near the one
@@ -288,6 +297,16 @@ local function snap(window, zone)
     local entry = snapped[address]
     if now and entry then entry.cw, entry.ch = now.size.x, now.size.y end
   end, { type = "oneshot", timeout = 250 })
+  if others_stay or not window.workspace then return end
+  -- Other windows still at their snapped size on this screen make room.
+  for _, other in ipairs(hl.get_workspace_windows(tostring(window.workspace.id))) do
+    local entry = snapped[other.address]
+    local room = entry and SNAP_MAKE_ROOM[entry.zone] and SNAP_MAKE_ROOM[entry.zone][zone]
+    if room and other.address ~= address and other.monitor and other.monitor.name == window.monitor.name
+      and other.size.x == entry.cw and other.size.y == entry.ch then
+      snap(other, room, true)
+    end
+  end
 end
 
 -- A drag of a snapped window, still at its snapped size, gives it back its own
