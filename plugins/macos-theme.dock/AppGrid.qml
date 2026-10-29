@@ -165,7 +165,13 @@ Item {
     target: root.appLibrary
     function onAppsChanged() {
       if (root.opened) root.rebuild()
-      else root.appsStale = true
+      else {
+        // The old entries may already be deleted; hold none until it opens.
+        root.appsStale = true
+        root.apps = []
+        root.menuEntry = null
+        root.uninstallEntry = null
+      }
     }
   }
 

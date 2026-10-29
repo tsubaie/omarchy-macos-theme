@@ -28,7 +28,14 @@ Item {
     function entrySubtext(entry) { return entry ? String(entry.genericName || entry.comment || "") : "" }
     function iconSource(icon) { return Quickshell.iconPath(String(icon || ""), true) }
     function refreshIcons() {}
-    function remove(desktopId, name) {}
+    // Uninstalls, or hides a web app, through Omarchy's own script, as its
+    // app library does.
+    function remove(desktopId, name) {
+      var id = String(desktopId || "")
+      if (!id) return
+      var script = (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/bin/omarchy-remove-launcher-entry"
+      Util.execDetached(Util.shellQuote(script) + " " + Util.shellQuote(id) + " " + Util.shellQuote(String(name || id)))
+    }
 
     function sortedEntries(query) {
       var needle = String(query || "").toLowerCase()
@@ -56,6 +63,13 @@ Item {
       Util.execDetached("uwsm-app -- gtk-launch " + Util.shellQuote(id + ".desktop"))
     }
   }
+  // Installing or removing an app replaces Quickshell's desktop entries; the
+  // grid must drop the old ones, which are deleted, or drawing them crashes.
+  Connections {
+    target: DesktopEntries.applications
+    function onValuesChanged() { if (root.appLibrary === localLibrary) localLibrary.appsChanged() }
+  }
+
   // A user plugin is handed the bar and idle settings but not the dock's, so
   // read the dock section of shell.json (and Omarchy's defaults) directly and
   // follow the file as `omarchy dock` changes it. Without this, pins, position
