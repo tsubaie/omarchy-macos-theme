@@ -291,7 +291,7 @@ Item {
               visible: tileItem.selected
               elide: Text.ElideRight
               color: Qt.rgba(1, 1, 1, 0.85)
-              font.family: "Adwaita Sans"
+              font.family: "Inter"
               font.pixelSize: Math.round(13 * Style.fontScale)
             }
 
@@ -354,7 +354,7 @@ Item {
               text: windowRow.modelData.title || root.selectedApp.name
               elide: Text.ElideRight
               color: "#ffffff"
-              font.family: "Adwaita Sans"
+              font.family: "Inter"
               font.pixelSize: Math.round(13 * Style.fontScale)
             }
 
@@ -367,7 +367,7 @@ Item {
               textFormat: Text.PlainText
               text: windowRow.modelData.minimized ? "Minimized" : "Workspace " + windowRow.modelData.workspace
               color: Qt.rgba(1, 1, 1, 0.55)
-              font.family: "Adwaita Sans"
+              font.family: "Inter"
               font.pixelSize: Math.round(12 * Style.fontScale)
             }
 

@@ -33,7 +33,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 
 - **Apple colors**: the macOS dark grays (`#1c1c1e`, `#2c2c2e`) and system colors, with Apple's blue `#0a84ff` as the accent.
 - **Frosted glass where it belongs**: a clear, blurred top bar; a frosted dock, menus, launcher, notifications and popups, all in the same borderless tinted glass.
-  - App windows are 80% frosted glass, on floating workspaces too.
+  - App windows are 70% frosted glass, on floating workspaces too.
   - Browsers stay solid so their menus stay readable.
   - Ghostty keeps a glass background with solid text.
 - **Window title bars** with red, yellow and green circles on the left and the app's name centered, on Apple's dark title-bar gray. Double-click a title bar to maximize. They stay on floating workspaces too.
@@ -41,12 +41,13 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
   ![Title bar](docs/screenshots/title-bar.png)
 
 - **Minimize into the dock**: the yellow button shrinks the window into the dock. This works on floating workspaces, where Omarchy can minimize.
-- **Thin glass edges** instead of colored window borders, soft shadows, 14px rounded corners and 4px gaps.
+- **Thin glass edges** instead of colored window borders, soft shadows, 16px rounded corners and roomy gaps (6px between windows, 10px at the edges).
 - **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces.
 - **Notifications** on the same frosted glass.
 
   ![Notification](docs/screenshots/notification.png)
 
+- **Inter** for text, the closest free match to Apple's SF Pro, in Regular weight with 13px semibold window titles. Install it with `sudo pacman -S inter-font`; the bar keeps your Omarchy font (`omarchy font set` changes it).
 - **Wallpapers**: two full-resolution (6000×4000) photos, by Pawel Czerwinski (the default) and Martin Martz. Cycle between them with `omarchy theme bg next`.
 
 ### macOS dock (`--dock`)
@@ -148,7 +149,7 @@ This removes the theme and plugins, turns Omarchy's dock, on-screen display and 
 
 The window look lives in `~/.config/omarchy/themes/macos/look.lua`. Edit it, then run `hyprctl reload`.
 
-- **Window glass**: `o.window(".*", { opacity = "0.8 0.8" })`. Use `1 1` for solid windows, or add an app's class to the solid list below that line (find it with `hyprctl clients`).
+- **Window glass**: `o.window(".*", { opacity = "0.7 0.7" })`. Use `1 1` for solid windows, or add an app's class to the solid list below that line (find it with `hyprctl clients`).
 - **Gaps, corners, blur**: in the `hl.config` block at the top.
 - **Title bars**: in the `hyprbars` block.
 
@@ -158,7 +159,7 @@ Bar, menu, launcher, notification and popup colors and transparency are in `shel
 
 - Needs Omarchy 4 (Lua Hyprland config). The title bars use the plugin Omarchy ships for floating workspaces.
 - The dock appears on floating workspaces, as Omarchy's does. Click the current workspace in the bar (or press Super+L) to change a workspace's layout.
-- Title bars fade with their window, so on glass windows they are about 80% opaque. Hyprland fades a window as a whole.
+- Title bars fade with their window, so on glass windows they are about 70% opaque. Hyprland fades a window as a whole.
 - Apps that draw their own title bar (like Brave or Files) show the macOS strip above it.
 
 ## Credits

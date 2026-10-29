@@ -88,8 +88,8 @@ Item {
 
   TextMetrics {
     id: messageMetrics
-    font.family: Style.font.family
-    font.bold: true
+    font.family: "Inter"
+    font.weight: Font.Medium
     font.pixelSize: Style.font.title
     text: root.message
   }

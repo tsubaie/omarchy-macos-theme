@@ -3,12 +3,12 @@
 -- it wins over your own look settings only while this theme is active.
 hl.config({
   general = {
-    gaps_in = 2,
-    gaps_out = 4,
+    gaps_in = 6,
+    gaps_out = 10,
     border_size = 1,
   },
   decoration = {
-    rounding = 14,
+    rounding = 16,
     dim_inactive = false,
     active_opacity = 1.0,
     inactive_opacity = 0.97,
@@ -36,8 +36,8 @@ hl.config({
 })
 
 -- Springy pop-in and sideways Spaces-style workspace slides.
-hl.curve("macSpring", { type = "bezier", points = { { 0.34, 1.56 }, { 0.64, 1 } } })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 4, bezier = "macSpring", style = "popin 90%" })
+hl.curve("macSpring", { type = "bezier", points = { { 0.34, 1.8 }, { 0.64, 1 } } })
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 5, bezier = "macSpring", style = "popin 90%" })
 hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOutQuint", style = "slide" })
 
 -- Frosted glass behind the bar (it is almost clear, so blur every pixel of it)
@@ -46,12 +46,12 @@ hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popup
 hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher)$" }, blur = true, ignore_alpha = 0.3 })
 
 -- Menus, popups and the launcher pop in with the same spring as windows.
-hl.animation({ leaf = "layersIn", enabled = true, speed = 3.5, bezier = "macSpring", style = "popin 92%" })
+hl.animation({ leaf = "layersIn", enabled = true, speed = 4.5, bezier = "macSpring", style = "popin 92%" })
 hl.animation({ leaf = "layersOut", enabled = true, speed = 2, bezier = "easeOutQuint", style = "popin 95%" })
 
 -- Every app fades to frosted glass like Files (apps draw solid backgrounds,
 -- so the whole window fades). GTK apps get their blur from gtk.css.
-o.window(".*", { opacity = "0.8 0.8" })
+o.window(".*", { opacity = "0.7 0.7" })
 -- Ghostty has its own glass background with solid text; keep it as is.
 o.window("^(com\\.mitchellh\\.ghostty|TUI\\..*)$", { opacity = "1 1" })
 -- Browsers draw popups (downloads, menus) as separate layers, so a fade stacks
@@ -84,9 +84,9 @@ if hl.plugin.hyprbars then
         bar_color_inactive = "rgb(2a2a2a)",
         bar_color = bar,
         col = { text = "rgb(e5e5e7)" },
-        bar_text_font = "Adwaita Sans",
-        bar_text_size = 14,
-        bar_text_weight = "bold",
+        bar_text_font = "Inter",
+        bar_text_size = 13,
+        bar_text_weight = "semibold",
         bar_text_align = "center",
         bar_buttons_alignment = "left",
         bar_part_of_window = true,

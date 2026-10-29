@@ -586,7 +586,7 @@ PanelWindow {
       textFormat: Text.PlainText
       text: tipLabel.text
       color: "#ffffff"
-      font.family: "Adwaita Sans"
+      font.family: "Inter"
       font.pixelSize: Math.round(15 * Style.fontScale)
     }
   }
@@ -926,7 +926,7 @@ PanelWindow {
         topPadding: Style.space(4)
         bottomPadding: Style.space(6)
         color: Commons.Color.popups.text
-        font.family: "Adwaita Sans"
+        font.family: "Inter"
         font.pixelSize: Math.round(13 * Style.fontScale)
       }
 
@@ -1221,7 +1221,7 @@ PanelWindow {
           text: fanRow.label
           elide: Text.ElideMiddle
           color: "#ffffff"
-          font.family: "Adwaita Sans"
+          font.family: "Inter"
           font.pixelSize: Math.round(13 * Style.fontScale)
         }
       }
@@ -1293,9 +1293,9 @@ PanelWindow {
       textFormat: Text.PlainText
       text: parent.text
       color: Qt.rgba(1, 1, 1, 0.4)
-      font.family: "Adwaita Sans"
+      font.family: "Inter"
       font.pixelSize: Math.round(16 * Style.fontScale)
-      font.weight: Font.Medium
+      font.weight: Font.Normal
     }
   }
 
@@ -1340,7 +1340,7 @@ PanelWindow {
       textFormat: Text.PlainText
       text: row.mark
       color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
-      font.family: "Adwaita Sans"
+      font.family: "Inter"
       font.pixelSize: row.mark === "◆" ? Math.round(10 * Style.fontScale) : Math.round(16 * Style.fontScale)
       font.weight: Font.DemiBold
     }
@@ -1356,9 +1356,9 @@ PanelWindow {
       textFormat: Text.PlainText
       text: row.text
       color: rowMouse.containsMouse ? "#ffffff" : Commons.Color.popups.text
-      font.family: "Adwaita Sans"
+      font.family: "Inter"
       font.pixelSize: Math.round(16 * Style.fontScale)
-      font.weight: Font.Medium
+      font.weight: Font.Normal
     }
 
     Text {

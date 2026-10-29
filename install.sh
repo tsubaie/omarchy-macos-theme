@@ -184,6 +184,8 @@ if $with_switcher; then
   install_plugin "$SWITCHER_ID"
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
 fi
+fc-list : family | grep -q "^Inter" || echo "    The theme uses the Inter font, which is not installed. Install it with: sudo pacman -S inter-font" >&2
+
 if $with_wide_menu; then
   # Clone the menu of the Omarchy version installed here, then patch it (width,
   # magnifying glass, "Search"), so it matches this Omarchy's menu otherwise.

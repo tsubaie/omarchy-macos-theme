@@ -112,8 +112,8 @@ Item {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: strings.t("hud.transcribing")
-          font.family: Style.font.family
-          font.bold: true
+          font.family: "Inter"
+          font.weight: Font.Medium
           font.pixelSize: Style.font.title
           color: Commons.Color.popups.text
         }

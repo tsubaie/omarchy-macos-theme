@@ -267,7 +267,7 @@ Item {
               textFormat: Text.PlainText
               text: "Workspace " + spaceItem.modelData.name
               color: spaceItem.selected ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
-              font.family: "Adwaita Sans"
+              font.family: "Inter"
               font.pixelSize: Math.round(13 * Style.fontScale)
             }
 

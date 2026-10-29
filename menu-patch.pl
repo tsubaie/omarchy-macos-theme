@@ -22,3 +22,9 @@ unless (/macOS theme: the root heading/) {
   s/^(\s+)var mergedMenu = MenuModel\.mergeMenuSources\(translatedDefaults, root\.userMenuItems, rootCatalog && rootCatalog\.label\)/$1\/\/ macOS theme: the root heading reads "Search", as in Spotlight.\n$1var mergedMenu = MenuModel.mergeMenuSources(translatedDefaults, root.userMenuItems, "Search")/m;
   s/: "Go"\) \+ "…"\)/: "Search") + "…")/;
 }
+
+unless (/macOS theme: Inter/) {
+  # Icons keep the shared font (it carries the Nerd Font glyphs); text uses Inter.
+  s/font\.family: row\.iconFont\.length > 0 \? row\.iconFont : root\.fontFamily/font.family: row.iconFont.length > 0 ? row.iconFont : Style.font.menuFamily/;
+  s/^(  )property string fontFamily: Style\.font\.menuFamily/$1\/\/ macOS theme: Inter, the closest free match to Apple's SF Pro.\n$1property string fontFamily: "Inter"/m;
+}
