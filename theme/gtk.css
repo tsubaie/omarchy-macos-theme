@@ -1,0 +1,24 @@
+/* macOS theme: Finder-style striped rows in Files' list view. Loaded into
+   GTK apps from ~/.config/gtk-4.0/gtk.css while this theme is active. */
+.nautilus-window columnview > listview > row:nth-child(even):not(:selected):not(:hover) {
+  background-color: alpha(white, 0.045);
+}
+
+.nautilus-window columnview > listview > row {
+  border-radius: 6px;
+}
+
+/* Finder's glass: the sidebar has Ghostty's glass (an 80% tint) and the file
+   list is nearly solid, with solid text throughout (look.lua keeps the window
+   itself opaque). The window is cleared so only the panes' tints remain. */
+window.nautilus-window {
+  background-color: transparent;
+}
+
+window.nautilus-window .sidebar-pane {
+  background-color: alpha(#1c1c1e, 0.8);
+}
+
+window.nautilus-window .content-pane {
+  background-color: alpha(#1c1c1e, 0.95);
+}

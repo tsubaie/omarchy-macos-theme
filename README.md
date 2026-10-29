@@ -35,7 +35,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 - **Frosted glass where it belongs**: a clear, blurred top bar; a frosted dock, menus, launcher, notifications and popups, all in the same borderless tinted glass.
   - App windows are 70% frosted glass, on floating workspaces too.
   - Browsers stay solid so their menus stay readable.
-  - Ghostty keeps a glass background with solid text.
+  - Ghostty keeps a glass background with solid text. Files, like Finder, has a see-through sidebar and a nearly solid file list.
 - **Window title bars** with red, yellow and green circles on the left and the app's name centered, on Apple's dark title-bar gray. Double-click a title bar to maximize. They stay on floating workspaces too.
 
   ![Title bar](docs/screenshots/title-bar.png)
@@ -43,6 +43,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 - **Minimize into the dock**: the yellow button shrinks the window into the dock. This works on floating workspaces, where Omarchy can minimize.
 - **Thin glass edges** instead of colored window borders, soft shadows, 16px rounded corners and roomy gaps (6px between windows, 10px at the edges).
 - **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces.
+- **Striped rows in Files** list view, like Finder, with rounded rows. They come from the theme's `gtk.css`, so they show only while this theme is active.
 - **Notifications** on the same frosted glass.
 
   ![Notification](docs/screenshots/notification.png)
@@ -123,7 +124,7 @@ Each file is backed up first (as `*.bak.<timestamp>`; an existing `macos` theme 
 |---|---|
 | `~/.config/omarchy/themes/macos/` | The theme itself |
 | `~/.config/hypr/looknfeel.lua` | One line at the end that loads the theme's `look.lua`, so its look applies only while this theme is active |
-| `~/.config/gtk-4.0/gtk.css` | One import so GTK apps like Files get blur |
+| `~/.config/gtk-4.0/gtk.css` | Two imports: blur for GTK apps like Files, and the theme's striped Files rows |
 | `~/.config/omarchy/plugins/` | The plugins you chose |
 | `~/.config/omarchy/shell.json` | Turns on the plugins and turns off the Omarchy ones they replace |
 

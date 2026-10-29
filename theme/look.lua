@@ -54,6 +54,8 @@ hl.animation({ leaf = "layersOut", enabled = true, speed = 2, bezier = "easeOutQ
 o.window(".*", { opacity = "0.7 0.7" })
 -- Ghostty has its own glass background with solid text; keep it as is.
 o.window("^(com\\.mitchellh\\.ghostty|TUI\\..*)$", { opacity = "1 1" })
+-- Files draws its own glass (see-through sidebar, solid list) from gtk.css.
+o.window("^org\\.gnome\\.Nautilus$", { opacity = "1 1" })
 -- Browsers draw popups (downloads, menus) as separate layers, so a fade stacks
 -- on the faded page and becomes unreadable; keep them solid.
 o.window("^(brave-browser|chromium|google-chrome|firefox|zen)$", { opacity = "1 1" })

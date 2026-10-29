@@ -31,6 +31,8 @@ LOADER_COMMENT="-- macOS theme: per-theme look overrides (look.lua). Added by om
 LOADER_LINE='require("default.hypr.require_optional").module("omarchy.current.theme.look")'
 GTK_COMMENT="/* macOS theme: blur behind see-through GTK windows. Added by omarchy-macos-theme. */"
 GTK_LINE="@import url(\"file://$OMARCHY_PATH/default/gtk/glass.css\");"
+ROWS_COMMENT="/* macOS theme: Finder-style list rows while the theme is active. Added by omarchy-macos-theme. */"
+ROWS_LINE="@import url(\"file://$HOME/.local/state/omarchy/current/theme/gtk.css\");"
 
 OSD_ID="macos-theme.osd"
 HUD_ID="macos-theme.dictation-hud"
@@ -102,6 +104,7 @@ if $uninstall; then
   fi
   remove_lines "$LOOKNFEEL" "$LOADER_COMMENT" "$LOADER_LINE"
   remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
+  remove_lines "$GTK_CSS" "$ROWS_COMMENT" "$ROWS_LINE"
   rm -rf "$THEME_DIR"
   say "Removed the theme. Backups of edited files end in .bak.$STAMP"
   if [[ -d $HOME/.local/share/icons/MacTahoe ]]; then
@@ -164,13 +167,19 @@ if ! grep -qF 'omarchy.current.theme.look' "$LOOKNFEEL"; then
   say "Added the look.lua loader to $LOOKNFEEL"
 fi
 
-# 3. Let GTK apps such as Files ask Hyprland for blur.
+# 3. Let GTK apps such as Files ask Hyprland for blur, and stripe Files lists.
 mkdir -p "$(dirname "$GTK_CSS")"
 touch "$GTK_CSS"
 if ! grep -qF 'default/gtk/glass.css' "$GTK_CSS"; then
   cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
   printf '%s\n%s\n' "$GTK_COMMENT" "$GTK_LINE" >> "$GTK_CSS"
   say "Added GTK blur to $GTK_CSS (reopen GTK apps to see it)"
+fi
+# Striped rows in Files, from the theme's gtk.css, so only while it is active.
+if ! grep -qF "$ROWS_LINE" "$GTK_CSS"; then
+  cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
+  printf '%s\n%s\n' "$ROWS_COMMENT" "$ROWS_LINE" >> "$GTK_CSS"
+  say "Added striped Files rows to $GTK_CSS (reopen Files to see them)"
 fi
 
 # 4. Optional plugins.
