@@ -63,11 +63,22 @@ PanelWindow {
   readonly property int popupRoom: Math.max(Style.spacing.popupRowHeight * 5 + Style.spacing.sm * 2 + Style.normalBorderWidth * 2 + gap * 2, stackRoom)
   // The Downloads fan: up to ten files plus "Open in Files".
   readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(10)) * 11 + Style.space(24))
-  // Icons pop away from the screen edge.
-  readonly property int popOrigin: position === "top" ? Item.Top
-    : position === "left" ? Item.Left
-    : position === "right" ? Item.Right
-    : Item.Bottom
+
+  // macOS magnification: icons near the pointer grow toward the screen's
+  // middle, peaking under it, and their neighbors move aside. Off while a
+  // menu is open or an app is dragged, as on macOS.
+  readonly property real magnifyPeak: 1.75
+  readonly property real magnifyRange: slotSize * 3
+  // Where the pointer is along the dock, from the start of the slots.
+  property real pointerAlong: 0
+  readonly property bool magnifying: (magnifyHover.hovered || bodyHover.hovered) && contentShown && !menuOpen && !dragging && insertIndex < 0 && !hoverStale
+  // Eases the effect in and out; the pointer itself is followed directly.
+  property real magnifyAmount: magnifying ? 1 : 0
+  Behavior on magnifyAmount { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
+  readonly property real magnifyGain: 1 + (magnifyPeak - 1) * magnifyAmount
+
+  function magnifyScale(at) { return DockModel.magnifyScale(at - pointerAlong, magnifyRange, magnifyGain) }
+  function magnifyShift(at) { return DockModel.magnifyShift(at - pointerAlong, magnifyRange, magnifyGain) }
 
   // The app being dragged along the dock, how far the pointer has taken it,
   // and the slot it would land in.
@@ -260,6 +271,7 @@ PanelWindow {
   mask: Region {
     item: window.contentShown ? body : null
 
+    Region { item: window.contentShown ? magnifyZone : null }
     Region { item: window.shown && window.autohide ? edgeTrigger : null }
     Region { item: menu.visible ? menu : null }
     Region { item: menuTail.visible ? menuTail : null }
@@ -349,10 +361,38 @@ PanelWindow {
 
     // The macOS dock platter: a borderless sheet of tinted glass behind the
     // icons, the same as the app switcher. Hyprland blurs what is behind it.
+    // It stretches with the magnified icons, as far as its end ones move.
     Rectangle {
-      anchors.fill: parent
+      readonly property real startShift: window.magnifyShift(0)
+      readonly property real endShift: window.magnifyShift(window.vertical ? slots.height : slots.width)
+
+      x: window.vertical ? 0 : startShift
+      y: window.vertical ? startShift : 0
+      width: parent.width + (window.vertical ? 0 : endShift - startShift)
+      height: parent.height + (window.vertical ? endShift - startShift : 0)
       radius: Math.round((window.slotSize + window.platterPadding * 2) * 0.3)
       color: Qt.rgba(0.2, 0.2, 0.23, 0.34)
+    }
+
+    // The room the magnified icons grow into, so moving onto a grown icon
+    // keeps it grown; the body's own hover covers the dock itself.
+    Item {
+      id: magnifyZone
+
+      readonly property real grow: window.iconSize * (window.magnifyPeak - 1)
+
+      x: window.position === "right" ? -grow : 0
+      y: window.position === "bottom" ? -grow : 0
+      width: parent.width + (window.vertical ? grow : 0)
+      height: parent.height + (window.vertical ? 0 : grow)
+
+      HoverHandler {
+        id: magnifyHover
+        onPointChanged: {
+          var at = point.position
+          if (hovered) window.pointerAlong = window.vertical ? at.y + magnifyZone.y - slots.y : at.x + magnifyZone.x - slots.x
+        }
+      }
     }
 
     HoverHandler {
@@ -360,8 +400,11 @@ PanelWindow {
       onHoveredChanged: if (!hovered && window.autohide) hideTimer.restart()
       // Only a real move clears it: the release itself reports the pointer too.
       onPointChanged: {
-        if (!window.hoverStale || window.dragging) return
         var at = point.position
+        // The icons take hover from the zone below them, so the body follows
+        // the pointer over the dock itself.
+        if (hovered) window.pointerAlong = window.vertical ? at.y - slots.y : at.x - slots.x
+        if (!window.hoverStale || window.dragging) return
         if (Math.hypot(at.x - window.dropPoint.x, at.y - window.dropPoint.y) > Style.space(4)) window.hoverStale = false
       }
     }
@@ -381,8 +424,11 @@ PanelWindow {
       // A divider, then running apps that are not pinned, Downloads, and
       // Trash at the very end.
       Item {
+        id: divider
         width: window.vertical ? window.slotSize : Style.space(13)
         height: window.vertical ? Style.space(13) : window.slotSize
+        readonly property real along: window.magnifyShift(window.vertical ? y + height / 2 : x + width / 2)
+        transform: Translate { x: window.vertical ? 0 : divider.along; y: window.vertical ? divider.along : 0 }
 
         Rectangle {
           anchors.centerIn: parent
@@ -491,10 +537,10 @@ PanelWindow {
       asynchronous: true
       smooth: true
       mipmap: true
-      scale: placeSlot.hovered ? 1.15 : 1
-      transformOrigin: window.popOrigin
-
-      Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
+      transform: [
+        IconScale { factor: placeSlot.magScale },
+        Translate { x: window.vertical ? 0 : placeSlot.magShift; y: window.vertical ? placeSlot.magShift : 0 }
+      ]
     }
   }
 
@@ -527,18 +573,34 @@ PanelWindow {
       asynchronous: true
       smooth: true
       mipmap: true
-      scale: unpinnedSlot.hovered ? 1.15 : 1
-      transformOrigin: window.popOrigin
-
-      Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
+      transform: [
+        IconScale { factor: unpinnedSlot.magScale },
+        Translate { x: window.vertical ? 0 : unpinnedSlot.magShift; y: window.vertical ? unpinnedSlot.magShift : 0 }
+      ]
     }
 
     RunningDot {}
   }
 
 
+  // Grows an icon from its base on the dock's screen edge.
+  component IconScale: Scale {
+    property real factor: 1
+    readonly property int size: window.iconSize
+    origin.x: window.position === "left" ? 0 : window.position === "right" ? size : size / 2
+    origin.y: window.position === "top" ? 0 : window.position === "bottom" ? size : size / 2
+    xScale: factor
+    yScale: factor
+  }
+
   // The macOS running indicator: a small dot between the icon and the dock's edge.
   component RunningDot: Rectangle {
+    id: dot
+    // Extra movement along the dock, such as a drag.
+    property real shift: 0
+    readonly property real along: dot.shift + dot.parent.magShift
+    transform: Translate { x: window.vertical ? 0 : dot.along; y: window.vertical ? dot.along : 0 }
+
     readonly property int size: Math.max(4, Math.round(window.iconSize * 0.11))
     readonly property real edge: window.iconInset / 2 - size / 2
 
@@ -577,8 +639,11 @@ PanelWindow {
     color: Qt.rgba(0.11, 0.11, 0.12, 0.88)
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.14)
-    x: window.tipSlot ? window.popupX(window.tipSlot, tipLabel) : 0
-    y: window.tipSlot ? window.popupY(window.tipSlot, tipLabel) - Style.space(4) : 0
+    // Over the magnified icon: moved along with it, and past what it grew.
+    readonly property real lift: window.tipSlot ? window.iconSize * (window.tipSlot.magScale - 1) : 0
+    readonly property real along: window.tipSlot ? window.tipSlot.magShift : 0
+    x: window.tipSlot ? window.popupX(window.tipSlot, tipLabel) + (window.vertical ? (window.position === "left" ? tipLabel.lift : -tipLabel.lift) : tipLabel.along) : 0
+    y: window.tipSlot ? window.popupY(window.tipSlot, tipLabel) - Style.space(4) + (window.vertical ? tipLabel.along : (window.position === "top" ? tipLabel.lift : -tipLabel.lift)) : 0
 
     Text {
       id: tipText
@@ -610,6 +675,10 @@ PanelWindow {
 
     width: window.slotSize
     height: window.slotSize
+
+    readonly property real center: window.vertical ? y + height / 2 : x + width / 2
+    readonly property real magScale: window.magnifyScale(center)
+    readonly property real magShift: window.magnifyShift(center)
 
     MouseArea {
       id: mouse
@@ -653,10 +722,10 @@ PanelWindow {
       y: window.iconInset
       width: window.iconSize
       height: window.iconSize
-      scale: appsSlot.hovered ? 1.15 : 1
-      transformOrigin: window.popOrigin
-
-      Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
+      transform: [
+        IconScale { factor: appsSlot.magScale },
+        Translate { x: window.vertical ? 0 : appsSlot.magShift; y: window.vertical ? appsSlot.magShift : 0 }
+      ]
 
       Grid {
         readonly property int square: Math.round(window.iconSize * 0.22)
@@ -784,23 +853,20 @@ PanelWindow {
       asynchronous: true
       smooth: true
       mipmap: true
-      transform: Translate {
-        x: window.vertical ? 0 : appSlot.displayedShift
-        y: window.vertical ? appSlot.displayedShift : 0
-      }
-      scale: appSlot.lifted || appSlot.hovered ? 1.15 : 1
-      transformOrigin: window.popOrigin
-
-      Behavior on scale { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
+      // A dragged icon is lifted instead of magnified.
+      transform: [
+        IconScale { factor: appSlot.lifted ? 1.15 : appSlot.magScale },
+        Translate {
+          x: window.vertical ? 0 : appSlot.displayedShift + appSlot.magShift
+          y: window.vertical ? appSlot.displayedShift + appSlot.magShift : 0
+        }
+      ]
     }
 
     RunningDot {
       visible: appSlot.windowCount > 0 || appSlot.launching
       opacity: appSlot.launching ? appSlot.pulse : 1
-      transform: Translate {
-        x: window.vertical ? 0 : appSlot.displayedShift
-        y: window.vertical ? appSlot.displayedShift : 0
-      }
+      shift: appSlot.displayedShift
     }
 
     // With animations off it holds still rather than spinning through

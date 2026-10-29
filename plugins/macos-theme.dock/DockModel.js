@@ -137,6 +137,21 @@ function dropIndex(fromIndex, offset, slotSize, count) {
   return Math.max(0, Math.min(count - 1, target))
 }
 
+// macOS dock magnification: an icon offset from the pointer along the dock
+// grows by a cosine falloff, from peak at the pointer to 1 at range.
+function magnifyScale(offset, range, peak) {
+  var u = Math.abs(offset) / range
+  return u >= 1 ? 1 : 1 + (peak - 1) * Math.cos(u * Math.PI / 2)
+}
+
+// How far that icon moves out of the way: the extra size of everything
+// between it and the pointer, the integral of the falloff, so neighbors never
+// overlap and the dock grows evenly on both sides.
+function magnifyShift(offset, range, peak) {
+  var u = Math.max(-1, Math.min(1, offset / range))
+  return (peak - 1) * range * 2 / Math.PI * Math.sin(u * Math.PI / 2)
+}
+
 // The pins to save for the dock's order: the pinned apps in that order, then
 // pins the dock is not showing, because their app is not installed, as they
 // were. pinned holds the pinned desktop ids as keys.
@@ -185,6 +200,8 @@ if (typeof module !== "undefined") {
     orderItems: orderItems,
     orderWithKeyAt: orderWithKeyAt,
     dropIndex: dropIndex,
+    magnifyScale: magnifyScale,
+    magnifyShift: magnifyShift,
     pinsInOrder: pinsInOrder,
     pickWindow: pickWindow
   }

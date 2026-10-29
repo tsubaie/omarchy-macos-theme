@@ -56,6 +56,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 Omarchy's dock, which appears on floating workspaces, reworked to behave like the macOS Dock:
 
 - A borderless frosted platter with 48px icons, and the app's name on hover.
+- **Magnification** like macOS: icons near the pointer grow (up to 1.75×) and their neighbors slide aside, with the platter stretching to fit. Change `magnifyPeak` in `DockWindow.qml` for more or less.
 - **Pinned apps on the left.** Running apps that aren't pinned sit to the right of a divider, minimized or not.
 - **A dot under every running app.** Pins survive restarts.
 - **Right-click an app** for a macOS-style menu: its open windows, New Window, Options › Keep in Dock, and Quit.
