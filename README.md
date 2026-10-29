@@ -25,6 +25,9 @@ cd omarchy-macos-theme
 | `--dictation-hud` | A dictation pill for [Voxtype](https://voxtype.io) |
 | `--all` | All of the above |
 | `--uninstall` | Undo everything (switch to another theme first) |
+| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud` or `menubar` |
+| `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
+| `--status [--json]` | Which pieces are installed, and whether the theme is current |
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps. Re-running the script updates everything in place and keeps your wallpaper.
 
