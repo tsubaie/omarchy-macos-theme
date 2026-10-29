@@ -503,6 +503,12 @@ Item {
     function minimize(address: string, x: int, y: int, width: int, height: int, monitor: string): void {
       root.minimize(address, Qt.rect(x, y, width, height), monitor)
     }
+    // Where a dragged window would snap (look.lua), in Hyprland's layout
+    // coordinates, and its end.
+    function snapShow(monitor: string, x: int, y: int, width: int, height: int): void {
+      root.snapShow(monitor, Qt.rect(x, y, width, height))
+    }
+    function snapHide(): void { root.snapHide() }
   }
 
   function screenNamed(name) {
@@ -511,6 +517,20 @@ Item {
       if (screens[i].name === name) return screens[i]
     }
     return null
+  }
+
+  function snapShow(monitor, rect) {
+    var screen = root.screenNamed(monitor)
+    var outlines = snapPreviews.instances
+    for (var i = 0; i < outlines.length; i++) {
+      if (outlines[i].screen === screen) outlines[i].show(Qt.rect(rect.x - screen.x, rect.y - screen.y, rect.width, rect.height))
+      else outlines[i].hide()
+    }
+  }
+
+  function snapHide() {
+    var outlines = snapPreviews.instances
+    for (var i = 0; i < outlines.length; i++) outlines[i].hide()
   }
 
   function genieOn(screen) {
@@ -595,6 +615,18 @@ Item {
         required property var modelData
         screen: modelData
         sourceDir: root.manifest && root.manifest.__sourceDir ? String(root.manifest.__sourceDir) : ""
+      }
+    }
+  }
+
+  Variants {
+    id: snapPreviews
+    model: Quickshell.screens
+
+    delegate: Component {
+      SnapPreview {
+        required property var modelData
+        screen: modelData
       }
     }
   }

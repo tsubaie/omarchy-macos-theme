@@ -46,6 +46,8 @@ hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popup
 hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher)$" }, blur = true, ignore_alpha = 0.3 })
 -- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
+-- The snap outline is frosted glass and animates itself.
+hl.layer_rule({ match = { namespace = "^omarchy-snap-preview$" }, no_anim = true, blur = true, ignore_alpha = 0.01 })
 
 -- Menus, popups and the launcher pop in with the same spring as windows.
 hl.animation({ leaf = "layersIn", enabled = true, speed = 4.5, bezier = "macSpring", style = "popin 92%" })
@@ -135,21 +137,32 @@ end
 -- floating ones their size. Finish the job: float it as Omarchy does,
 -- claimed, so it tiles again if the workspace does, at the size Omarchy opens
 -- windows at there, centered.
-local function settle_arrival(address)
-  local window = hl.get_window("address:" .. address)
-  if not window or (window.fullscreen or 0) ~= 0 or not window.workspace then return end
-  -- A floating workspace is one whose windows carry Omarchy's tag.
-  local on_floating = false
+-- A floating workspace is one whose windows carry Omarchy's tag.
+local function on_floating_workspace(window)
+  if not window.workspace then return false end
   for _, other in ipairs(hl.get_workspace_windows(tostring(window.workspace.id))) do
     for _, tag in ipairs(other.tags or {}) do
-      if tag == "omarchy-floating-workspace" then on_floating = true end
+      if tag == "omarchy-floating-workspace" then return true end
     end
   end
-  local monitor = window.monitor
-  if not on_floating or not monitor or not monitor.width then return end
+  return false
+end
+
+-- A monitor's room for windows, clear of the bar: x, y, width, height.
+local function usable_area(monitor)
   local reserved = monitor.reserved or {}
-  local width = math.floor(monitor.width / monitor.scale) - (reserved.left or 0) - (reserved.right or 0)
-  local height = math.floor(monitor.height / monitor.scale) - (reserved.top or 0) - (reserved.bottom or 0)
+  local width = math.floor(monitor.width / monitor.scale)
+  local height = math.floor(monitor.height / monitor.scale)
+  return monitor.x + (reserved.left or 0), monitor.y + (reserved.top or 0),
+    width - (reserved.left or 0) - (reserved.right or 0), height - (reserved.top or 0) - (reserved.bottom or 0)
+end
+
+local function settle_arrival(address)
+  local window = hl.get_window("address:" .. address)
+  if not window or (window.fullscreen or 0) ~= 0 then return end
+  local monitor = window.monitor
+  if not on_floating_workspace(window) or not monitor or not monitor.width then return end
+  local _, _, width, height = usable_area(monitor)
   if not window.floating then
     hl.dispatch(hl.dsp.window.tag({ tag = "+omarchy-floating-workspace", window = window }))
     hl.dispatch(hl.dsp.window.tag({ tag = "+omarchy-mode-floated", window = window }))
@@ -177,6 +190,206 @@ end)
 -- the move event, a click on the window still floats it.
 hl.on("window.active", function(window)
   if window and window.address and not window.floating then settle_arrival(window.address) end
+end)
+
+-- Snapping, as in macOS and Windows: on a floating workspace, drag a window's
+-- pointer to the left or right edge for that half of the screen, to a corner
+-- for that quarter, or to the top edge to fill it. While the drag is over a
+-- spot, a frosted outline shows where the window will go (drawn by the dock
+-- plugin, when installed); letting go puts it there, with the gaps kept and
+-- its title bar, which sits above its own area, on screen.
+--
+-- Hyprland tells nothing of a drag: the title bar plugin takes the button
+-- before any bind sees it, and no event marks the start or the end. But a
+-- dragged window moves exactly as the pointer does, which nothing else does.
+-- So the active window is watched while on a floating workspace, and the
+-- snap lands as Hyprland refocuses the window on release, or, should that
+-- not come, as the pointer first moves on alone.
+local SNAP_EDGE = 12
+-- The ends of an edge that give a corner rather than a half, as a share of
+-- the screen: KDE's default (ElectricBorderCornerRatio), roomy enough to hit.
+local SNAP_CORNER = 0.25
+-- How often the active window and the pointer are checked, in milliseconds.
+local SNAP_TICK = 40
+local snap_shown = nil
+
+local function snap_zone(cursor, monitor)
+  local x, y, width, height = usable_area(monitor)
+  local left, right = cursor.x <= x + SNAP_EDGE, cursor.x >= x + width - SNAP_EDGE
+  -- The top edge is the bar's: the pointer stops on it.
+  local top = cursor.y <= y + SNAP_EDGE
+  local bottom = cursor.y >= y + height - SNAP_EDGE
+  local upper = cursor.y <= y + height * SNAP_CORNER
+  local lower = cursor.y >= y + height * (1 - SNAP_CORNER)
+  if left or right then
+    local side = left and "left" or "right"
+    if upper then return "top-" .. side end
+    if lower then return "bottom-" .. side end
+    return side
+  end
+  if top then
+    if cursor.x <= x + width * SNAP_CORNER then return "top-left" end
+    if cursor.x >= x + width * (1 - SNAP_CORNER) then return "top-right" end
+    return "fill"
+  end
+  -- The bottom edge, the dock's, gives only its corners, reached from below
+  -- as well as from the sides.
+  if bottom then
+    if cursor.x <= x + width * SNAP_CORNER then return "bottom-left" end
+    if cursor.x >= x + width * (1 - SNAP_CORNER) then return "bottom-right" end
+  end
+  return nil
+end
+
+-- The spot a zone stands for, title bar included: x, y, width, height.
+local function snap_cell(monitor, zone)
+  local x, y, width, height = usable_area(monitor)
+  local gap = hl.get_config("general.gaps_in")
+  local edge = hl.get_config("general.gaps_out")
+  gap = (type(gap) == "table" and gap.top or gap or 0) * 2
+  edge = type(edge) == "table" and edge.top or edge or 0
+  x, y, width, height = x + edge, y + edge, width - edge * 2, height - edge * 2
+  local half_w, half_h = math.floor((width - gap) / 2), math.floor((height - gap) / 2)
+  local cells = {
+    fill = { x, y, width, height },
+    left = { x, y, half_w, height },
+    right = { x + width - half_w, y, half_w, height },
+    ["top-left"] = { x, y, half_w, half_h },
+    ["top-right"] = { x + width - half_w, y, half_w, half_h },
+    ["bottom-left"] = { x, y + height - half_h, half_w, half_h },
+    ["bottom-right"] = { x + width - half_w, y + height - half_h, half_w, half_h },
+  }
+  return cells[zone]
+end
+
+-- Snapped windows by address: the size each had before, and the size it
+-- snapped to, so dragging it back out gives its own size back, as on macOS.
+local snapped = {}
+local SNAP_BAR = hl.plugin.hyprbars and 32 or 0
+
+local function snap(window, zone)
+  local cell = snap_cell(window.monitor, zone)
+  local was = snapped[window.address]
+  -- Snapping again from one spot to another keeps the size from before both.
+  local own = was and { was.w, was.h } or { window.size.x, window.size.y }
+  snapped[window.address] = { w = own[1], h = own[2], cw = cell[3], ch = cell[4] - SNAP_BAR }
+  hl.dispatch(hl.dsp.window.resize({ x = cell[3], y = cell[4] - SNAP_BAR, relative = false, window = window }))
+  hl.dispatch(hl.dsp.window.move({ x = cell[1], y = cell[2] + SNAP_BAR, window = window }))
+  -- Apps such as the calculator settle on a size of their own near the one
+  -- asked for; remember the size it took, so a drag still knows it as snapped.
+  local address = window.address
+  hl.timer(function()
+    local now = hl.get_window("address:" .. address)
+    local entry = snapped[address]
+    if now and entry then entry.cw, entry.ch = now.size.x, now.size.y end
+  end, { type = "oneshot", timeout = 250 })
+end
+
+-- A drag of a snapped window, still at its snapped size, gives it back its own
+-- size at once; the drop then centres it under the pointer by its title bar.
+local function unsnap(window)
+  local was = snapped[window.address]
+  snapped[window.address] = nil
+  if not was or window.size.x ~= was.cw or window.size.y ~= was.ch then return false end
+  hl.dispatch(hl.dsp.window.resize({ x = was.w, y = was.h, relative = false, window = window }))
+  return true
+end
+
+
+-- Shows the outline for a spot, or hides it with nil; only when it changes.
+local function show_snap(window, zone)
+  local key = zone and (window.monitor.name .. ":" .. zone) or nil
+  if key == snap_shown then return end
+  snap_shown = key
+  local command = "omarchy-shell -q omarchy.dock snapHide"
+  if zone then
+    local cell = snap_cell(window.monitor, zone)
+    command = string.format("omarchy-shell -q omarchy.dock snapShow %s %d %d %d %d", window.monitor.name, cell[1], cell[2], cell[3], cell[4])
+  end
+  hl.dispatch(hl.dsp.exec_cmd(command))
+end
+
+-- The last look at the active window and the pointer, and the drag, if one
+-- is on: the spot it was over when last seen moving with the pointer.
+local snap_seen = nil
+local snap_drag = nil
+
+-- Let go: into the spot the drag was over, or, for a window unsnapped on the
+-- way, under the pointer.
+local function drop(window, drag, cursor)
+  show_snap(nil, nil)
+  if drag.zone then
+    snap(window, drag.zone)
+  elseif drag.unsnapped then
+    hl.dispatch(hl.dsp.window.move({
+      x = math.floor(cursor.x - window.size.x / 2),
+      y = math.floor(cursor.y + SNAP_BAR / 2),
+      window = window,
+    }))
+  end
+end
+
+local function snap_tick()
+  local window = hl.get_active_window()
+  local cursor = hl.get_cursor_pos()
+  local seen = snap_seen
+  snap_seen = nil
+  if window and window.floating and (window.fullscreen or 0) == 0 and window.monitor and on_floating_workspace(window) then
+    snap_seen = { address = window.address, x = window.at.x, y = window.at.y, w = window.size.x, h = window.size.y, cx = cursor.x, cy = cursor.y }
+  end
+  local now = snap_seen
+  if seen and now and seen.address == now.address and snap_drag and snap_drag.unsnapped and not snap_drag.resized then
+    -- The unsnap's own resize: the drag goes on.
+    snap_drag.resized = true
+  elseif not (seen and now and seen.address == now.address and seen.w == now.w and seen.h == now.h) then
+    -- Another window, a resize, or none: no drag to follow.
+    if snap_drag then show_snap(nil, nil) end
+    snap_drag = nil
+  else
+    local wx, wy = now.x - seen.x, now.y - seen.y
+    local cx, cy = now.cx - seen.cx, now.cy - seen.cy
+    local moved = wx ~= 0 or wy ~= 0
+    if moved and math.abs(wx - cx) <= 2 and math.abs(wy - cy) <= 2 then
+      -- Moving with the pointer: dragged. Show the spot it is over.
+      if not snap_drag then
+        snap_drag = { unsnapped = unsnap(window) }
+      end
+      snap_drag.zone = snap_zone(cursor, window.monitor)
+      snap_drag.alone = 0
+      show_snap(window, snap_drag.zone)
+    elseif snap_drag and not moved and (cx ~= 0 or cy ~= 0) and (snap_drag.alone or 0) < 1 then
+      -- The pointer moved alone once; a second time means it was let go.
+      snap_drag.alone = (snap_drag.alone or 0) + 1
+    elseif snap_drag and not moved and (cx ~= 0 or cy ~= 0) then
+      -- The pointer moves on alone: let go where the drag last was.
+      local drag = snap_drag
+      snap_drag = nil
+      drop(window, drag, cursor)
+    elseif snap_drag and moved then
+      -- Moved some other way, by a key or a script.
+      snap_drag = nil
+      show_snap(nil, nil)
+    end
+  end
+  hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
+end
+
+hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
+
+-- Letting go of a drag refocuses the window, which Hyprland reports even
+-- though it already had focus: that is the release, so snap right away.
+hl.on("window.active", function(window)
+  if not snap_drag or not window or not snap_seen or window.address ~= snap_seen.address then return end
+  local drag = snap_drag
+  snap_drag = nil
+  local current = hl.get_window("address:" .. window.address)
+  if current then drop(current, drag, hl.get_cursor_pos()) end
+end)
+
+-- A closed window's snap is forgotten.
+hl.on("window.destroy", function(window)
+  -- A closing window can come without its address.
+  if window and window.address then snapped[window.address] = nil end
 end)
 
 -- Omarchy makes windows on floating workspaces fully opaque; keep the same
