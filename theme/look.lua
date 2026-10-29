@@ -128,6 +128,57 @@ if hl.plugin.hyprbars then
   end
 end
 
+-- A window dragged with the mouse from a tiled workspace onto a floating one
+-- can land still tiled (under every floating window, filling the screen, and
+-- not raised by a click) or floating at its tiled size. Omarchy floats and
+-- sizes only windows that arrive tiled once the move has settled, and leaves
+-- floating ones their size. Finish the job: float it as Omarchy does,
+-- claimed, so it tiles again if the workspace does, at the size Omarchy opens
+-- windows at there, centered.
+local function settle_arrival(address)
+  local window = hl.get_window("address:" .. address)
+  if not window or (window.fullscreen or 0) ~= 0 or not window.workspace then return end
+  -- A floating workspace is one whose windows carry Omarchy's tag.
+  local on_floating = false
+  for _, other in ipairs(hl.get_workspace_windows(tostring(window.workspace.id))) do
+    for _, tag in ipairs(other.tags or {}) do
+      if tag == "omarchy-floating-workspace" then on_floating = true end
+    end
+  end
+  local monitor = window.monitor
+  if not on_floating or not monitor or not monitor.width then return end
+  local reserved = monitor.reserved or {}
+  local width = math.floor(monitor.width / monitor.scale) - (reserved.left or 0) - (reserved.right or 0)
+  local height = math.floor(monitor.height / monitor.scale) - (reserved.top or 0) - (reserved.bottom or 0)
+  if not window.floating then
+    hl.dispatch(hl.dsp.window.tag({ tag = "+omarchy-floating-workspace", window = window }))
+    hl.dispatch(hl.dsp.window.tag({ tag = "+omarchy-mode-floated", window = window }))
+    hl.dispatch(hl.dsp.window.float({ action = "on", window = window }))
+  elseif window.size.x < width * 0.9 and window.size.y < height * 0.9 then
+    return
+  end
+  hl.dispatch(hl.dsp.window.resize({
+    x = math.min(1100, math.floor(width * 0.64)),
+    y = math.min(760, math.floor(height * 0.68)),
+    relative = false,
+    window = window,
+  }))
+  hl.dispatch(hl.dsp.window.center({ window = window }))
+  hl.dispatch(hl.dsp.window.alter_zorder({ mode = "top", window = window }))
+end
+
+hl.on("window.move_to_workspace", function(moved)
+  local address = moved.address
+  -- After Omarchy's own arranging (1ms), and again once a drag has let go.
+  hl.timer(function() settle_arrival(address) end, { type = "oneshot", timeout = 30 })
+  hl.timer(function() settle_arrival(address) end, { type = "oneshot", timeout = 300 })
+end)
+-- No window stays tiled on a floating workspace, so should a drag ever skip
+-- the move event, a click on the window still floats it.
+hl.on("window.active", function(window)
+  if window and window.address and not window.floating then settle_arrival(window.address) end
+end)
+
 -- Omarchy makes windows on floating workspaces fully opaque; keep the same
 -- glass there as on tiled workspaces. Rules it adds later for that tag drop
 -- their opacity, everything else about them stays.
