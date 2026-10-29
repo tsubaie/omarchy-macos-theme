@@ -53,8 +53,6 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 
   ![Title bar](docs/screenshots/title-bar.png)
 
-- **Minimize into the dock** with the macOS genie: the yellow button pours the window into its app's dock icon, and clicking the icon pours it back out to where it was. This works on floating workspaces, where Omarchy can minimize, and needs the dock (`--dock`); without it, windows minimize plainly.
-- **Snapping** on floating workspaces, as in macOS and Windows: drag a window to the left or right edge for half the screen, to a corner for a quarter (the outer third of an edge, the bottom edge's included), or to the top edge to fill it. A frosted outline shows the spot while you drag (with `--dock`), a snapped window gets its own size back when you drag it out, and snapped windows make room for each other (full screen gives way to the other half, a half to its other quarter).
 - **Thin glass edges** instead of colored window borders, soft shadows, 16px rounded corners and roomy gaps (6px between windows, 10px at the edges).
 - **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces.
 - **Striped rows in Files** list view, like Finder, with rounded rows. They come from the theme's `gtk.css`, so they show only while this theme is active.
@@ -62,8 +60,23 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 
   ![Notification](docs/screenshots/notification.png)
 
-- **Inter** for text, the closest free match to Apple's SF Pro, in Regular weight with 13px semibold window titles. Install it with `sudo pacman -S inter-font`; the bar keeps your Omarchy font (`omarchy font set` changes it).
+- **Inter** for text, the closest free match to Apple's SF Pro, in Regular weight with 13px semibold window titles. Install it with `sudo pacman -S inter-font`. With `--menubar` the bar and popups use it too; terminals keep your Omarchy font.
 - **Wallpapers**: two full-resolution (6000×4000) photos, by Pawel Czerwinski (the default) and Martin Martz. Cycle between them with `omarchy theme bg next`.
+
+### Floating windows
+
+On floating workspaces, windows behave like a Mac's:
+
+- **Snapping**, as on macOS and Windows. Drag a window by its title bar:
+  - to the left or right edge for half the screen;
+  - to a corner for a quarter. An edge is split in thirds: its upper and lower thirds give corners and the middle third the half, so you don't need to reach the very corner;
+  - to the middle of the top edge to fill the screen. The top and bottom edges' outer thirds give their corners too.
+
+  The left and right edges count when the window's own edge reaches them, not only the pointer, so it doesn't matter where you hold the title bar. A frosted outline shows the spot while you drag (with `--dock`), and the window snaps when you let go.
+- **Snapped windows make room for each other**: a window snapped beside a full-screen one takes its half and the other gives way, and a half gives way to a quarter.
+- **Drag a snapped window out** and it gets its own size back.
+- **Windows moved here from a tiled workspace** float at a regular size in the middle, instead of filling the screen, and come to the front.
+- **Minimize into the dock** with the macOS genie: the yellow button pours the window into its app's dock icon, and clicking the icon pours it back out where it was. The dock brings back the window you minimized, not another one of the same app, and leaves the pointer where it is. Needs the dock (`--dock`); without it, windows minimize plainly.
 
 ### macOS dock (`--dock`)
 
@@ -85,7 +98,7 @@ Omarchy's dock, which appears on floating workspaces, reworked to behave like th
 
   ![Trash menu](docs/screenshots/trash-menu.png)
 
-- **All apps** grid at the far right, like Launchpad, with search.
+- **All apps** grid at the far right, like Launchpad, with search. Right-click an app for a macOS-style menu, including Uninstall, which asks first.
 - Menus, the Downloads fan and the Trash menu close when you click anywhere else.
 - Windows of apps that don't report an app id still get a proper icon, matched from their title.
 
@@ -112,7 +125,6 @@ The bar as macOS Tahoe draws it:
 - **The focused app's name in bold** right after the menu button, the way macOS shows it next to the Apple menu.
 - **Control Center**: one icon by the clock for network (Wi-Fi or Ethernet), Bluetooth and Tailscale with their state, a volume slider, and Display and Power. Each opens Omarchy's own panel for the full controls. The widgets it stands in for move to the bar's tray drawer, which keeps their panels working.
 - **A soft shade** behind the see-through bar, as Tahoe has, so it reads on any wallpaper.
-
 - **macOS's arrangement** for Omarchy's own widgets. The right end holds only the tray drawer, the keyboard layout, Control Center and the clock, with the notification bell past it if you have it. The status widgets (indicators, world clock, weather, system update) sit in the middle, and the agents widget joins the drawer.
 
 Widgets from other plugins stay where you put them. To show or hide any widget, drag it between the bar and the tray drawer (the "<"). `--uninstall` puts Omarchy's widgets back in its default layout.
@@ -136,7 +148,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 
 | Plugin | Option | What it replaces |
 |---|---|---|
-| `macos-theme.dock` | `--dock` | Omarchy's dock (`omarchy.dock` is turned off while it is installed) |
+| `macos-theme.dock` | `--dock` | Omarchy's dock (`omarchy.dock` is turned off while it is installed); it also draws the genie and the snapping outline |
 | `macos-theme.switcher` | `--switcher` | Nothing; adds the Alt+Tab and Super+Tab switchers |
 | `macos-theme.osd` | `--osd` | Omarchy's on-screen display (`omarchy.osd` is turned off) |
 | `macos-theme.dictation-hud` | `--dictation-hud` | Nothing; adds a pill for Voxtype |
@@ -182,6 +194,7 @@ The window look lives in `~/.config/omarchy/themes/macos/look.lua`. Edit it, the
 - **Window glass**: `o.window(".*", { opacity = "0.7 0.7" })`. Use `1 1` for solid windows, or add an app's class to the solid list below that line (find it with `hyprctl clients`).
 - **Gaps, corners, blur**: in the `hl.config` block at the top.
 - **Title bars**: in the `hyprbars` block.
+- **Snapping**: `SNAP_EDGE` is how close to an edge (in pixels) a drag must come, and `SNAP_CORNER` how much of each edge counts as a corner (a third by default).
 
 Bar, menu, launcher, notification and popup colors and transparency are in `shell.toml` in the same folder. If you have your own `~/.config/omarchy/shell.toml`, its values win.
 
