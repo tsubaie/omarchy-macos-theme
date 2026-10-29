@@ -20,6 +20,7 @@ cd omarchy-macos-theme
 | `--icons` | MacTahoe macOS icons |
 | `--switcher` | App switcher (Alt+Tab) and workspace switcher (Super+Tab) |
 | `--wide-menu` | A wider, Spotlight-like Omarchy menu |
+| `--menubar` | The macOS menu bar: Inter, the app name in bold, Control Center |
 | `--osd` | The frosted volume and brightness capsule |
 | `--dictation-hud` | A dictation pill for [Voxtype](https://voxtype.io) |
 | `--all` | All of the above |
@@ -91,6 +92,17 @@ Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon
 
 - **Super+Tab** does the same for workspaces, showing each one as a live miniature of its windows. A quick Super+Tab flips between your last two workspaces.
 
+### macOS menu bar (`--menubar`)
+
+The bar as macOS Tahoe draws it:
+
+- **Inter** for the shell's text (bar, popups, notifications), as macOS uses one sans serif throughout; terminals keep their own font. The bar is 24px tall, as the macOS menu bar is.
+- **The focused app's name in bold** right after the menu button, the way macOS shows it next to the Apple menu.
+- **Control Center**: one icon by the clock for network (Wi-Fi or Ethernet), Bluetooth and Tailscale with their state, a volume slider, and Display and Power. Each opens Omarchy's own panel for the full controls. The widgets it stands in for move to the bar's tray drawer, which keeps their panels working.
+- **A soft shade** behind the see-through bar, as Tahoe has, so it reads on any wallpaper.
+
+Your other bar widgets stay where they are.
+
 ### Spotlight-like menu (`--wide-menu`)
 
 Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, with a magnifying glass and "Search…" instead of "Go…", on the same frosted glass. Everything in it works as before.
@@ -115,6 +127,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | `macos-theme.osd` | `--osd` | Omarchy's on-screen display (`omarchy.osd` is turned off) |
 | `macos-theme.dictation-hud` | `--dictation-hud` | Nothing; adds a pill for Voxtype |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
+| `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets move to the bar's tray drawer |
 
 `--icons` installs the MacTahoe icon theme, which is not a plugin, into `~/.local/share/icons`.
 

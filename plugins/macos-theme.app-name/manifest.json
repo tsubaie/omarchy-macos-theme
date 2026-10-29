@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.app-name",
+  "name": "App name",
+  "version": "1.0.0",
+  "description": "The focused app's name in bold, as the macOS menu bar shows it next to the Apple menu.",
+  "license": "MIT",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "AppName.qml"
+  },
+  "barWidget": {
+    "displayName": "App name",
+    "description": "The focused app's name in bold",
+    "category": "Compositor",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}

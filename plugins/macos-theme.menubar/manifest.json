@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.menubar",
+  "name": "macOS menu bar",
+  "version": "1.0.0",
+  "description": "The macOS Tahoe look for the bar: Inter for the shell's text and a soft shade behind the bar so it reads on any wallpaper.",
+  "license": "MIT",
+  "kinds": ["service"],
+  "entryPoints": {
+    "service": "MenuBar.qml"
+  }
+}

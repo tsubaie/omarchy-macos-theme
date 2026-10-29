@@ -46,6 +46,8 @@ hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popup
 hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher)$" }, blur = true, ignore_alpha = 0.3 })
 -- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
+-- The shade behind the menu bar is just there, never animated in.
+hl.layer_rule({ match = { namespace = "^omarchy-menubar-shade$" }, no_anim = true })
 -- The snap outline is frosted glass and animates itself.
 hl.layer_rule({ match = { namespace = "^omarchy-snap-preview$" }, no_anim = true, blur = true, ignore_alpha = 0.01 })
 

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.control-center",
+  "name": "Control Center",
+  "version": "1.0.0",
+  "description": "One icon for network, Bluetooth, Tailscale, sound, display and power, as in the macOS menu bar; each opens Omarchy's own panel for it.",
+  "license": "MIT",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "ControlCenter.qml"
+  },
+  "barWidget": {
+    "displayName": "Control Center",
+    "description": "Network, Bluetooth, Tailscale, sound, display and power in one place",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

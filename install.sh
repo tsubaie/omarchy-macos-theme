@@ -8,6 +8,7 @@
 #   ./install.sh --icons          + MacTahoe macOS icon theme (from GitHub)
 #   ./install.sh --switcher       + app switcher (Alt+Tab) and workspace switcher (Super+Tab)
 #   ./install.sh --wide-menu      + Spotlight-like Omarchy menu: wider, magnifying glass, "Search"
+#   ./install.sh --menubar        + macOS menu bar: Inter, bold app name, Control Center, shade
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above
 #
@@ -37,11 +38,15 @@ ROWS_LINE="@import url(\"file://$HOME/.local/state/omarchy/current/theme/gtk.css
 OSD_ID="macos-theme.osd"
 HUD_ID="macos-theme.dictation-hud"
 DOCK_ID="macos-theme.dock"
+MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center"
+# The bar widgets the Control Center stands in for. They wait in the bar's tray
+# drawer rather than leaving the bar, since their panels live in them.
+CONTROL_CENTER_WIDGETS="omarchy.network omarchy.bluetooth omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power"
 SWITCHER_ID="macos-theme.switcher"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false with_wide_menu=false uninstall=false
+with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false with_wide_menu=false with_menubar=false uninstall=false
 for arg in "$@"; do
   case "$arg" in
     --osd) with_osd=true ;;
@@ -50,9 +55,10 @@ for arg in "$@"; do
     --icons) with_icons=true ;;
     --switcher) with_switcher=true; with_wide_menu=true ;;
     --wide-menu) with_wide_menu=true ;;
-    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true ;;
+    --menubar) with_menubar=true ;;
+    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true; with_menubar=true ;;
     --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -96,6 +102,16 @@ if $uninstall; then
     omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
     rm -rf "${PLUGINS_DIR:?}/$SWITCHER_ID"
     say "Removed the app switcher (Alt+Tab is back to your own binding after: hyprctl reload)"
+  fi
+  if [[ -d $PLUGINS_DIR/macos-theme.menubar ]]; then
+    for id in $MENUBAR_IDS; do
+      omarchy plugin disable "$id" >/dev/null 2>&1 || true
+      rm -rf "${PLUGINS_DIR:?}/$id"
+    done
+    for id in $CONTROL_CENTER_WIDGETS; do
+      omarchy bar move "$id" --before omarchy.clock >/dev/null 2>&1 || true
+    done
+    say "Removed the menu bar look and put the system widgets back on the bar"
   fi
   if [[ -d $PLUGINS_DIR/$HUD_ID ]]; then
     omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
@@ -209,6 +225,19 @@ fi
 if $with_switcher; then
   install_plugin "$SWITCHER_ID"
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
+fi
+if $with_menubar; then
+  for id in $MENUBAR_IDS; do install_plugin "$id"; done
+  # The bold app name follows the menu button, as on macOS, and Control Center
+  # sits by the clock; the widgets it stands in for go to the tray drawer.
+  omarchy bar put macos-theme.app-name --section left >/dev/null 2>&1 || true
+  omarchy bar move macos-theme.app-name --before omarchy.workspaces >/dev/null 2>&1 || true
+  omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
+  omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
+  for id in $CONTROL_CENTER_WIDGETS; do
+    omarchy bar move "$id" --section tray >/dev/null 2>&1 || true
+  done
+  say "Installed the macOS menu bar (Inter, app name, Control Center, a shade for legibility)"
 fi
 fc-list : family | grep -q "^Inter" || echo "    The theme uses the Inter font, which is not installed. Install it with: sudo pacman -S inter-font" >&2
 
