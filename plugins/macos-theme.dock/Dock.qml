@@ -104,6 +104,9 @@ Item {
   readonly property string position: DockModel.normalizePosition(dockConfig.position)
   readonly property bool vertical: DockModel.isVertical(position)
   readonly property bool autohide: dockConfig.autohide === true
+  // How far icons grow under the pointer: 1 is off, 2 twice their size. Set
+  // with install.sh --set magnification=<1-2>.
+  readonly property real magnification: typeof dockConfig.magnification === "number" ? Math.max(1, Math.min(2, dockConfig.magnification)) : 1.75
 
   // The dock's order for the session, as desktop ids, set when the user moves
   // an app: a drag moves it, and keeping it in the dock puts it at the end. An

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "omasync-preview",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd ~/Projects/OmaSync/.claude/worktrees/appearance && exec pnpm exec vite --mode e2e --port 1421 --strictPort"],
+      "port": 1421
+    }
+  ]
+}

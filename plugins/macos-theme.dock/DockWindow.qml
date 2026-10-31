@@ -70,7 +70,7 @@ PanelWindow {
   // macOS magnification: icons near the pointer grow toward the screen's
   // middle, peaking under it, and their neighbors move aside. Off while a
   // menu is open or an app is dragged, as on macOS.
-  readonly property real magnifyPeak: 1.75
+  readonly property real magnifyPeak: dock ? dock.magnification : 1.75
   readonly property real magnifyRange: slotSize * 3
   // Where the pointer is along the dock, from the start of the slots.
   property real pointerAlong: 0

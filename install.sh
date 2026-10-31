@@ -10,7 +10,18 @@
 #   ./install.sh --wide-menu      + Spotlight-like Omarchy menu: wider, magnifying glass, "Search"
 #   ./install.sh --menubar        + macOS menu bar: Inter, bold app name, Control Center, shade
 #   ./install.sh --all            everything
-#   ./install.sh --uninstall      undo all of the above
+#   ./install.sh --uninstall      undo all of the above (MacTahoe icons stay)
+#
+#   ./install.sh --add dock       only that piece, without the theme
+#   ./install.sh --remove dock    remove only that piece
+#   ./install.sh --status [--json]  which pieces are installed, and the settings
+#   ./install.sh --set glass=0.8  how solid windows are, 0.5 to 1 (1 is solid)
+#   ./install.sh --set web-glass=0.9  the same for browsers, web apps and Electron apps
+#   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
+#   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
+#   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
+#                                 switching to that theme first if the macOS theme is current
+#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
 # have their .lua files and ghostty.conf stripped for safety, and those carry
@@ -25,6 +36,7 @@ BACKUP_DIR="$CONFIG/omarchy/macos-theme-backups"
 PLUGINS_DIR="$CONFIG/omarchy/plugins"
 LOOKNFEEL="$CONFIG/hypr/looknfeel.lua"
 GTK_CSS="$CONFIG/gtk-4.0/gtk.css"
+SHELL_JSON="$CONFIG/omarchy/shell.json"
 OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
 STAMP="$(date +%s)"
 
@@ -46,108 +58,269 @@ SWITCHER_ID="macos-theme.switcher"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
-with_osd=false with_hud=false with_dock=false with_icons=false with_switcher=false with_wide_menu=false with_menubar=false uninstall=false
-for arg in "$@"; do
-  case "$arg" in
-    --osd) with_osd=true ;;
-    --dictation-hud) with_hud=true ;;
-    --dock) with_dock=true ;;
-    --icons) with_icons=true ;;
-    --switcher) with_switcher=true; with_wide_menu=true ;;
-    --wide-menu) with_wide_menu=true ;;
-    --menubar) with_menubar=true ;;
-    --all) with_osd=true; with_hud=true; with_dock=true; with_icons=true; with_switcher=true; with_menubar=true ;;
-    --uninstall) uninstall=true ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
+# Each piece, by the name --add, --remove and --status use.
+FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar"
+declare -A add=() remove=() settings=()
+status=false json=false legacy=false switch_to=""
+(( $# )) || legacy=true
+while (( $# )); do
+  case "$1" in
+    --osd) add[osd]=1; legacy=true ;;
+    --dictation-hud) add[dictation-hud]=1; legacy=true ;;
+    --dock) add[dock]=1; legacy=true ;;
+    --icons) add[icons]=1; legacy=true ;;
+    --switcher) add[switcher]=1; add[wide-menu]=1; legacy=true ;;
+    --wide-menu) add[wide-menu]=1; legacy=true ;;
+    --menubar) add[menubar]=1; legacy=true ;;
+    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar; do add[$f]=1; done; legacy=true ;;
+    --add|--remove)
+      [[ " $FEATURES " == *" ${2:-} "* ]] || { echo "Unknown feature: ${2:-} (one of: $FEATURES)" >&2; exit 1; }
+      if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
+      shift ;;
+    # MacTahoe stays, as it always has: it may serve other themes too.
+    --set)
+      [[ ${2:-} =~ ^(glass|web-glass|magnification|snapping)=([0-9]+(\.[0-9]+)?)$ ]] &&
+        awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" ? v == "0" || v == "1" : v >= 0.5 && v <= 1)
+        }' ||
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1)" >&2; exit 1; }
+      settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+      shift ;;
+    --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
+    --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
+    --status) status=true ;;
+    --json) json=true ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
+  shift
 done
+# The old options install the theme itself too; --add installs only what it names.
+if $legacy; then add[theme]=1; add[rows]=1; fi
 
 command -v omarchy >/dev/null || { echo "This needs Omarchy (the omarchy command was not found)." >&2; exit 1; }
+
+# The wide menu is a clone of Omarchy's menu marked by its width comment.
+wide_menus() {
+  local dir
+  for dir in "$PLUGINS_DIR"/*.menu; do
+    [[ -f $dir/Menu.qml ]] && grep -q "macOS theme: wider" "$dir/Menu.qml" && echo "$dir"
+  done
+  return 0
+}
+
+installed() {
+  case "$1" in
+    theme) [[ -d $THEME_DIR ]] ;;
+    rows) grep -qsF "$ROWS_LINE" "$GTK_CSS" ;;
+    icons) [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] ;;
+    wide-menu) [[ -n $(wide_menus) ]] ;;
+    dock) [[ -d $PLUGINS_DIR/$DOCK_ID ]] ;;
+    switcher) [[ -d $PLUGINS_DIR/$SWITCHER_ID ]] ;;
+    osd) [[ -d $PLUGINS_DIR/$OSD_ID ]] ;;
+    dictation-hud) [[ -d $PLUGINS_DIR/$HUD_ID ]] ;;
+    menubar) [[ -d $PLUGINS_DIR/macos-theme.menubar ]] ;;
+  esac
+}
+
+active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
+
+# Glass is the opacity look.lua gives every window, web-glass the one it gives
+# browsers and web and Electron apps, and snapping its SNAPPING switch: each a
+# line of look.lua, whose value is the second group of its pattern. The theme's
+# own values are the defaults. Magnification is a key of the dock's section of
+# shell.json, which the dock follows live.
+LOOK_SETTINGS="glass web-glass snapping"
+declare -A LOOK_RULE=(
+  [glass]='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
+  [web-glass]='^(o\.window\("\^\(brave-browser\|[^"]*", \{ opacity = ")([0-9.]+) [0-9.]+'
+  [snapping]='^(local SNAPPING = )([01])'
+)
+declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [magnification]=1.75)
+look_get() {
+  local v
+  v=$(sed -nE "s/${LOOK_RULE[$1]}.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null) || true
+  echo "${v:-${DEFAULT[$1]}}"
+}
+look_set() {
+  local value="$2 $2"
+  [[ $1 == snapping ]] && value=$2
+  sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$THEME_DIR/look.lua"
+}
+magnification() {
+  local m
+  m=$(jq '.dock.magnification | numbers' "$SHELL_JSON" 2>/dev/null) || true
+  echo "${m:-1.75}"
+}
+set_magnification() {
+  # A missing shell.json means Omarchy's defaults, as `omarchy dock` treats it.
+  local src=$SHELL_JSON tmp
+  [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
+  mkdir -p "$(dirname "$SHELL_JSON")"
+  tmp=$(mktemp)
+  jq -S --argjson m "$1" '.dock.magnification = $m' "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
+}
+
+if $status; then
+  if $json; then
+    out=""
+    for f in $FEATURES; do
+      out+="$([[ -n $out ]] && echo ,)\"$f\":$(installed "$f" && echo true || echo false)"
+    done
+    set_out=""
+    for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s}}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)"
+  else
+    active && echo "The macOS theme is the current theme."
+    for f in $FEATURES; do
+      printf '%-14s %s\n' "$f" "$(installed "$f" && echo installed || echo "not installed")"
+    done
+    for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
+    printf '%-14s %s\n' magnification "$(magnification)"
+  fi
+  exit 0
+fi
+
+# Re-applying the active theme would move to its next wallpaper, so refresh it
+# in place instead.
+refresh() {
+  cp -r "$THEME_DIR/." "$HOME/.local/state/omarchy/current/theme/"
+  omarchy-theme-set-gnome >/dev/null 2>&1 || true
+  hyprctl reload >/dev/null
+  omarchy restart shell >/dev/null 2>&1 || true
+}
 
 # Remove a line and the comment line above it, keeping a backup.
 remove_lines() {
   local file="$1" comment="$2" line="$3"
   [[ -f $file ]] && grep -qF "$line" "$file" || return 0
   cp "$file" "$file.bak.$STAMP"
-  grep -vxF -e "$comment" -e "$line" "$file.bak.$STAMP" > "$file"
+  # grep exits 1 when no lines are left, which is fine here.
+  grep -vxF -e "$comment" -e "$line" "$file.bak.$STAMP" > "$file" || true
 }
 
-if $uninstall; then
-  if [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; then
-    echo "Switch to another theme first (omarchy theme set <name>), then run --uninstall again." >&2
-    exit 1
-  fi
-  if [[ -d $PLUGINS_DIR/$OSD_ID ]]; then
-    omarchy plugin disable "$OSD_ID" >/dev/null 2>&1 || true
-    omarchy plugin enable omarchy.osd >/dev/null 2>&1 || true
-    rm -rf "${PLUGINS_DIR:?}/$OSD_ID"
-    say "Removed the volume capsule and restored Omarchy's own"
-  fi
-  if [[ -d $PLUGINS_DIR/$DOCK_ID ]]; then
-    omarchy plugin disable "$DOCK_ID" >/dev/null 2>&1 || true
-    omarchy plugin enable omarchy.dock >/dev/null 2>&1 || true
-    rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
-    say "Removed the macOS dock and restored Omarchy's own"
-  fi
-  # The wide menu is a clone of Omarchy's menu marked by its width comment.
-  for dir in "$PLUGINS_DIR"/*.menu; do
-    [[ -f $dir/Menu.qml ]] && grep -q "macOS theme: wider" "$dir/Menu.qml" || continue
+remove_osd() {
+  omarchy plugin disable "$OSD_ID" >/dev/null 2>&1 || true
+  omarchy plugin enable omarchy.osd >/dev/null 2>&1 || true
+  rm -rf "${PLUGINS_DIR:?}/$OSD_ID"
+  say "Removed the volume capsule and restored Omarchy's own"
+}
+remove_dock() {
+  omarchy plugin disable "$DOCK_ID" >/dev/null 2>&1 || true
+  omarchy plugin enable omarchy.dock >/dev/null 2>&1 || true
+  rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
+  say "Removed the macOS dock and restored Omarchy's own"
+}
+remove_wide_menu() {
+  local dir
+  for dir in $(wide_menus); do
     omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
     omarchy plugin enable omarchy.menu >/dev/null 2>&1 || true
     rm -rf "${dir:?}"
-    say "Removed the wide menu and restored Omarchy's own"
   done
-  if [[ -d $PLUGINS_DIR/$SWITCHER_ID ]]; then
-    omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
-    rm -rf "${PLUGINS_DIR:?}/$SWITCHER_ID"
-    say "Removed the app switcher (Alt+Tab is back to your own binding after: hyprctl reload)"
+  say "Removed the wide menu and restored Omarchy's own"
+}
+remove_switcher() {
+  omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
+  rm -rf "${PLUGINS_DIR:?}/$SWITCHER_ID"
+  say "Removed the app switcher (Alt+Tab is back to your own binding after: hyprctl reload)"
+}
+remove_menubar() {
+  local id after=omarchy.tray
+  for id in $MENUBAR_IDS; do
+    omarchy plugin disable "$id" >/dev/null 2>&1 || true
+    rm -rf "${PLUGINS_DIR:?}/$id"
+  done
+  # Omarchy's widgets back to its default bar: the clock in the middle, the
+  # system icons in a row after the tray.
+  omarchy bar move omarchy.clock --section center >/dev/null 2>&1 || true
+  omarchy bar move omarchy.tray --section right --index 0 >/dev/null 2>&1 || true
+  for id in omarchy.keyboard-layout omarchy.agents omarchy.bluetooth omarchy.network omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power; do
+    omarchy bar move "$id" --after "$after" >/dev/null 2>&1 && after=$id
+  done
+  say "Removed the menu bar look and put the system widgets back on the bar"
+}
+remove_dictation_hud() {
+  omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
+  rm -rf "${PLUGINS_DIR:?}/$HUD_ID"
+  say "Removed the dictation HUD (turn Voxtype's own overlay back on with: voxtype config set osd.enabled true)"
+}
+remove_rows() {
+  remove_lines "$GTK_CSS" "$ROWS_COMMENT" "$ROWS_LINE"
+  say "Removed striped Files rows (reopen Files to see it)"
+}
+remove_icons() {
+  rm -rf "$HOME"/.local/share/icons/MacTahoe{,-light,-dark}
+  if [[ -d $THEME_DIR ]]; then
+    cp "$REPO/theme/icons.theme" "$THEME_DIR/icons.theme"
+    if active; then refresh; fi
   fi
-  if [[ -d $PLUGINS_DIR/macos-theme.menubar ]]; then
-    for id in $MENUBAR_IDS; do
-      omarchy plugin disable "$id" >/dev/null 2>&1 || true
-      rm -rf "${PLUGINS_DIR:?}/$id"
-    done
-    # Omarchy's widgets back to its default bar: the clock in the middle, the
-    # system icons in a row after the tray.
-    omarchy bar move omarchy.clock --section center >/dev/null 2>&1 || true
-    omarchy bar move omarchy.tray --section right --index 0 >/dev/null 2>&1 || true
-    after=omarchy.tray
-    for id in omarchy.keyboard-layout omarchy.agents omarchy.bluetooth omarchy.network omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power; do
-      omarchy bar move "$id" --after "$after" >/dev/null 2>&1 && after=$id
-    done
-    say "Removed the menu bar look and put the system widgets back on the bar"
-  fi
-  if [[ -d $PLUGINS_DIR/$HUD_ID ]]; then
-    omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
-    rm -rf "${PLUGINS_DIR:?}/$HUD_ID"
-    say "Removed the dictation HUD (turn Voxtype's own overlay back on with: voxtype config set osd.enabled true)"
-  fi
+  say "Removed the MacTahoe icons"
+}
+# Moves the theme folder aside into a backup of its own, named in $kept (two
+# runs in the same second must not land in one folder).
+kept=""
+keep_theme() {
+  mkdir -p "$BACKUP_DIR"
+  kept=$(mktemp -d "$BACKUP_DIR/macos.$STAMP.XXX")
+  mv -T "$THEME_DIR" "$kept"
+}
+
+remove_theme() {
   remove_lines "$LOOKNFEEL" "$LOADER_COMMENT" "$LOADER_LINE"
   remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
-  remove_lines "$GTK_CSS" "$ROWS_COMMENT" "$ROWS_LINE"
-  rm -rf "$THEME_DIR"
-  say "Removed the theme. Backups of edited files end in .bak.$STAMP"
-  if [[ -d $HOME/.local/share/icons/MacTahoe ]]; then
-    echo "    MacTahoe icons are still installed. Remove them with:"
-    echo "      rm -rf ~/.local/share/icons/MacTahoe ~/.local/share/icons/MacTahoe-light ~/.local/share/icons/MacTahoe-dark"
-  fi
-  exit 0
+  # Kept, not deleted: it may hold wallpapers and files of your own.
+  keep_theme
+  say "Removed the theme (kept in $kept)"
+}
+
+if [[ -n $switch_to ]] && active; then
+  omarchy theme list | grep -qxF "$switch_to" || { echo "No theme called $switch_to (see: omarchy theme list)" >&2; exit 1; }
+  omarchy theme set "$switch_to"
+  say "Switched to $switch_to"
 fi
 
-# 1. The theme, as a local theme (so its .lua and ghostty.conf are kept).
-if [[ -d $THEME_DIR ]]; then
-  mkdir -p "$BACKUP_DIR"
-  mv "$THEME_DIR" "$BACKUP_DIR/macos.$STAMP"
-  say "Backed up your existing macos theme to $BACKUP_DIR/macos.$STAMP"
+if (( ${#remove[@]} )); then
+  if [[ -n ${remove[theme]:-} ]] && active; then
+    echo "Switch to another theme first (omarchy theme set <name>), then remove the theme again." >&2
+    exit 1
+  fi
+  # Plugins before the theme they sit on.
+  for f in osd dock wide-menu switcher menubar dictation-hud rows icons theme; do
+    if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
+  done
+  say "Done. Backups of edited files end in .bak.$STAMP"
+  if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
+    echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons"
+  fi
+  (( ${#add[@]} + ${#settings[@]} )) || exit 0
 fi
-mkdir -p "$THEME_DIR"
-cp -r "$REPO/theme/." "$THEME_DIR/"
-say "Installed the theme to $THEME_DIR"
+
+want() { [[ -n ${add[$1]:-} ]]; }
+
+# 1. The theme, as a local theme (so its .lua and ghostty.conf are kept).
+if want theme; then
+  declare -A kept_look=()
+  if [[ -f $THEME_DIR/look.lua ]]; then
+    for k in $LOOK_SETTINGS; do kept_look[$k]=$(look_get "$k"); done
+  fi
+  if [[ -d $THEME_DIR ]]; then
+    keep_theme
+    say "Backed up your existing macos theme to $kept"
+  fi
+  mkdir -p "$THEME_DIR"
+  cp -r "$REPO/theme/." "$THEME_DIR/"
+  # Wallpapers and files you added stay; the theme's own files are the new ones.
+  [[ -n $kept ]] && cp -rn "$kept/." "$THEME_DIR/"
+  # So do the settings you chose.
+  for k in "${!kept_look[@]}"; do look_set "$k" "${kept_look[$k]}"; done
+  say "Installed the theme to $THEME_DIR"
+fi
 
 # 1b. MacTahoe icons (GPL-3.0, github.com/vinceliuice/MacTahoe-icon-theme):
 # only the default color, into your home folder, no password needed.
-if $with_icons; then
+if want icons; then
   tmp=$(mktemp -d)
   if git clone -q --depth 1 https://github.com/vinceliuice/MacTahoe-icon-theme.git "$tmp/MacTahoe" &&
     bash "$tmp/MacTahoe/install.sh" -t default >/dev/null; then
@@ -175,29 +348,27 @@ if $with_icons; then
   rm -rf "$tmp"
 fi
 # Use MacTahoe whenever it is installed (here or system-wide).
-if [[ -d $HOME/.local/share/icons/MacTahoe-dark || -d /usr/share/icons/MacTahoe-dark ]]; then
+if [[ -d $THEME_DIR ]] && [[ -d $HOME/.local/share/icons/MacTahoe-dark || -d /usr/share/icons/MacTahoe-dark ]]; then
   echo "MacTahoe-dark" > "$THEME_DIR/icons.theme"
 fi
 
 # 2. Load the theme's look.lua last, after your own looknfeel settings.
-mkdir -p "$(dirname "$LOOKNFEEL")"
-touch "$LOOKNFEEL"
-if ! grep -qF 'omarchy.current.theme.look' "$LOOKNFEEL"; then
+mkdir -p "$(dirname "$LOOKNFEEL")" "$(dirname "$GTK_CSS")"
+touch "$LOOKNFEEL" "$GTK_CSS"
+if want theme && ! grep -qF 'omarchy.current.theme.look' "$LOOKNFEEL"; then
   cp "$LOOKNFEEL" "$LOOKNFEEL.bak.$STAMP"
   printf '\n%s\n%s\n' "$LOADER_COMMENT" "$LOADER_LINE" >> "$LOOKNFEEL"
   say "Added the look.lua loader to $LOOKNFEEL"
 fi
 
 # 3. Let GTK apps such as Files ask Hyprland for blur, and stripe Files lists.
-mkdir -p "$(dirname "$GTK_CSS")"
-touch "$GTK_CSS"
-if ! grep -qF 'default/gtk/glass.css' "$GTK_CSS"; then
+if want theme && ! grep -qF 'default/gtk/glass.css' "$GTK_CSS"; then
   cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
   printf '%s\n%s\n' "$GTK_COMMENT" "$GTK_LINE" >> "$GTK_CSS"
   say "Added GTK blur to $GTK_CSS (reopen GTK apps to see it)"
 fi
 # Striped rows in Files, from the theme's gtk.css, so only while it is active.
-if ! grep -qF "$ROWS_LINE" "$GTK_CSS"; then
+if want rows && ! grep -qF "$ROWS_LINE" "$GTK_CSS"; then
   cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
   printf '%s\n%s\n' "$ROWS_COMMENT" "$ROWS_LINE" >> "$GTK_CSS"
   say "Added striped Files rows to $GTK_CSS (reopen Files to see them)"
@@ -217,21 +388,21 @@ install_plugin() {
     sleep 0.25
   done
 }
-if $with_osd; then
+if want osd; then
   install_plugin "$OSD_ID"
   omarchy plugin disable omarchy.osd >/dev/null 2>&1 || true
   say "Installed the frosted volume capsule (replaces Omarchy's own popup)"
 fi
-if $with_dock; then
+if want dock; then
   install_plugin "$DOCK_ID"
   omarchy plugin disable omarchy.dock >/dev/null 2>&1 || true
   say "Installed the macOS dock (minimized windows sit after a divider at its end)"
 fi
-if $with_switcher; then
+if want switcher; then
   install_plugin "$SWITCHER_ID"
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
 fi
-if $with_menubar; then
+if want menubar; then
   for id in $MENUBAR_IDS; do install_plugin "$id"; done
   # The bold app name follows the menu button, as on macOS, and Control Center
   # sits by the clock; the widgets it stands in for go to the tray drawer.
@@ -261,10 +432,11 @@ if $with_menubar; then
 fi
 [[ -n $(fc-list Inter) ]] || echo "    The theme uses the Inter font, which is not installed. Install it with: sudo pacman -S inter-font" >&2
 
-if $with_wide_menu; then
+if want wide-menu; then
   # Clone the menu of the Omarchy version installed here, then patch it (width,
   # magnifying glass, "Search"), so it matches this Omarchy's menu otherwise.
-  menu_dir=$(ls -d "$PLUGINS_DIR"/*.menu 2>/dev/null | while read -r d; do grep -q '"clonedFrom": "omarchy.menu"' "$d/manifest.json" 2>/dev/null && echo "$d"; done | head -n1)
+  # No clone yet fails the lookup, which only means making one.
+  menu_dir=$(ls -d "$PLUGINS_DIR"/*.menu 2>/dev/null | while read -r d; do grep -q '"clonedFrom": "omarchy.menu"' "$d/manifest.json" 2>/dev/null && echo "$d"; done | head -n1) || true
   if [[ -z $menu_dir ]]; then
     menu_dir=$(omarchy plugin clone omarchy.menu 2>/dev/null | sed -n 's/^Cloned omarchy.menu to \(.*\) and switched.*/\1/p')
   fi
@@ -275,7 +447,7 @@ if $with_wide_menu; then
     echo "    Could not clone Omarchy's menu; it keeps its own width." >&2
   fi
 fi
-if $with_hud; then
+if want dictation-hud; then
   install_plugin "$HUD_ID"
   say "Installed the dictation HUD"
   if command -v voxtype >/dev/null; then
@@ -286,14 +458,25 @@ if $with_hud; then
   fi
 fi
 
-# 5. Apply. Re-applying the active theme would move to its next wallpaper, so
-# when it is already active, refresh it in place instead.
-if [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; then
-  cp -r "$THEME_DIR/." "$HOME/.local/state/omarchy/current/theme/"
-  omarchy-theme-set-gnome >/dev/null 2>&1 || true
-  hyprctl reload >/dev/null
-  omarchy restart shell >/dev/null 2>&1 || true
-else
+# 4b. Settings.
+look_changed=false
+for k in $LOOK_SETTINGS; do
+  [[ -n ${settings[$k]:-} ]] || continue
+  installed theme || { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
+  look_set "$k" "${settings[$k]}"
+  look_changed=true
+  say "Set $k to ${settings[$k]}"
+done
+if [[ -n ${settings[magnification]:-} ]]; then
+  set_magnification "${settings[magnification]}"
+  say "Set the dock's magnification to ${settings[magnification]}"
+fi
+
+# 5. Apply: refresh the active theme in place, or switch to it when it was asked for.
+# The dock follows shell.json itself, so magnification alone needs no refresh.
+if active && { (( ${#add[@]} )) || $look_changed; }; then
+  refresh
+elif want theme; then
   omarchy theme set macos
 fi
 say "Done. The bar, menus and popups pick up the theme now; restart the shell if they don't: omarchy restart shell"

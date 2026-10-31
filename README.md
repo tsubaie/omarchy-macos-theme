@@ -25,6 +25,18 @@ cd omarchy-macos-theme
 | `--dictation-hud` | A dictation pill for [Voxtype](https://voxtype.io) |
 | `--all` | All of the above |
 | `--uninstall` | Undo everything (switch to another theme first) |
+| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud` or `menubar` |
+| `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
+| `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
+| `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
+| `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
+| `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
+| `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
+| `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
+
+### App
+
+[Omarchy Sync](https://github.com/tsubaie/OmaSync) has a **macOS Theme** page that does all of this without a terminal: a switch for each piece, sliders for the glass and the dock's magnification, **Apply** to install, remove or set what changed, and **Update** to get the latest version. It downloads this repository to `~/.local/share/omarchy-macos-theme` and runs the same `install.sh` (`--add`, `--remove`, `--set` and `--status --json`), so the page and the script always agree.
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps. Re-running the script updates everything in place and keeps your wallpaper.
 

@@ -62,9 +62,11 @@ o.window(".*", { opacity = "0.7 0.7" })
 o.window("^(com\\.mitchellh\\.ghostty|TUI\\..*)$", { opacity = "1 1" })
 -- Files draws its own glass (see-through sidebar, solid list) from gtk.css.
 o.window("^org\\.gnome\\.Nautilus$", { opacity = "1 1" })
--- Browsers draw popups (downloads, menus) as separate layers, so a fade stacks
--- on the faded page and becomes unreadable; keep them solid.
-o.window("^(brave-browser|chromium|google-chrome|firefox|zen)$", { opacity = "1 1" })
+-- Browsers, Omarchy's web apps and Electron apps (Claude, VS Code, Cursor,
+-- Discord, Slack, Obsidian, Signal, Spotify) draw popups (downloads, menus) as
+-- separate layers, so a fade stacks on the faded page and becomes unreadable;
+-- solid unless you set it (install.sh --set web-glass=<0.5-1>).
+o.window("^(brave-browser|chromium|google-chrome|firefox|zen|(brave|chrome|chromium)-.+|com\\.anthropic\\.Claude|[Cc]ode|code-oss|[Cc]ursor|discord|[Ss]lack|obsidian|[Ss]ignal|[Ss]potify)$", { opacity = "1 1" })
 -- Keep video and images true to color.
 o.window("^(mpv|imv|org\\.gnome\\.Loupe)$", { opacity = "1 1" })
 
@@ -207,6 +209,8 @@ end)
 -- So the active window is watched while on a floating workspace, and the
 -- snap lands as Hyprland refocuses the window on release, or, should that
 -- not come, as the pointer first moves on alone.
+-- 0 turns snapping off (install.sh --set snapping=0).
+local SNAPPING = 1
 local SNAP_EDGE = 12
 -- The ends of an edge that give a corner rather than a half, as a share of
 -- the screen: thirds, so each corner is as easy to reach as the half between
@@ -400,7 +404,7 @@ local function snap_tick()
   hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
 end
 
-hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
+if SNAPPING == 1 then hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK }) end
 
 -- Letting go of a drag refocuses the window, which Hyprland reports even
 -- though it already had focus: that is the release, so snap right away.
