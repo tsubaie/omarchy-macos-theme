@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
@@ -639,7 +640,7 @@ PanelWindow {
       if (window.dock) window.dock.activate(unpinnedSlot.modelData)
     }
 
-    Image {
+    RoundedIcon {
       x: window.iconInset
       y: window.iconInset
       width: window.iconSize
@@ -659,6 +660,32 @@ PanelWindow {
     RunningDot {}
   }
 
+
+  // Like macOS, every icon is cut to a rounded square, so full-bleed square
+  // icons (Grok Bot) lose their sharp corners. MacTahoe's icons sit inside it.
+  // Drawn at twice the size so the corners stay smooth when magnified.
+  Rectangle {
+    id: iconMask
+    width: window.iconSize
+    height: window.iconSize
+    radius: window.iconSize * 0.225
+    visible: false
+    layer.enabled: true
+    layer.textureSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+    layer.smooth: true
+  }
+
+  component RoundedIcon: Image {
+    layer.enabled: true
+    layer.textureSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+    layer.smooth: true
+    layer.effect: MultiEffect {
+      maskEnabled: true
+      maskSource: iconMask
+      maskThresholdMin: 0.5
+      maskSpreadAtMin: 1
+    }
+  }
 
   // Grows an icon from its base on the dock's screen edge.
   component IconScale: Scale {
@@ -919,7 +946,7 @@ PanelWindow {
 
     // Like macOS: every app is drawn in full, and a dot on the dock's edge marks
     // the running ones. One that is starting pulses its dot.
-    Image {
+    RoundedIcon {
       x: window.iconInset
       y: window.iconInset
       width: window.iconSize
