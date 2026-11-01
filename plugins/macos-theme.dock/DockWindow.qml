@@ -66,7 +66,9 @@ PanelWindow {
   // has five rows.
   readonly property int popupRoom: Math.max(Style.spacing.popupRowHeight * 5 + Style.spacing.sm * 2 + Style.normalBorderWidth * 2 + gap * 2, stackRoom)
   // The Downloads fan: up to ten files plus "Open in Files".
-  readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(10)) * 11 + Style.space(24))
+  // The Downloads fan's 11 rows, raised as far as magnified icons grow, the
+  // gap, and the tilt of its top row; short of this, its top row was cut.
+  readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(10)) * 11 + iconSize * (magnifyPeak - 1) + gap + Style.space(40))
 
   // macOS magnification: icons near the pointer grow toward the screen's
   // middle, peaking under it, and their neighbors move aside. Off while a
