@@ -1,6 +1,11 @@
 -- macOS Liquid Glass look for Omarchy.
 -- Loaded last, from a line install.sh adds to ~/.config/hypr/looknfeel.lua, so
 -- it wins over your own look settings only while this theme is active.
+
+-- 0 turns off the frosted blur behind see-through windows, menus, the bar and
+-- the dock (install.sh --set blur=0); they stay see-through, just unblurred.
+local BLUR = 1
+
 hl.config({
   general = {
     gaps_in = 6,
@@ -20,7 +25,7 @@ hl.config({
       color_inactive = "rgba(00000030)",
     },
     blur = {
-      enabled = true,
+      enabled = BLUR == 1,
       size = 10,
       passes = 3,
       ignore_opacity = true,
