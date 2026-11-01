@@ -634,20 +634,12 @@ Window {
 
                         Image {
                             id: omarchyLogo
-                            visible: false
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: status === Image.Ready
                             source: backend.omarchyLogo
                             sourceSize.height: 36
                             height: 14
                             fillMode: Image.PreserveAspectFit
-                        }
-                        // Omarchy draws its logo black; white here, on the dark window.
-                        MultiEffect {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: omarchyLogo.paintedWidth
-                            height: omarchyLogo.height
-                            source: omarchyLogo
-                            visible: omarchyLogo.status === Image.Ready
-                            brightness: 1
                         }
                         Value {
                             text: omarchyLogo.status === Image.Ready ? backend.omarchyVersion : "Omarchy " + backend.omarchyVersion
@@ -834,7 +826,7 @@ Window {
         property int size: 40
         width: size
         height: size
-        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon-mono.svg"
+        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon-omarchy.svg"
         sourceSize: Qt.size(size * 2, size * 2)
         smooth: true
         mipmap: true

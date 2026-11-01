@@ -253,6 +253,28 @@ pub fn omarchy_dir() -> PathBuf {
     env::var_os("OMARCHY_PATH").map_or_else(|| PathBuf::from("/usr/share/omarchy"), PathBuf::from)
 }
 
+/// Omarchy's own green, the color of its icon.
+pub const OMARCHY_GREEN: &str = "#9ECE6A";
+
+/// Omarchy's logo recolored from its black to its green, written next to the
+/// app's other runtime files, as a `file://` URL. None when the logo can't be read.
+pub fn green_omarchy_logo() -> Option<String> {
+    let logo = std::fs::read_to_string(omarchy_dir().join("logo.svg")).ok()?;
+    let green = recolor_logo(&logo);
+    let file = env::temp_dir().join("omarchy-macos-settings-logo.svg");
+    std::fs::write(&file, green).ok()?;
+    Some(format!("file://{}", file.display()))
+}
+
+/// The logo with its black fills in Omarchy's green; anything else unchanged.
+fn recolor_logo(svg: &str) -> String {
+    ["fill=\"#000\"", "fill=\"#000000\"", "fill=\"black\""]
+        .iter()
+        .fold(svg.to_owned(), |svg, black| {
+            svg.replace(black, &format!("fill=\"{OMARCHY_GREEN}\""))
+        })
+}
+
 /// Omarchy's version, such as "4.0.0.alpha", when it can be read.
 pub fn omarchy_version() -> Option<String> {
     let version = std::fs::read_to_string(omarchy_dir().join("version")).ok()?;
@@ -471,6 +493,16 @@ mod tests {
         let backups: Vec<Backup> = serde_json::from_str(list).expect("valid list");
         assert_eq!(backups[0].id, "20261101-140755");
         assert!(backups[0].pinned);
+    }
+
+    #[test]
+    fn the_logo_turns_green_and_nothing_else_changes() {
+        let logo =
+            r##"<svg fill="none"><g fill="#000"><path d="m1 1"/></g><path fill="black"/></svg>"##;
+        assert_eq!(
+            recolor_logo(logo),
+            r##"<svg fill="none"><g fill="#9ECE6A"><path d="m1 1"/></g><path fill="#9ECE6A"/></svg>"##
+        );
     }
 
     #[test]

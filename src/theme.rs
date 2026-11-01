@@ -107,14 +107,9 @@ impl Default for ThemeBackendRust {
             theme_version: QString::default(),
             app_version: QString::from(env!("CARGO_PKG_VERSION")),
             omarchy_version: QString::from(install::omarchy_version().unwrap_or_default().as_str()),
-            // Omarchy's own logo, read where Omarchy keeps it rather than copied in.
-            omarchy_logo: QString::from(
-                format!(
-                    "file://{}",
-                    install::omarchy_dir().join("logo.svg").display()
-                )
-                .as_str(),
-            ),
+            // Omarchy's own logo, read where Omarchy keeps it rather than
+            // copied in, in its green.
+            omarchy_logo: QString::from(install::green_omarchy_logo().unwrap_or_default().as_str()),
             dir,
         }
     }

@@ -6,6 +6,7 @@ edge, and a soft shadow under the mark. The mark is measured from the design
 "Lime Geometric Frame Icon" by trace_mark.py. Run:
   python3 trace_mark.py design.png > mark.txt && python3 make_icon.py mark.txt > icon.svg
   python3 make_icon.py mark.txt mono > icon-mono.svg   # graphite and white, as Tahoe's tinted icons
+  python3 make_icon.py mark.txt omarchy > icon-omarchy.svg   # graphite and Omarchy's green
 """
 import math
 import pathlib
@@ -14,9 +15,10 @@ import sys
 SIZE, C = 1024, 512
 MARK = pathlib.Path(sys.argv[1]).read_text().strip()
 
-MONO = sys.argv[2:3] == ["mono"]
-BG_TOP, BG_BOTTOM = ("#48484C", "#1C1C1E") if MONO else ("#127C78", "#073E46")
-MARK_TOP, MARK_BOTTOM = ("#FFFFFF", "#D6D6DA") if MONO else ("#C6F592", "#A1E35F")
+STYLE = sys.argv[2] if len(sys.argv) > 2 else "color"
+BG_TOP, BG_BOTTOM = {"mono": ("#48484C", "#1C1C1E"), "omarchy": ("#48484C", "#1C1C1E")}.get(STYLE, ("#127C78", "#073E46"))
+# Omarchy's own green (#9ECE6A, from its icon), lighter at the top.
+MARK_TOP, MARK_BOTTOM = {"mono": ("#FFFFFF", "#D6D6DA"), "omarchy": ("#B6DE8C", "#9ECE6A")}.get(STYLE, ("#C6F592", "#A1E35F"))
 
 
 def squircle(n=5.0, steps=720, inset=0):
