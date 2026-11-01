@@ -248,6 +248,73 @@ pub fn download(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Asks GitHub for the theme's new commits. Offline or without git, it
+/// quietly leaves things as they were: the next check catches up.
+pub fn fetch(dir: &Path) {
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["fetch", "--quiet"])
+        .output();
+}
+
+/// How many commits the theme on GitHub is ahead of the one here, as last
+/// fetched; 0 when that can't be told.
+pub fn updates_behind(dir: &Path) -> u32 {
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-list", "--count", "HEAD..@{upstream}"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|count| count.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+/// Pieces an update reinstalls: what is installed, but not the MacTahoe
+/// icons, which come from their own project rather than the theme.
+fn reinstall(status: &Status) -> Vec<Piece> {
+    status
+        .features
+        .iter()
+        .filter(|(name, on)| **on && name.as_str() != "icons")
+        .filter_map(|(name, _)| Piece::try_from(name.as_str()).ok())
+        .collect()
+}
+
+/// Brings the theme up to date: pulls its new commits, then installs the
+/// pieces in use again, in one `install.sh` call that backs up first and
+/// reloads once.
+///
+/// # Errors
+///
+/// Fails when git can't pull (such as when the folder has changes of its
+/// own), or with `install.sh`'s own message.
+pub fn update(dir: &Path) -> Result<()> {
+    let installed = reinstall(&status(dir)?);
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["pull", "--ff-only", "--quiet"])
+        .output()
+        .context("running git")?;
+    if !output.status.success() {
+        bail!(
+            "{}",
+            last_line(&output.stderr, "git could not update the theme")
+        );
+    }
+    apply(
+        dir,
+        &Changes {
+            add: installed,
+            ..Changes::default()
+        },
+    )
+}
+
 /// Where Omarchy is installed: `$OMARCHY_PATH`, else `/usr/share/omarchy`.
 pub fn omarchy_dir() -> PathBuf {
     env::var_os("OMARCHY_PATH").map_or_else(|| PathBuf::from("/usr/share/omarchy"), PathBuf::from)
@@ -503,6 +570,14 @@ mod tests {
             recolor_logo(logo),
             r##"<svg fill="none"><g fill="#9ECE6A"><path d="m1 1"/></g><path fill="#9ECE6A"/></svg>"##
         );
+    }
+
+    #[test]
+    fn an_update_reinstalls_what_is_in_use_but_not_the_icons() {
+        let status = parse_status(r#"{"active":true,"features":{"theme":true,"icons":true,"dock":true,"lock":false},"settings":{}}"#)
+            .expect("valid report");
+        let names: Vec<String> = reinstall(&status).iter().map(ToString::to_string).collect();
+        assert_eq!(names, ["dock", "theme"]);
     }
 
     #[test]

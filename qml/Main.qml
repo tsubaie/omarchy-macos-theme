@@ -233,8 +233,9 @@ Window {
 
                     Text {
                         text: !backend.downloaded ? "Not downloaded"
+                            : backend.updates > 0 ? "Update available"
                             : window.status.active ? "Current theme" : "Installed, not current"
-                        color: Qt.rgba(1, 1, 1, 0.55)
+                        color: backend.updates > 0 ? "#0a84ff" : Qt.rgba(1, 1, 1, 0.55)
                         font.pixelSize: 11
                     }
                 }
@@ -604,7 +605,7 @@ Window {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "macOS Theme"
+                    text: "macOS Theme for Omarchy"
                     color: "white"
                     font.pixelSize: 26
                     font.weight: Font.Bold
@@ -642,15 +643,36 @@ Window {
                             fillMode: Image.PreserveAspectFit
                         }
                         Value {
-                            text: omarchyLogo.status === Image.Ready ? backend.omarchyVersion : "Omarchy " + backend.omarchyVersion
+                            // The Omarchy versions the theme supports, not this computer's.
+                            text: omarchyLogo.status === Image.Ready ? "4+" : "Omarchy 4+"
                         }
                     }
 
                     Fact { text: "Theme" }
-                    Value {
-                        text: !backend.downloaded ? "Not downloaded yet"
-                            : (window.status.active ? "In use" : "Installed, not in use")
-                              + (backend.themeVersion ? "  ·  " + backend.themeVersion : "")
+                    Row {
+                        spacing: 10
+                        height: 18
+
+                        Value {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: !backend.downloaded ? "Not downloaded yet"
+                                : backend.updates > 0 ? "Update available" : "Up to date"
+                            color: backend.updates > 0 ? "#0a84ff" : "white"
+                        }
+
+                        MacButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: backend.updates > 0
+                            text: "Update"
+                            primary: true
+                            enabled: !backend.busy
+                            onClicked: window.confirm = {
+                                title: "Update the macOS theme?",
+                                text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once.",
+                                button: "Update",
+                                action: () => { window.revert(); backend.update() }
+                            }
+                        }
                     }
 
                     Fact { text: "License" }

@@ -21,6 +21,7 @@ pub mod qobject {
         #[qproperty(QString, error)]
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
         #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
+        #[qproperty(i32, updates, cxx_name = "updates")]
         #[qproperty(QString, app_version, cxx_name = "appVersion")]
         #[qproperty(QString, omarchy_version, cxx_name = "omarchyVersion")]
         #[qproperty(QString, omarchy_logo, cxx_name = "omarchyLogo")]
@@ -35,6 +36,10 @@ pub mod qobject {
         /// `install.sh` call so the theme reloads once.
         #[qinvokable]
         fn apply(self: Pin<&mut Self>, changes: &QString);
+
+        /// Pulls the theme's new commits and installs the pieces in use again.
+        #[qinvokable]
+        fn update(self: Pin<&mut Self>);
 
         /// Takes a snapshot now.
         #[qinvokable]
@@ -88,6 +93,7 @@ pub struct ThemeBackendRust {
     error: QString,
     theme_dir: QString,
     theme_version: QString,
+    updates: i32,
     app_version: QString,
     omarchy_version: QString,
     omarchy_logo: QString,
@@ -105,6 +111,7 @@ impl Default for ThemeBackendRust {
             error: QString::default(),
             theme_dir: QString::from(dir.display().to_string().as_str()),
             theme_version: QString::default(),
+            updates: 0,
             app_version: QString::from(env!("CARGO_PKG_VERSION")),
             omarchy_version: QString::from(install::omarchy_version().unwrap_or_default().as_str()),
             // Omarchy's own logo, read where Omarchy keeps it rather than
@@ -120,12 +127,23 @@ struct Outcome {
     status: Result<Status>,
     backups: Result<Vec<Backup>>,
     version: Option<String>,
+    updates: u32,
     error: Option<String>,
 }
 
 impl qobject::ThemeBackend {
     pub fn refresh(self: Pin<&mut Self>) {
-        self.run(|_| Ok(()));
+        // Also asks GitHub for the theme's new commits.
+        self.run(|dir| {
+            if install::is_downloaded(dir) {
+                install::fetch(dir);
+            }
+            Ok(())
+        });
+    }
+
+    pub fn update(self: Pin<&mut Self>) {
+        self.run(install::update);
     }
 
     pub fn apply(self: Pin<&mut Self>, changes: &QString) {
@@ -196,6 +214,11 @@ impl qobject::ThemeBackend {
                 status,
                 backups,
                 version: install::version(&dir),
+                updates: if downloaded {
+                    install::updates_behind(&dir)
+                } else {
+                    0
+                },
                 error,
             };
             let queued = qt_thread.queue(move |mut backend| {
@@ -210,6 +233,8 @@ impl qobject::ThemeBackend {
 
     fn finish(mut self: Pin<&mut Self>, outcome: Outcome) {
         self.as_mut()
+            .set_updates(i32::try_from(outcome.updates).unwrap_or(i32::MAX));
+        self.as_mut()
             .set_theme_version(QString::from(outcome.version.unwrap_or_default().as_str()));
         let mut error = outcome.error;
         match outcome.status {
@@ -221,15 +246,10 @@ impl qobject::ThemeBackend {
                 error.get_or_insert_with(|| format!("{status_error:#}"));
             }
         }
-        match outcome.backups {
-            Ok(backups) => {
-                let json = serde_json::to_string(&backups).unwrap_or_else(|_| "[]".to_owned());
-                self.as_mut().set_backups_json(QString::from(json.as_str()));
-            }
-            Err(backups_error) => {
-                error.get_or_insert_with(|| format!("{backups_error:#}"));
-            }
-        }
+        // A theme older than backups lists none; updating it brings them.
+        let backups = outcome.backups.unwrap_or_default();
+        let json = serde_json::to_string(&backups).unwrap_or_else(|_| "[]".to_owned());
+        self.as_mut().set_backups_json(QString::from(json.as_str()));
         self.as_mut()
             .set_error(QString::from(error.unwrap_or_default().as_str()));
         self.as_mut().set_busy(false);
