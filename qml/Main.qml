@@ -15,7 +15,7 @@ Window {
     minimumWidth: 700
     minimumHeight: 460
     visible: true
-    title: window.page === "overview" ? "macOS Theme" : window.pages.find(p => p.id === window.page).title
+    title: window.pages.find(p => p.id === window.page).title
     color: "#1e1e1e"
 
     ThemeBackend {
@@ -176,30 +176,7 @@ Window {
         Column {
             anchors.fill: parent
             anchors.margins: 10
-            anchors.topMargin: 4
             spacing: 2
-
-            // The window controls, where macOS puts them, on a strip people
-            // can drag the window by, as the title bar was.
-            Item {
-                width: parent.width
-                height: 34
-
-                MouseArea {
-                    anchors.fill: parent
-                    onPressed: window.startSystemMove()
-                    onDoubleClicked: backend.zoomWindow()
-                }
-
-                TrafficLights {
-                    x: 4
-                    anchors.verticalCenter: parent.verticalCenter
-                    active: window.active
-                    onClose: window.close()
-                    onMinimize: if (!backend.minimizeWindow()) window.showMinimized()
-                    onZoom: backend.zoomWindow()
-                }
-            }
 
             SearchField {
                 id: searchField
@@ -351,37 +328,19 @@ Window {
         searchField.clear()
     }
 
-    // The top bar over the content: the pane's title, level with the traffic
-    // lights, and the window's drag area, as the macOS formula has it.
+    // The pane's name is in the window's title bar, as on every window; only
+    // "Working…" shows here, while the theme's installer runs.
     Item {
         id: topBar
         anchors.left: sidebar.right
         anchors.right: parent.right
         anchors.top: parent.top
-        height: 52
-
-        MouseArea {
-            anchors.fill: parent
-            onPressed: window.startSystemMove()
-            onDoubleClicked: backend.zoomWindow()
-        }
-
-        Text {
-            id: pageTitle
-            x: 32
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 4
-            text: window.pages.find(p => p.id === window.page).title
-            color: "white"
-            // Title 3, emphasized: what macOS uses for a pane's title.
-            font.pixelSize: 15
-            font.weight: Font.DemiBold
-        }
+        height: 20
 
         Text {
             anchors.right: parent.right
             anchors.rightMargin: 28
-            anchors.verticalCenter: pageTitle.verticalCenter
+            anchors.bottom: parent.bottom
             visible: backend.busy
             text: "Working…"
             color: Qt.rgba(1, 1, 1, 0.55)
