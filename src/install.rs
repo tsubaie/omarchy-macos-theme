@@ -248,6 +248,85 @@ pub fn download(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A snapshot `install.sh` took, as `--backups --json` lists it.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Backup {
+    /// When it was taken, as `YYYYMMDD-HHMMSS`, which `--restore` takes.
+    pub id: String,
+    /// When it was taken, as ISO 8601.
+    pub created: String,
+    /// What changed after it, such as "Added dock".
+    pub note: String,
+    /// Kept for good: the first snapshot.
+    pub pinned: bool,
+    /// Taken before the theme changed anything.
+    pub original: bool,
+}
+
+/// The snapshots, newest first.
+///
+/// # Errors
+///
+/// Fails when `install.sh` can't list them.
+pub fn backups(dir: &Path) -> Result<Vec<Backup>> {
+    let list = run(dir, &["--backups", "--json"])?;
+    serde_json::from_str(&list).context("reading the backups")
+}
+
+/// Takes a snapshot now.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when it does.
+pub fn back_up(dir: &Path) -> Result<()> {
+    run(dir, &["--backup"]).map(drop)
+}
+
+/// Checks a snapshot id: digits and dashes only, as `install.sh` makes them.
+///
+/// # Errors
+///
+/// Fails for anything else, so no other text reaches `install.sh`.
+pub fn backup_id(id: &str) -> Result<String> {
+    let valid = id.len() >= 15 && id.chars().all(|c| c.is_ascii_digit() || c == '-');
+    if !valid {
+        bail!("not a backup: {id:?}");
+    }
+    Ok(id.to_owned())
+}
+
+/// Puts a snapshot back; `install.sh` snapshots the present first.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when it does.
+pub fn restore(dir: &Path, id: &str) -> Result<()> {
+    run(dir, &["--restore", id]).map(drop)
+}
+
+/// Writes the user's choices to `file`.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when it does.
+pub fn export(dir: &Path, file: &Path) -> Result<()> {
+    let file = file.to_str().context("the file's name isn't text")?;
+    run(dir, &["--export", file]).map(drop)
+}
+
+/// Applies an export; `install.sh` snapshots the present first.
+///
+/// # Errors
+///
+/// Fails when the file is missing, or with `install.sh`'s own message.
+pub fn import(dir: &Path, file: &Path) -> Result<()> {
+    if !file.is_file() {
+        bail!("no file {}", file.display());
+    }
+    let file = file.to_str().context("the file's name isn't text")?;
+    run(dir, &["--import", file]).map(drop)
+}
+
 fn run(dir: &Path, args: &[&str]) -> Result<String> {
     let script = dir.join("install.sh");
     let output = Command::new("bash")
@@ -344,6 +423,29 @@ mod tests {
         assert!(Changes::from_json(r#"{"set":{"glass":3}}"#).is_err());
         assert!(Changes::from_json(r#"{"add":["dock"],"remove":["dock"]}"#).is_err());
         assert!(Changes::from_json("not json").is_err());
+    }
+
+    #[test]
+    fn only_snapshot_ids_reach_restore() {
+        assert_eq!(
+            backup_id("20261101-140755").expect("an id"),
+            "20261101-140755"
+        );
+        assert_eq!(
+            backup_id("20261101-140755-4242").expect("an id"),
+            "20261101-140755-4242"
+        );
+        assert!(backup_id("../../etc").is_err());
+        assert!(backup_id("--uninstall").is_err());
+        assert!(backup_id("2026").is_err());
+    }
+
+    #[test]
+    fn backups_read_install_sh_json() {
+        let list = r#"[{"id":"20261101-140755","created":"2026-11-01T14:07:55+03:00","note":"Backed up by hand","theme":"Macos","pinned":true,"original":false}]"#;
+        let backups: Vec<Backup> = serde_json::from_str(list).expect("valid list");
+        assert_eq!(backups[0].id, "20261101-140755");
+        assert!(backups[0].pinned);
     }
 
     #[test]

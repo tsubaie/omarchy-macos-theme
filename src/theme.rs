@@ -15,6 +15,7 @@ pub mod qobject {
         #[qobject]
         #[qml_element]
         #[qproperty(QString, status_json, cxx_name = "statusJson")]
+        #[qproperty(QString, backups_json, cxx_name = "backupsJson")]
         #[qproperty(bool, busy)]
         #[qproperty(bool, downloaded)]
         #[qproperty(QString, error)]
@@ -30,6 +31,25 @@ pub mod qobject {
         /// `install.sh` call so the theme reloads once.
         #[qinvokable]
         fn apply(self: Pin<&mut Self>, changes: &QString);
+
+        /// Takes a snapshot now.
+        #[qinvokable]
+        #[cxx_name = "backUp"]
+        fn back_up(self: Pin<&mut Self>);
+
+        /// Puts a snapshot back, by its id; the present is snapshotted first.
+        #[qinvokable]
+        fn restore(self: Pin<&mut Self>, id: &QString);
+
+        /// Writes the user's choices to a file, for another computer or a new install.
+        #[qinvokable]
+        #[cxx_name = "exportTo"]
+        fn export_to(self: Pin<&mut Self>, file: &QString);
+
+        /// Applies an export; the present is snapshotted first.
+        #[qinvokable]
+        #[cxx_name = "importFrom"]
+        fn import_from(self: Pin<&mut Self>, file: &QString);
 
         /// Downloads the theme, when it isn't there yet.
         #[qinvokable]
@@ -53,11 +73,12 @@ use anyhow::Result;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 
-use crate::install::{self, Changes, Status};
+use crate::install::{self, Backup, Changes, Status};
 
 /// The Rust side of [`qobject::ThemeBackend`].
 pub struct ThemeBackendRust {
     status_json: QString,
+    backups_json: QString,
     busy: bool,
     downloaded: bool,
     error: QString,
@@ -70,6 +91,7 @@ impl Default for ThemeBackendRust {
         let dir = install::theme_dir();
         Self {
             status_json: QString::from("{}"),
+            backups_json: QString::from("[]"),
             busy: false,
             downloaded: install::is_downloaded(&dir),
             error: QString::default(),
@@ -82,6 +104,7 @@ impl Default for ThemeBackendRust {
 /// What a finished job hands back to the Qt thread.
 struct Outcome {
     status: Result<Status>,
+    backups: Result<Vec<Backup>>,
     error: Option<String>,
 }
 
@@ -95,6 +118,27 @@ impl qobject::ThemeBackend {
             Ok(changes) => self.run(move |dir| install::apply(dir, &changes)),
             Err(error) => self.set_error(QString::from(format!("{error:#}").as_str())),
         }
+    }
+
+    pub fn back_up(self: Pin<&mut Self>) {
+        self.run(install::back_up);
+    }
+
+    pub fn restore(self: Pin<&mut Self>, id: &QString) {
+        match install::backup_id(&id.to_string()) {
+            Ok(id) => self.run(move |dir| install::restore(dir, &id)),
+            Err(error) => self.set_error(QString::from(format!("{error:#}").as_str())),
+        }
+    }
+
+    pub fn export_to(self: Pin<&mut Self>, file: &QString) {
+        let file = PathBuf::from(file.to_string());
+        self.run(move |dir| install::export(dir, &file));
+    }
+
+    pub fn import_from(self: Pin<&mut Self>, file: &QString) {
+        let file = PathBuf::from(file.to_string());
+        self.run(move |dir| install::import(dir, &file));
     }
 
     pub fn download(self: Pin<&mut Self>) {
@@ -128,12 +172,16 @@ impl qobject::ThemeBackend {
         thread::spawn(move || {
             let error = job(&dir).err().map(|error| format!("{error:#}"));
             let downloaded = install::is_downloaded(&dir);
-            let status = if downloaded {
-                install::status(&dir)
+            let (status, backups) = if downloaded {
+                (install::status(&dir), install::backups(&dir))
             } else {
-                Ok(Status::default())
+                (Ok(Status::default()), Ok(Vec::new()))
             };
-            let outcome = Outcome { status, error };
+            let outcome = Outcome {
+                status,
+                backups,
+                error,
+            };
             let queued = qt_thread.queue(move |mut backend| {
                 backend.as_mut().set_downloaded(downloaded);
                 backend.as_mut().finish(outcome);
@@ -153,6 +201,15 @@ impl qobject::ThemeBackend {
             }
             Err(status_error) => {
                 error.get_or_insert_with(|| format!("{status_error:#}"));
+            }
+        }
+        match outcome.backups {
+            Ok(backups) => {
+                let json = serde_json::to_string(&backups).unwrap_or_else(|_| "[]".to_owned());
+                self.as_mut().set_backups_json(QString::from(json.as_str()));
+            }
+            Err(backups_error) => {
+                error.get_or_insert_with(|| format!("{backups_error:#}"));
             }
         }
         self.as_mut()

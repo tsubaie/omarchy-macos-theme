@@ -1,4 +1,6 @@
+import QtCore
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Window
 import org.omarchy.macossettings
 
@@ -23,6 +25,22 @@ Window {
     readonly property var status: {
         try { return JSON.parse(backend.statusJson) } catch (e) { return {} }
     }
+
+    readonly property var backups: {
+        try { return JSON.parse(backend.backupsJson) } catch (e) { return [] }
+    }
+
+    // "1 Nov 2026, 14:07" from an ISO date.
+    function when(iso) {
+        return Qt.formatDateTime(new Date(iso), "d MMM yyyy, hh:mm")
+    }
+
+    function localPath(url) {
+        return decodeURIComponent(url.toString().replace(/^file:\/\//, ""))
+    }
+
+    // A question before something that changes the setup: { title, text, button, action }.
+    property var confirm: null
 
     function installed(piece) {
         return !!status.features && status.features[piece] === true
@@ -85,7 +103,12 @@ Window {
         }
     }
 
-    property string page: "general"
+    // The page shown first: --page <id> opens another, such as --page backups.
+    property string page: {
+        const args = Qt.application.arguments
+        const asked = args[args.indexOf("--page") + 1]
+        return args.indexOf("--page") >= 0 && pages.some(p => p.id === asked) ? asked : "general"
+    }
 
     readonly property var pages: [
         { id: "general", title: "General", icon: 0xF0493, tint: "#8e8e93" },
@@ -93,6 +116,7 @@ Window {
         { id: "lock", title: "Lock Screen", icon: 0xF033E, tint: "#5e5ce6" },
         { id: "widgets", title: "Widgets", icon: 0xF072C, tint: "#ff9f0a" },
         { id: "menubar", title: "Menu Bar", icon: 0xF10AB, tint: "#30b0c7" },
+        { id: "backups", title: "Backups", icon: 0xF006F, tint: "#34c759" },
         { id: "about", title: "About", icon: 0xF02FC, tint: "#8e8e93" }
     ]
 
@@ -395,12 +419,173 @@ Window {
                 }
             }
 
+            // Backups.
+            Column {
+                visible: backend.downloaded && window.page === "backups"
+                width: parent.width
+                spacing: 18
+
+                Group {
+                    title: "This Computer"
+
+                    SettingRow {
+                        label: "Back up now"
+                        note: "A backup is also taken by itself before every change. The last 10 are kept, and the first one for good."
+                        last: true
+                        MacButton {
+                            text: "Back Up Now"
+                            enabled: !backend.busy
+                            onClicked: backend.backUp()
+                        }
+                    }
+                }
+
+                Group {
+                    title: "Backups"
+                    visible: window.backups.length > 0
+
+                    Repeater {
+                        model: window.backups
+
+                        delegate: SettingRow {
+                            required property var modelData
+                            required property int index
+                            label: modelData.original ? "Before macOS theme" : modelData.note
+                            note: window.when(modelData.created) + (modelData.pinned ? "  ·  Kept" : "")
+                            last: index === window.backups.length - 1
+
+                            MacButton {
+                                text: "Restore"
+                                enabled: !backend.busy
+                                onClicked: window.confirm = {
+                                    title: "Restore the backup from " + window.when(modelData.created) + "?",
+                                    text: "Your theme goes back to how it was then. Your setup now is backed up first, so you can undo this.",
+                                    button: "Restore",
+                                    action: () => { window.revert(); backend.restore(modelData.id) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Group {
+                    title: "Another Computer"
+
+                    SettingRow {
+                        label: "Export"
+                        note: "Saves your choices to one file: the pieces you use, your settings, your dock and widgets, and wallpapers you added. Import it on another computer or a new install."
+                        MacButton {
+                            text: "Export…"
+                            enabled: !backend.busy && window.installed("theme")
+                            onClicked: exportDialog.open()
+                        }
+                    }
+                    SettingRow {
+                        label: "Import"
+                        note: "Sets this computer up from an export. Your setup now is backed up first."
+                        last: true
+                        MacButton {
+                            text: "Import…"
+                            enabled: !backend.busy
+                            onClicked: importDialog.open()
+                        }
+                    }
+                }
+            }
+
             // About.
             Group {
                 visible: window.page === "about"
 
                 SettingRow { label: "Version"; Text { text: "0.1.0"; color: Qt.rgba(1, 1, 1, 0.55); font.pixelSize: 13 } }
                 SettingRow { label: "Theme folder"; note: backend.themeDir; last: true }
+            }
+        }
+    }
+
+    FileDialog {
+        id: exportDialog
+        title: "Export Your macOS Theme Setup"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "tar.gz"
+        nameFilters: ["macOS theme export (*.tar.gz)"]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        selectedFile: currentFolder + "/macos-theme-" + Qt.formatDate(new Date(), "yyyy-MM-dd") + ".tar.gz"
+        onAccepted: backend.exportTo(window.localPath(selectedFile))
+    }
+
+    FileDialog {
+        id: importDialog
+        title: "Import a macOS Theme Setup"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["macOS theme export (*.tar.gz)"]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: {
+            const file = window.localPath(selectedFile)
+            window.confirm = {
+                title: "Import " + file.split("/").pop() + "?",
+                text: "Your theme is set up to match it: its pieces, settings, dock, widgets and wallpapers. Your setup now is backed up first, so you can undo this.",
+                button: "Import",
+                action: () => { window.revert(); backend.importFrom(file) }
+            }
+        }
+    }
+
+    // The question sheet, over a dimmed window, as macOS asks.
+    Rectangle {
+        anchors.fill: parent
+        visible: window.confirm !== null
+        color: Qt.rgba(0, 0, 0, 0.45)
+        z: 10
+
+        MouseArea { anchors.fill: parent }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 380
+            height: sheet.height + 40
+            radius: 12
+            color: "#2c2c2e"
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.12)
+
+            Column {
+                id: sheet
+                x: 20
+                y: 20
+                width: parent.width - 40
+                spacing: 10
+
+                Text {
+                    width: parent.width
+                    text: window.confirm ? window.confirm.title : ""
+                    color: "white"
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
+                    wrapMode: Text.WordWrap
+                }
+                Text {
+                    width: parent.width
+                    text: window.confirm ? window.confirm.text : ""
+                    color: Qt.rgba(1, 1, 1, 0.7)
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+                Item { width: 1; height: 6 }
+                Row {
+                    anchors.right: parent.right
+                    spacing: 10
+                    MacButton { text: "Cancel"; onClicked: window.confirm = null }
+                    MacButton {
+                        text: window.confirm ? window.confirm.button : ""
+                        primary: true
+                        onClicked: {
+                            const action = window.confirm.action
+                            window.confirm = null
+                            action()
+                        }
+                    }
+                }
             }
         }
     }
