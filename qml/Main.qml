@@ -283,12 +283,12 @@ Window {
                             border.width: 0.5
                             border.color: Qt.rgba(1, 1, 1, 0.18)
 
-                            // The artwork has padding of its own; at 19 px its
-                            // shape fills two thirds of the tile, as macOS draws them.
+                            // Filled, as System Settings draws its tile symbols;
+                            // two thirds of the tile.
                             Glyph {
                                 anchors.centerIn: parent
                                 name: entry.modelData.icon
-                                size: 19
+                                size: 14
                             }
                         }
 

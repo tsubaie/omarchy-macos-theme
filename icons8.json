@@ -1,19 +1,19 @@
 {
   "version": 2,
   "icons": {
-    "pack": "sf-regular",
-    "sizes": [13, 14],
+    "pack": "ios_filled",
+    "sizes": [14, 17, 18],
     "color": "#ffffff",
     "items": {
-      "general": { "id": "M9s3DeMEWotE", "commonName": "settings" },
-      "dock": { "id": "RXUO2mGBNQP2", "commonName": "minimize-window" },
-      "widgets": { "id": "oSLHbQtBBBXk", "commonName": "dashboard-layout" },
-      "menubar": { "id": "LBSGcgVt8pkY", "commonName": "application-window" },
-      "backups": { "id": "MpN00l6F80aB", "commonName": "time-machine" },
-      "lock": { "id": "DZbPJ4lsqOdQ", "commonName": "lock" },
-      "about": { "id": "DWp2BGf88ZZb", "commonName": "info" },
-      "search": { "id": "TQPOC8XaUqZ0", "commonName": "search" },
-      "clear": { "id": "0UkEquwk40Zu", "commonName": "cancel" }
+      "general": { "id": "2969", "commonName": "settings" },
+      "dock": { "id": "23545", "commonName": "minimize-window" },
+      "lock": { "id": "2862", "commonName": "lock" },
+      "widgets": { "id": "52220", "commonName": "view-module" },
+      "menubar": { "id": "123437", "commonName": "application-window" },
+      "backups": { "id": "10058", "commonName": "time-machine" },
+      "about": { "id": "2800", "commonName": "info" },
+      "search": { "id": "TQPOC8XaUqZ0", "commonName": "search", "pack": "sf-regular", "note": "text fields use line icons, as on macOS" },
+      "clear": { "id": "0UkEquwk40Zu", "commonName": "cancel", "pack": "sf-regular" }
     }
   }
 }
