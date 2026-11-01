@@ -5,6 +5,7 @@ sheen and a bright rim catching light from above, a slightly darker bottom
 edge, and a soft shadow under the mark. The mark is measured from the design
 "Lime Geometric Frame Icon" by trace_mark.py. Run:
   python3 trace_mark.py design.png > mark.txt && python3 make_icon.py mark.txt > icon.svg
+  python3 make_icon.py mark.txt mono > icon-mono.svg   # graphite and white, as Tahoe's tinted icons
 """
 import math
 import pathlib
@@ -13,8 +14,9 @@ import sys
 SIZE, C = 1024, 512
 MARK = pathlib.Path(sys.argv[1]).read_text().strip()
 
-BG_TOP, BG_BOTTOM = "#127C78", "#073E46"
-MARK_TOP, MARK_BOTTOM = "#C6F592", "#A1E35F"
+MONO = sys.argv[2:3] == ["mono"]
+BG_TOP, BG_BOTTOM = ("#48484C", "#1C1C1E") if MONO else ("#127C78", "#073E46")
+MARK_TOP, MARK_BOTTOM = ("#FFFFFF", "#D6D6DA") if MONO else ("#C6F592", "#A1E35F")
 
 
 def squircle(n=5.0, steps=720, inset=0):

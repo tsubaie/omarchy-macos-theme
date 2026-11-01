@@ -11,7 +11,7 @@ fn main() {
             .qml_file("qml/SearchField.qml"),
     )
     .qrc_resources([
-        "assets/icon.svg",
+        "assets/icon-mono.svg",
         "assets/icons/general.svg",
         "assets/icons/dock.svg",
         "assets/icons/lock.svg",
