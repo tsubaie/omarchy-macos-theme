@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 
 // The macOS search field: a magnifier, the "Search" placeholder, a clear
 // button once there is text, and the accent focus ring while typing (HIG,
@@ -30,20 +31,23 @@ Rectangle {
     Accessible.role: Accessible.EditableText
     Accessible.name: "Search"
 
-    Text {
+    Image {
         id: magnifier
-        x: 8
+        x: 6
         anchors.verticalCenter: parent.verticalCenter
-        text: String.fromCodePoint(0xF0349)
-        color: Qt.rgba(1, 1, 1, 0.55)
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 14
+        width: 17
+        height: 17
+        opacity: 0.6
+        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icons/search.svg"
+        sourceSize: Qt.size(17 * Screen.devicePixelRatio * 2, 17 * Screen.devicePixelRatio * 2)
+        smooth: true
+        mipmap: true
     }
 
     TextInput {
         id: input
         anchors.left: magnifier.right
-        anchors.leftMargin: 6
+        anchors.leftMargin: 4
         anchors.right: clearButton.visible ? clearButton.left : parent.right
         anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter
@@ -69,16 +73,19 @@ Rectangle {
     }
 
     // Clears the search; the circled ✕ macOS shows once there is text.
-    Text {
+    Image {
         id: clearButton
         anchors.right: parent.right
         anchors.rightMargin: 7
         anchors.verticalCenter: parent.verticalCenter
         visible: input.text !== ""
-        text: String.fromCodePoint(0xF0159)
-        color: Qt.rgba(1, 1, 1, 0.55)
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 14
+        width: 18
+        height: 18
+        opacity: 0.6
+        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icons/clear.svg"
+        sourceSize: Qt.size(18 * Screen.devicePixelRatio * 2, 18 * Screen.devicePixelRatio * 2)
+        smooth: true
+        mipmap: true
 
         Accessible.role: Accessible.Button
         Accessible.name: "Clear search"

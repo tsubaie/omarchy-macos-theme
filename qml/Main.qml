@@ -143,19 +143,19 @@ Window {
     // Sections group the sidebar as System Settings does; keywords are the
     // words on each page's rows, which search also finds.
     readonly property var pages: [
-        { id: "overview", title: "About", icon: 0xF02FC, tint: "#0a84ff", section: 0,
+        { id: "overview", title: "About", icon: "about", tint: "#0a84ff", section: 0,
           keywords: "about version license open source github omarchy" },
-        { id: "general", title: "General", icon: 0xF0493, tint: "#8e8e93", section: 1,
+        { id: "general", title: "General", icon: "general", tint: "#8e8e93", section: 1,
           keywords: "theme colors glass window browser apps electron snap snapping halves corners mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
-        { id: "dock", title: "Dock", icon: 0xF10A9, tint: "#0a84ff", section: 1,
+        { id: "dock", title: "Dock", icon: "dock", tint: "#0a84ff", section: 1,
           keywords: "dock magnification window previews downloads trash" },
-        { id: "lock", title: "Lock Screen", icon: 0xF033E, tint: "#5e5ce6", section: 1,
+        { id: "lock", title: "Lock Screen", icon: "lock", tint: "#5e5ce6", section: 1,
           keywords: "lock screen password clock account picture preview" },
-        { id: "widgets", title: "Widgets", icon: 0xF072C, tint: "#ff9f0a", section: 1,
+        { id: "widgets", title: "Widgets", icon: "widgets", tint: "#ff9f0a", section: 1,
           keywords: "desktop widgets clock calendar weather now playing music" },
-        { id: "menubar", title: "Menu Bar", icon: 0xF10AB, tint: "#30b0c7", section: 1,
+        { id: "menubar", title: "Menu Bar", icon: "menubar", tint: "#30b0c7", section: 1,
           keywords: "menu bar inter font app name control center" },
-        { id: "backups", title: "Backups", icon: 0xF006F, tint: "#34c759", section: 2,
+        { id: "backups", title: "Backups", icon: "backups", tint: "#34c759", section: 2,
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
 
@@ -283,12 +283,12 @@ Window {
                             border.width: 0.5
                             border.color: Qt.rgba(1, 1, 1, 0.18)
 
-                            Text {
+                            // The artwork has padding of its own; at 19 px its
+                            // shape fills two thirds of the tile, as macOS draws them.
+                            Glyph {
                                 anchors.centerIn: parent
-                                text: String.fromCodePoint(entry.modelData.icon)
-                                color: "white"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 13
+                                name: entry.modelData.icon
+                                size: 19
                             }
                         }
 
@@ -837,6 +837,19 @@ Window {
         height: size
         source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon.svg"
         sourceSize: Qt.size(size * 2, size * 2)
+        smooth: true
+        mipmap: true
+    }
+
+    // An Icons8 glyph (SF Symbols style, white) from assets/icons, drawn at
+    // the screen's real pixel size so its thin strokes stay sharp.
+    component Glyph: Image {
+        property string name: ""
+        property int size: 14
+        width: size
+        height: size
+        source: name ? "qrc:/qt/qml/org/omarchy/macossettings/assets/icons/" + name + ".svg" : ""
+        sourceSize: Qt.size(size * Screen.devicePixelRatio * 2, size * Screen.devicePixelRatio * 2)
         smooth: true
         mipmap: true
     }

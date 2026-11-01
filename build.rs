@@ -10,7 +10,18 @@ fn main() {
             .qml_file("qml/SettingRow.qml")
             .qml_file("qml/SearchField.qml"),
     )
-    .qrc_resources(["assets/icon.svg"])
+    .qrc_resources([
+        "assets/icon.svg",
+        "assets/icons/general.svg",
+        "assets/icons/dock.svg",
+        "assets/icons/lock.svg",
+        "assets/icons/widgets.svg",
+        "assets/icons/menubar.svg",
+        "assets/icons/backups.svg",
+        "assets/icons/about.svg",
+        "assets/icons/search.svg",
+        "assets/icons/clear.svg",
+    ])
     .qt_module("Network")
     .files(["src/theme.rs"])
     .build();
