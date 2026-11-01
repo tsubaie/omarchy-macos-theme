@@ -34,6 +34,14 @@ To work against a checkout of the theme instead of the downloaded copy:
 OMARCHY_MACOS_THEME_DIR=~/Projects/omarchy-macos-theme cargo run
 ```
 
+## Watch mode
+
+```bash
+./dev.sh ~/Projects/omarchy-macos-theme
+```
+
+Rebuilds and reopens the app on the same page whenever a file in `qml/`, `src/` or `assets/` is saved.
+
 ## Checks
 
 ```bash

@@ -159,19 +159,22 @@ Window {
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
 
-    // The sidebar: a panel floating inside the window on glass, as macOS
-    // Tahoe draws it, with search at the top (HIG, Search fields: "Include
-    // search at the top of the sidebar when filtering… navigation there").
+    // The sidebar: the window's full height, edge to edge, a shade darker than
+    // the content with a hairline between them, as Files and Finder draw it;
+    // search at the top (HIG, Search fields: "Include search at the top of the
+    // sidebar when filtering… navigation there").
     Rectangle {
         id: sidebar
-        x: 8
-        y: 8
         width: 232
-        height: parent.height - 16
-        radius: 14
-        color: Qt.rgba(1, 1, 1, 0.055)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.08)
+        height: parent.height
+        color: "#181818"
+
+        Rectangle {
+            anchors.right: parent.right
+            width: 1
+            height: parent.height
+            color: Qt.rgba(1, 1, 1, 0.08)
+        }
 
         Column {
             anchors.fill: parent
@@ -352,7 +355,6 @@ Window {
     Flickable {
         id: content
         anchors.left: sidebar.right
-        anchors.leftMargin: 4
         anchors.right: parent.right
         anchors.top: topBar.bottom
         anchors.bottom: parent.bottom
@@ -805,7 +807,6 @@ Window {
     Rectangle {
         id: applyBar
         anchors.left: sidebar.right
-        anchors.leftMargin: 8
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 52
