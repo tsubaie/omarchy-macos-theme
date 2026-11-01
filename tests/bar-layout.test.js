@@ -64,6 +64,23 @@ try {
   }
   assert.strictEqual(run("--bar-layout", "not json").status, 1)
   assert.deepStrictEqual(calls(), [])
+
+  // With Control Center on the bar, the widgets it stands in for are unseen
+  // there and left out; so is the bar icons helper, always.
+  plugins.push({ id: "macos-theme.control-center", name: "Control Center", kinds: ["bar-widget"], enabled: true, clonedFrom: "" },
+    { id: "omarchy.network", name: "Network", kinds: ["bar-widget"], enabled: true, clonedFrom: "" },
+    { id: "macos-theme.bar-icons", name: "macOS icons", kinds: ["bar-widget"], enabled: true, clonedFrom: "" })
+  fs.writeFileSync(path.join(home, "plugins.json"), JSON.stringify(plugins))
+  const layout = { left: [{ id: "macos-theme.bar-icons" }], right: [{ id: "omarchy.network" }, { id: "omarchy.clock" }, { id: "macos-theme.control-center" }] }
+  fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout } }))
+  let listed = JSON.parse(run("--bar", "--json").stdout)
+  assert.deepStrictEqual(listed.sections.left, [])
+  assert.deepStrictEqual(listed.sections.right.map((w) => w.id), ["omarchy.clock", "macos-theme.control-center"])
+  // Without it, they are listed again.
+  layout.right.pop()
+  fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout } }))
+  listed = JSON.parse(run("--bar", "--json").stdout)
+  assert.deepStrictEqual(listed.sections.right.map((w) => w.id), ["omarchy.network", "omarchy.clock"])
 } finally {
   fs.rmSync(home, { recursive: true, force: true })
 }

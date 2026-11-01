@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.bar-icons",
+  "name": "macOS menu bar icons",
+  "version": "1.0.0",
+  "description": "macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widgets, which stay Omarchy's and keep its updates.",
+  "license": "MIT",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarIcons.qml"
+  },
+  "barWidget": {
+    "displayName": "macOS icons",
+    "description": "macOS style icons for the system widgets",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}

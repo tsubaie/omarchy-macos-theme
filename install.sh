@@ -9,6 +9,7 @@
 #   ./install.sh --switcher       + app switcher (Alt+Tab) and workspace switcher (Super+Tab)
 #   ./install.sh --wide-menu      + Spotlight-like Omarchy menu: wider, magnifying glass, "Search"
 #   ./install.sh --menubar        + macOS menu bar: Inter, bold app name, Control Center, shade
+#   ./install.sh --bar-icons      + macOS icons for the bar's Network, Bluetooth, Audio and Display
 #   ./install.sh --lock           + macOS lock screen: date, large clock, account picture, glass field
 #   ./install.sh --widgets        + desktop widgets: clock, calendar, weather, now playing
 #   ./install.sh --all            everything
@@ -36,7 +37,7 @@
 #   ./install.sh --restore <id>       put one back (taking a snapshot of now first)
 #   ./install.sh --export <file|dir>  your choices in one file, for another computer or a new install
 #   ./install.sh --import <file>      apply an export here
-#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets
+#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
 # have their .lua files and ghostty.conf stripped for safety, and those carry
@@ -71,11 +72,14 @@ MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center
 CONTROL_CENTER_WIDGETS="omarchy.network omarchy.bluetooth omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power"
 SWITCHER_ID="macos-theme.switcher"
 WIDGETS_ID="macos-theme.widgets"
+# It gives Omarchy's own widgets macOS icons from the bar, unseen there, so
+# the arrangement leaves it out.
+BAR_ICONS_ID="macos-theme.bar-icons"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
 # Each piece, by the name --add, --remove and --status use.
-FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets"
+FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
 declare -A add=() remove=() settings=()
 status=false json=false legacy=false switch_to="" mode="" mode_arg="" bar_layout=""
 (( $# )) || legacy=true
@@ -88,9 +92,10 @@ while (( $# )); do
     --switcher) add[switcher]=1; add[wide-menu]=1; legacy=true ;;
     --wide-menu) add[wide-menu]=1; legacy=true ;;
     --menubar) add[menubar]=1; legacy=true ;;
+    --bar-icons) add[bar-icons]=1; legacy=true ;;
     --lock) add[lock]=1; legacy=true ;;
     --widgets) add[widgets]=1; legacy=true ;;
-    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar lock widgets; do add[$f]=1; done; legacy=true ;;
+    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar bar-icons lock widgets; do add[$f]=1; done; legacy=true ;;
     --add|--remove)
       [[ " $FEATURES " == *" ${2:-} "* ]] || { echo "Unknown feature: ${2:-} (one of: $FEATURES)" >&2; exit 1; }
       if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
@@ -168,6 +173,7 @@ installed() {
     osd) [[ -d $PLUGINS_DIR/$OSD_ID ]] ;;
     dictation-hud) [[ -d $PLUGINS_DIR/$HUD_ID ]] ;;
     menubar) [[ -d $PLUGINS_DIR/macos-theme.menubar ]] ;;
+    bar-icons) [[ -d $PLUGINS_DIR/$BAR_ICONS_ID ]] ;;
     lock) [[ -n $(macos_locks) ]] ;;
     widgets) [[ -d $PLUGINS_DIR/$WIDGETS_ID ]] ;;
   esac
@@ -242,10 +248,10 @@ BAR_SECTIONS="left centerBegin center centerEnd right tray"
 # Every bar widget Omarchy knows, as {id: {name, enabled}}, without those an
 # enabled copy stands in for (such as your own copy of the menu or the tray).
 bar_widgets() {
-  omarchy plugin list --json 2>/dev/null | jq -c '
+  omarchy plugin list --json 2>/dev/null | jq -c --arg hide "$BAR_ICONS_ID" '
     [.[] | select((.kinds // []) | index("bar-widget"))] as $all
     | ([$all[] | select(.enabled and .clonedFrom != "") | .clonedFrom]) as $replaced
-    | [$all[] | select((.id as $id | $replaced | index($id)) | not)]
+    | [$all[] | select((.id as $id | $replaced | index($id)) | not) | select(.id != $hide)]
     | map({key: .id, value: {name: .name, enabled: .enabled, drawer: (.id == "omarchy.tray" or .clonedFrom == "omarchy.tray")}}) | from_entries' 2>/dev/null || echo "{}"
 }
 
@@ -254,10 +260,14 @@ bar_json() {
   local widgets layout
   widgets=$(bar_widgets)
   layout=$(jq -c '.bar.layout // {}' "$SHELL_JSON" 2>/dev/null || echo "{}")
-  jq -n --argjson w "$widgets" --argjson l "$layout" --arg order "$BAR_SECTIONS" '
+  # With Control Center on the bar, the widgets it stands in for are on it
+  # unseen, and open from it alone, so they aren't listed.
+  jq -n --argjson w "$widgets" --argjson l "$layout" --arg order "$BAR_SECTIONS" --arg hide "$BAR_ICONS_ID" \
+    --arg cc "macos-theme.control-center" --arg ccw "$CONTROL_CENTER_WIDGETS" '
     ($order | split(" ")) as $sections
     | ([$sections[] as $s | ($l[$s] // [])[] | .id? // empty]) as $placed
-    | {sections: ($sections | map({key: ., value: [($l[.] // [])[] | .id? // empty | {id: ., name: ($w[.].name // .)} + (if $w[.].drawer then {drawer: true} else {} end)]}) | from_entries),
+    | ([$hide] + (if ($placed | index($cc)) and $w[$cc].enabled then $ccw | split(" ") else [] end)) as $unlisted
+    | {sections: ($sections | map({key: ., value: [($l[.] // [])[] | .id? // empty | select(. as $id | $unlisted | index($id) | not) | {id: ., name: ($w[.].name // .)} + (if $w[.].drawer then {drawer: true} else {} end)]}) | from_entries),
        hidden: [$w | to_entries[] | select((.value.enabled | not) and (.key as $id | $placed | index($id) | not)) | {id: .key, name: .value.name}] | sort_by(.name)}'
 }
 
@@ -377,6 +387,11 @@ remove_menubar() {
   done
   say "Removed the menu bar look and put the system widgets back on the bar"
 }
+remove_bar_icons() {
+  omarchy plugin disable "$BAR_ICONS_ID" >/dev/null 2>&1 || true
+  rm -rf "${PLUGINS_DIR:?}/$BAR_ICONS_ID"
+  say "Removed the macOS bar icons; Omarchy's own are back"
+}
 remove_widgets() {
   omarchy plugin disable "$WIDGETS_ID" >/dev/null 2>&1 || true
   rm -rf "${PLUGINS_DIR:?}/$WIDGETS_ID"
@@ -456,7 +471,7 @@ if (( ${#remove[@]} )); then
     exit 1
   fi
   # Plugins before the theme they sit on.
-  for f in widgets lock osd dock wide-menu switcher menubar dictation-hud rows icons theme; do
+  for f in widgets lock osd dock wide-menu switcher bar-icons menubar dictation-hud rows icons theme; do
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
   say "Done. Backups of edited files end in .bak.$STAMP"
@@ -615,6 +630,11 @@ if want wide-menu; then
   else
     echo "    Could not clone Omarchy's menu; it keeps its own width." >&2
   fi
+fi
+if want bar-icons; then
+  install_plugin "$BAR_ICONS_ID"
+  omarchy bar put "$BAR_ICONS_ID" --section left >/dev/null 2>&1 || true
+  say "Installed the macOS bar icons (Omarchy's Network, Bluetooth, Audio and Display widgets keep their updates)"
 fi
 if want widgets; then
   install_plugin "$WIDGETS_ID"

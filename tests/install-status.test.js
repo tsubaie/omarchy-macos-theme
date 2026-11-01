@@ -28,7 +28,7 @@ exit 0
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
 const status = () => JSON.parse(execFileSync("bash", [script, "--status", "--json"], { env, encoding: "utf8" }))
-const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "lock", "widgets"]
+const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "bar-icons", "lock", "widgets"]
 
 try {
   // A fresh home: nothing installed, and every piece is reported.
