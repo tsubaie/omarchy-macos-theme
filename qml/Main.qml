@@ -32,9 +32,57 @@ Window {
         return status.settings && typeof status.settings[key] === "number" ? status.settings[key] : fallback
     }
 
-    function toggle(piece, on) {
-        if (on) backend.addPiece(piece)
-        else backend.removePiece(piece)
+    // Changes wait here until Apply sends them to install.sh in one call, so
+    // the theme reloads once however many there are.
+    property var pendingPieces: ({})
+    property var pendingSettings: ({})
+    readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
+    property bool applying: false
+
+    function pieceOn(piece) {
+        return piece in pendingPieces ? pendingPieces[piece] : installed(piece)
+    }
+
+    function settingValue(key, fallback) {
+        return key in pendingSettings ? pendingSettings[key] : setting(key, fallback)
+    }
+
+    // Marking a piece back to what is installed takes the change away again.
+    function markPiece(piece, on) {
+        const next = Object.assign({}, pendingPieces)
+        if (on === installed(piece)) delete next[piece]
+        else next[piece] = on
+        pendingPieces = next
+    }
+
+    function markSetting(key, value, fallback) {
+        const next = Object.assign({}, pendingSettings)
+        if (Math.abs(value - setting(key, fallback)) < 0.005) delete next[key]
+        else next[key] = value
+        pendingSettings = next
+    }
+
+    function revert() {
+        pendingPieces = {}
+        pendingSettings = {}
+    }
+
+    function apply() {
+        const changes = { add: [], remove: [], set: pendingSettings }
+        for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
+        applying = true
+        backend.apply(JSON.stringify(changes))
+    }
+
+    // Done: the switches show what is installed now. On an error the changes
+    // stay marked, to fix and apply again.
+    Connections {
+        target: backend
+        function onBusyChanged() {
+            if (backend.busy || !window.applying) return
+            window.applying = false
+            if (backend.error === "") window.revert()
+        }
     }
 
     property string page: "general"
@@ -167,7 +215,7 @@ Window {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        contentHeight: column.height + 48
+        contentHeight: column.height + 48 + (applyBar.visible ? applyBar.height : 0)
         clip: true
 
         Column {
@@ -266,9 +314,9 @@ Window {
                         label: "Snap windows to halves and corners"
                         last: true
                         MacSwitch {
-                            checked: window.setting("snapping", 1) === 1
-                            enabled: !backend.busy && window.installed("theme")
-                            onToggled: on => backend.setSetting("snapping", on ? 1 : 0)
+                            checked: window.settingValue("snapping", 1) === 1
+                            enabled: !backend.busy && window.pieceOn("theme")
+                            onToggled: on => window.markSetting("snapping", on ? 1 : 0, 1)
                         }
                     }
                 }
@@ -357,12 +405,53 @@ Window {
         }
     }
 
-    // A switch that installs or removes one piece of the theme.
+    // The bar under the content while changes wait: how many, Revert and Apply.
+    Rectangle {
+        id: applyBar
+        anchors.left: sidebar.right
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 52
+        visible: window.pendingCount > 0 || window.applying
+        color: "#2a2a2c"
+
+        Rectangle { width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1) }
+
+        Text {
+            x: 28
+            anchors.verticalCenter: parent.verticalCenter
+            text: window.applying ? "Applying…"
+                : window.pendingCount === 1 ? "1 change" : window.pendingCount + " changes"
+            color: Qt.rgba(1, 1, 1, 0.7)
+            font.pixelSize: 13
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 28
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+
+            MacButton {
+                text: "Revert"
+                enabled: !backend.busy
+                onClicked: window.revert()
+            }
+            MacButton {
+                text: "Apply"
+                primary: true
+                enabled: !backend.busy
+                onClicked: window.apply()
+            }
+        }
+    }
+
+    // A switch that marks one piece of the theme to install or remove.
     component PieceSwitch: MacSwitch {
         property string piece: ""
-        checked: window.installed(piece)
+        checked: window.pieceOn(piece)
         enabled: !backend.busy
-        onToggled: on => window.toggle(piece, on)
+        onToggled: on => window.markPiece(piece, on)
     }
 
     // A slider for one install.sh setting, set when let go.
@@ -371,9 +460,9 @@ Window {
         property real fallback: 0
         property string needs: "theme"
         width: 180
-        value: window.setting(key, fallback)
-        enabled: !backend.busy && window.installed(needs)
-        onMoved: v => backend.setSetting(key, v)
+        value: window.settingValue(key, fallback)
+        enabled: !backend.busy && window.pieceOn(needs)
+        onMoved: v => window.markSetting(key, v, fallback)
 
         Text {
             anchors.right: parent.left
@@ -389,12 +478,13 @@ Window {
     component MacButton: Rectangle {
         property string text: ""
         property bool enabled: true
+        property bool primary: false
         signal clicked()
         width: label.width + 24
         height: 24
         radius: 6
         opacity: enabled ? 1 : 0.4
-        color: press.pressed ? "#5a5a5e" : "#48484c"
+        color: primary ? (press.pressed ? "#0a6fdc" : "#0a84ff") : (press.pressed ? "#5a5a5e" : "#48484c")
 
         Text {
             id: label

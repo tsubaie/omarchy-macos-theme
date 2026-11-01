@@ -25,20 +25,11 @@ pub mod qobject {
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
 
-        /// Installs a piece, by its `install.sh` name.
+        /// Applies the changes waiting in the window, as JSON:
+        /// `{"add": [..], "remove": [..], "set": {key: value}}`, in one
+        /// `install.sh` call so the theme reloads once.
         #[qinvokable]
-        #[cxx_name = "addPiece"]
-        fn add_piece(self: Pin<&mut Self>, piece: &QString);
-
-        /// Removes a piece, by its `install.sh` name.
-        #[qinvokable]
-        #[cxx_name = "removePiece"]
-        fn remove_piece(self: Pin<&mut Self>, piece: &QString);
-
-        /// Changes a setting: glass, web-glass, magnification or snapping.
-        #[qinvokable]
-        #[cxx_name = "setSetting"]
-        fn set_setting(self: Pin<&mut Self>, key: &QString, value: f64);
+        fn apply(self: Pin<&mut Self>, changes: &QString);
 
         /// Downloads the theme, when it isn't there yet.
         #[qinvokable]
@@ -62,7 +53,7 @@ use anyhow::Result;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 
-use crate::install::{self, Piece, Setting, Status};
+use crate::install::{self, Changes, Status};
 
 /// The Rust side of [`qobject::ThemeBackend`].
 pub struct ThemeBackendRust {
@@ -99,24 +90,10 @@ impl qobject::ThemeBackend {
         self.run(|_| Ok(()));
     }
 
-    pub fn add_piece(self: Pin<&mut Self>, piece: &QString) {
-        match Piece::try_from(piece.to_string().as_str()) {
-            Ok(piece) => self.run(move |dir| install::add(dir, piece)),
-            Err(error) => self.set_error(QString::from(error.to_string().as_str())),
-        }
-    }
-
-    pub fn remove_piece(self: Pin<&mut Self>, piece: &QString) {
-        match Piece::try_from(piece.to_string().as_str()) {
-            Ok(piece) => self.run(move |dir| install::remove(dir, piece)),
-            Err(error) => self.set_error(QString::from(error.to_string().as_str())),
-        }
-    }
-
-    pub fn set_setting(self: Pin<&mut Self>, key: &QString, value: f64) {
-        match Setting::try_new(&key.to_string(), value) {
-            Ok(setting) => self.run(move |dir| install::set(dir, setting)),
-            Err(error) => self.set_error(QString::from(error.to_string().as_str())),
+    pub fn apply(self: Pin<&mut Self>, changes: &QString) {
+        match Changes::from_json(&changes.to_string()) {
+            Ok(changes) => self.run(move |dir| install::apply(dir, &changes)),
+            Err(error) => self.set_error(QString::from(format!("{error:#}").as_str())),
         }
     }
 

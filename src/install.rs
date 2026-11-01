@@ -134,31 +134,94 @@ fn parse_status(report: &str) -> Result<Status> {
     serde_json::from_str(report).context("reading the theme's status")
 }
 
-/// Installs a piece.
-///
-/// # Errors
-///
-/// Fails with `install.sh`'s own message when it does.
-pub fn add(dir: &Path, piece: Piece) -> Result<()> {
-    run(dir, &["--add", piece.0]).map(drop)
+/// Changes waiting for Apply: pieces to add and remove, and settings to set.
+/// They go to `install.sh` in one call, so the theme reloads once.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Changes {
+    add: Vec<Piece>,
+    remove: Vec<Piece>,
+    set: Vec<Setting>,
 }
 
-/// Removes a piece.
-///
-/// # Errors
-///
-/// Fails with `install.sh`'s own message when it does.
-pub fn remove(dir: &Path, piece: Piece) -> Result<()> {
-    run(dir, &["--remove", piece.0]).map(drop)
+/// The changes as the window sends them, before they are checked.
+#[derive(Deserialize)]
+struct RawChanges {
+    #[serde(default)]
+    add: Vec<String>,
+    #[serde(default)]
+    remove: Vec<String>,
+    #[serde(default)]
+    set: BTreeMap<String, f64>,
 }
 
-/// Changes a setting.
+impl Changes {
+    /// Reads `{"add": [..], "remove": [..], "set": {key: value}}` and checks
+    /// every piece and setting.
+    ///
+    /// # Errors
+    ///
+    /// Fails on bad JSON, an unknown piece or setting, a value out of range,
+    /// or a piece both added and removed.
+    pub fn from_json(json: &str) -> Result<Self> {
+        let raw: RawChanges = serde_json::from_str(json).context("reading the changes")?;
+        let pieces = |names: &[String]| -> Result<Vec<Piece>> {
+            names
+                .iter()
+                .map(|name| Piece::try_from(name.as_str()))
+                .collect()
+        };
+        let changes = Changes {
+            add: pieces(&raw.add)?,
+            remove: pieces(&raw.remove)?,
+            set: raw
+                .set
+                .iter()
+                .map(|(key, value)| Setting::try_new(key, *value))
+                .collect::<Result<_>>()?,
+        };
+        if let Some(piece) = changes
+            .add
+            .iter()
+            .find(|piece| changes.remove.contains(piece))
+        {
+            bail!("{piece} is both added and removed");
+        }
+        Ok(changes)
+    }
+
+    /// Whether there is nothing to apply.
+    pub fn is_empty(&self) -> bool {
+        self.add.is_empty() && self.remove.is_empty() && self.set.is_empty()
+    }
+
+    /// The arguments for one `install.sh` call.
+    fn args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+        for piece in &self.remove {
+            args.extend(["--remove".to_owned(), piece.to_string()]);
+        }
+        for piece in &self.add {
+            args.extend(["--add".to_owned(), piece.to_string()]);
+        }
+        for setting in &self.set {
+            args.extend(["--set".to_owned(), setting.arg()]);
+        }
+        args
+    }
+}
+
+/// Applies the changes in one `install.sh` call.
 ///
 /// # Errors
 ///
 /// Fails with `install.sh`'s own message when it does.
-pub fn set(dir: &Path, setting: Setting) -> Result<()> {
-    run(dir, &["--set", &setting.arg()]).map(drop)
+pub fn apply(dir: &Path, changes: &Changes) -> Result<()> {
+    if changes.is_empty() {
+        return Ok(());
+    }
+    let args = changes.args();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    run(dir, &args).map(drop)
 }
 
 /// Downloads the theme into `dir`.
@@ -249,6 +312,38 @@ mod tests {
         assert_eq!(status.features.get("dock"), Some(&false));
         assert_eq!(status.settings.get("magnification"), Some(&1.75));
         assert!(parse_status("not json").is_err());
+    }
+
+    #[test]
+    fn changes_become_one_install_sh_call() {
+        let changes = Changes::from_json(
+            r#"{"add":["dock","widgets"],"remove":["osd"],"set":{"glass":0.8,"snapping":0}}"#,
+        )
+        .expect("valid changes");
+        assert_eq!(
+            changes.args(),
+            [
+                "--remove",
+                "osd",
+                "--add",
+                "dock",
+                "--add",
+                "widgets",
+                "--set",
+                "glass=0.8",
+                "--set",
+                "snapping=0"
+            ]
+        );
+        assert!(Changes::from_json("{}").expect("nothing to do").is_empty());
+    }
+
+    #[test]
+    fn bad_changes_are_refused_before_install_sh_runs() {
+        assert!(Changes::from_json(r#"{"add":["everything"]}"#).is_err());
+        assert!(Changes::from_json(r#"{"set":{"glass":3}}"#).is_err());
+        assert!(Changes::from_json(r#"{"add":["dock"],"remove":["dock"]}"#).is_err());
+        assert!(Changes::from_json("not json").is_err());
     }
 
     #[test]
