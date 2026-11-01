@@ -182,7 +182,7 @@ Window {
         { id: "widgets", title: "Widgets", icon: "widgets", section: 1,
           keywords: "desktop widgets clock calendar weather now playing music" },
         { id: "menubar", title: "Menu Bar", icon: "menubar", section: 1,
-          keywords: "menu bar inter font app name control center clock time date position left center middle right items icons widgets show hide rearrange order drag tray" },
+          keywords: "menu bar inter font app name control center wifi wi-fi ethernet network bluetooth sound volume display monitor symbols clock time date position left center middle right items icons widgets show hide rearrange order drag tray" },
         { id: "backups", title: "Backups", icon: "backups", section: 2,
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
@@ -621,9 +621,14 @@ Window {
 
                 SettingRow {
                     label: "macOS menu bar"
-                    note: "Inter, the app name in bold, and Control Center"
-                    last: true
+                    note: "Inter, the app name in bold, and Control Center, which holds Wi-Fi, Bluetooth, sound and displays"
                     PieceSwitch { piece: "menubar" }
+                }
+                SettingRow {
+                    label: "macOS icons"
+                    note: "For Wi-Fi and Ethernet, Bluetooth, sound and displays"
+                    last: true
+                    PieceSwitch { piece: "bar-icons" }
                 }
             }
 

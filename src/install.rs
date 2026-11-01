@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 pub const REPO_URL: &str = "https://github.com/tsubaie/omarchy-macos-theme.git";
 
 /// The pieces `install.sh --add` and `--remove` know, as its `FEATURES` lists them.
-const PIECES: [&str; 11] = [
+const PIECES: [&str; 12] = [
     "theme",
     "rows",
     "icons",
@@ -24,6 +24,7 @@ const PIECES: [&str; 11] = [
     "osd",
     "dictation-hud",
     "menubar",
+    "bar-icons",
     "lock",
     "widgets",
 ];
