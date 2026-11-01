@@ -143,19 +143,19 @@ Window {
     // Sections group the sidebar as System Settings does; keywords are the
     // words on each page's rows, which search also finds.
     readonly property var pages: [
-        { id: "overview", title: "About", icon: "about", tint: "#0a84ff", section: 0,
+        { id: "overview", title: "About", icon: "about", section: 0,
           keywords: "about version license open source github omarchy" },
-        { id: "general", title: "General", icon: "general", tint: "#8e8e93", section: 1,
+        { id: "general", title: "General", icon: "general", section: 1,
           keywords: "theme colors glass window browser apps electron snap snapping halves corners mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
-        { id: "dock", title: "Dock", icon: "dock", tint: "#0a84ff", section: 1,
+        { id: "dock", title: "Dock", icon: "dock", section: 1,
           keywords: "dock magnification window previews downloads trash" },
-        { id: "lock", title: "Lock Screen", icon: "lock", tint: "#5e5ce6", section: 1,
+        { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
           keywords: "lock screen password clock account picture preview" },
-        { id: "widgets", title: "Widgets", icon: "widgets", tint: "#ff9f0a", section: 1,
+        { id: "widgets", title: "Widgets", icon: "widgets", section: 1,
           keywords: "desktop widgets clock calendar weather now playing music" },
-        { id: "menubar", title: "Menu Bar", icon: "menubar", tint: "#30b0c7", section: 1,
+        { id: "menubar", title: "Menu Bar", icon: "menubar", section: 1,
           keywords: "menu bar inter font app name control center" },
-        { id: "backups", title: "Backups", icon: "backups", tint: "#34c759", section: 2,
+        { id: "backups", title: "Backups", icon: "backups", section: 2,
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
 
@@ -198,7 +198,7 @@ Window {
                 height: 52
                 visible: window.query === ""
                 radius: 8
-                color: window.page === "overview" ? "#0a84ff" : cardHover.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
+                color: window.page === "overview" ? Qt.rgba(1, 1, 1, 0.12) : cardHover.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
                 Accessible.role: Accessible.PageTab
                 Accessible.name: "About macOS Theme"
@@ -234,7 +234,7 @@ Window {
                     Text {
                         text: !backend.downloaded ? "Not downloaded"
                             : window.status.active ? "Current theme" : "Installed, not current"
-                        color: Qt.rgba(1, 1, 1, window.page === "overview" ? 0.8 : 0.55)
+                        color: Qt.rgba(1, 1, 1, 0.55)
                         font.pixelSize: 11
                     }
                 }
@@ -251,16 +251,26 @@ Window {
                     required property int index
                     readonly property bool selected: window.query === "" ? window.page === modelData.id : index === window.resultIndex
                     // A little room where a new section starts, as in System Settings.
-                    readonly property bool newSection: window.query === "" && index > 0 && window.listed[index - 1].section !== modelData.section
+                    // A gray heading where a section starts, as in Finder.
+                    readonly property bool newSection: window.query === "" && (index === 0 || window.listed[index - 1].section !== modelData.section)
                     width: parent.width
 
-                    Item { width: 1; height: entry.newSection ? 10 : 0 }
+                    Text {
+                        visible: entry.newSection
+                        x: 8
+                        topPadding: entry.index === 0 ? 2 : 12
+                        bottomPadding: 4
+                        text: ["", "Theme", "Data"][entry.modelData.section]
+                        color: Qt.rgba(1, 1, 1, 0.45)
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
 
                     Rectangle {
                         width: parent.width
                         height: 28
                         radius: 6
-                        color: entry.selected ? "#0a84ff" : hover.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
+                        color: entry.selected ? Qt.rgba(1, 1, 1, 0.12) : hover.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
                         Accessible.role: Accessible.PageTab
                         Accessible.name: entry.modelData.title
@@ -269,27 +279,14 @@ Window {
 
                         HoverHandler { id: hover }
 
-                        Rectangle {
+                        // A line symbol in the accent blue with no tile, as Finder
+                        // and most macOS sidebars draw them (HIG, Sidebars).
+                        Glyph {
                             id: icon
                             x: 6
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 20
-                            height: 20
-                            radius: 5
-                            gradient: Gradient {
-                                GradientStop { position: 0; color: Qt.lighter(entry.modelData.tint, 1.18) }
-                                GradientStop { position: 1; color: entry.modelData.tint }
-                            }
-                            border.width: 0.5
-                            border.color: Qt.rgba(1, 1, 1, 0.18)
-
-                            // Filled, as System Settings draws its tile symbols;
-                            // two thirds of the tile.
-                            Glyph {
-                                anchors.centerIn: parent
-                                name: entry.modelData.icon
-                                size: 14
-                            }
+                            name: entry.modelData.icon
+                            size: 20
                         }
 
                         Text {
