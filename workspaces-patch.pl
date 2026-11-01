@@ -1,18 +1,18 @@
 #!/usr/bin/perl -0pi
 # Patches a clone of Omarchy's workspaces bar widget (Workspaces.qml) so a
-# click always goes to a workspace, and a right-click opens a menu of its
-# layouts (WorkspaceMenu.qml, copied next to it), instead of a click on the
-# shown workspace cycling its layout. Each change is skipped when already
+# click goes to a workspace, and a click on the shown one, or a right-click on
+# any, opens a menu of its layouts (WorkspaceMenu.qml, copied next to it),
+# instead of a click on the shown workspace cycling its layout. Each change is skipped when already
 # applied, so it is safe to re-run.
 # Usage: perl -0pi workspaces-patch.pl path/to/Workspaces.qml
 
-unless (/macOS theme: a click always goes/) {
+unless (/macOS theme: a click goes to a workspace/) {
   s/(\n( +)WidgetButton \{\n)/$1$2  id: workspaceButton\n/;
   s/( +)onPressed: function\(\) \{\n +if \(shown\) root\.cycleLayout\(\)\n +else root\.focusWorkspace\(modelData\)\n +\}/
-    "$1\/\/ macOS theme: a click always goes to the workspace; a right-click opens\n" .
-    "$1\/\/ its layout menu (Super + L still cycles the shown one's).\n" .
+    "$1\/\/ macOS theme: a click goes to a workspace; a click on the one shown, or a\n" .
+    "$1\/\/ right-click on any, opens its layout menu (Super + L still cycles it).\n" .
     "$1onPressed: function(button) {\n" .
-    "$1  if (button === Qt.RightButton) modesMenu.show(workspaceButton, modelData, slot)\n" .
+    "$1  if (button === Qt.RightButton || shown) modesMenu.show(workspaceButton, modelData, slot)\n" .
     "$1  else root.focusWorkspace(modelData)\n" .
     "$1}"/e;
   s/(\n\}\s*)\z/\n\n  \/\/ macOS theme: the layout menu a right-click on a workspace opens.\n  WorkspaceMenu {\n    id: modesMenu\n    bar: root.bar\n  }$1/;

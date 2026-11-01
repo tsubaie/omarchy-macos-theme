@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
@@ -176,7 +177,7 @@ BarWidget {
   // sight, so their panels open from here alone; put anywhere else on the bar
   // they show there too.
   readonly property var standsInFor: ["omarchy.network", "omarchy.bluetooth", "omarchy.tailscale",
-    "omarchy.audio", "omarchy.monitor", "omarchy.power"]
+    "omarchy.audio", "omarchy.monitor", "omarchy.power", "netmojo.omdrop"]
   property var hidden: []
   // Whether a widget sits in the tray's drawer: its slot says, or, for one
   // waiting in its bar's pool, the slot that last held it.
@@ -262,9 +263,11 @@ BarWidget {
     }
   }
 
-  // Omdrop, AirDrop for Omarchy, where its plugin is on the bar: AirDrop's
-  // switch works through it, and is grayed out without it.
+  // Omdrop, AirDrop for Omarchy, where its plugin is on the bar (unseen in
+  // the tray's drawer, as the other widgets here): AirDrop's switch works
+  // through it. Without it, AirDrop says where to get it.
   property var airdrop: null
+  readonly property string omdropPage: "https://github.com/netmojo-systems/omdrop-plugin"
   function widgetOnBar(item, id) {
     if ("moduleName" in item && item.moduleName === id && "activeItem" in item) return item.activeItem
     for (var i = 0; i < item.children.length; i++) {
@@ -305,7 +308,10 @@ BarWidget {
     // The focus is for the panel's keyboard. The panel itself is this bar's
     // own copy of the widget: asked by id, the shell picks the copy on the
     // monitor it last heard had focus, which may still be the other one.
-    if (screen) Util.execDetached("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ monitor = \"" + screen + "\" })"))
+    // Only when another monitor has it: focusing a monitor moves the pointer
+    // to its middle, away from the panel opening under it.
+    var focused = Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name || "") : ""
+    if (screen && screen !== focused) Util.execDetached("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ monitor = \"" + screen + "\" })"))
     var own = root.hidden.find(function(h) { return h.target && h.target.moduleName === target })
     // What is hidden is the bar's holder for the widget; the widget is its
     // activeItem, and its own open() opens the panel on this monitor.
@@ -457,7 +463,7 @@ BarWidget {
     if (id === "airdrop") {
       var a = airdrop
       return { airdrop: true, title: "AirDrop", unavailable: !a, on: !!a && a.receiving === true,
-        subtitle: !a ? "Not Installed" : !a.usable ? "Not Available" : a.busy ? a.stateText
+        subtitle: !a ? "Not Installed · Get Omdrop" : !a.usable ? "Not Available" : a.busy ? a.stateText
           : !a.receiving ? "Off" : a.audience === "contacts" ? "Contacts Only" : "Everyone" }
     }
     if (id === "tailscale") return { glyph: "󰖂", title: "Tailscale", subtitle: tailscaleOn ? "Connected" : "Off", on: tailscaleOn }
@@ -468,6 +474,8 @@ BarWidget {
   }
 
   function pillToggled(id) {
+    // AirDrop's icon turns it on or off through Omdrop; the rest of the
+    // switch opens Omdrop's window (or, not installed, says where to get it).
     if (id === "airdrop") {
       if (airdrop && airdrop.usable) airdrop.toggleOmdrop()
       else pillActivated(id)
@@ -482,9 +490,11 @@ BarWidget {
 
   function pillActivated(id) {
     if (id === "airdrop") {
-      if (!airdrop) return
-      root.open = false
-      airdrop.open()
+      // Not installed: Omdrop's page, which says how to install it.
+      if (!airdrop) {
+        root.open = false
+        Util.execDetached("xdg-open " + Util.shellQuote(root.omdropPage))
+      } else openPanel("netmojo.omdrop")
     } else if (id === "tailscale") openPanel("omarchy.tailscale")
     else if (id === "display") openPanel("omarchy.monitor")
     else if (id === "focus") pillToggled(id)
@@ -845,7 +855,8 @@ BarWidget {
     property string subtitle
     property bool on: false
     property bool airdrop: false
-    // Grayed out, and nothing to click, while what it works through is missing.
+    // Grayed out while what it works through is missing; still a click, to
+    // say where to get it.
     property bool unavailable: false
     signal toggled()
 
@@ -855,9 +866,7 @@ BarWidget {
     width: parent ? parent.width : 0
     height: root.pillHeight
     radius: root.pillHeight / 2
-    hoverable: !unavailable
-    enabled: !unavailable
-    opacity: unavailable ? 0.4 : 1
+    opacity: unavailable ? 0.55 : 1
     clip: true
     Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
     Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }

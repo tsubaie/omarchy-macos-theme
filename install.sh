@@ -86,7 +86,8 @@ DOCK_ID="macos-theme.dock"
 MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center"
 # The bar widgets the Control Center stands in for. They wait in the bar's tray
 # drawer rather than leaving the bar, since their panels live in them.
-CONTROL_CENTER_WIDGETS="omarchy.network omarchy.bluetooth omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power"
+# Omdrop (AirDrop for Omarchy) included: Control Center has its switch.
+CONTROL_CENTER_WIDGETS="omarchy.network omarchy.bluetooth omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power netmojo.omdrop"
 SWITCHER_ID="macos-theme.switcher"
 WIDGETS_ID="macos-theme.widgets"
 # The desktop widgets, as the widgets' WidgetsModel.js names them.
@@ -180,7 +181,7 @@ wide_menus() {
 
 # The bar's workspaces are a clone of Omarchy's widget, patched by
 # workspaces-patch.pl so a right-click opens a layout menu (WorkspaceMenu.qml).
-WORKSPACES_MARK="macOS theme: a click always goes"
+WORKSPACES_MARK="macOS theme: a click"
 workspaces_clones() {
   local dir
   for dir in "$PLUGINS_DIR"/*; do
