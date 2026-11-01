@@ -520,16 +520,32 @@ Window {
                     id: preview
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(parent.width, 560)
+                    // No room is kept until it has loaded, as before it is downloaded.
                     height: shot.status === Image.Ready ? Math.round(width * 10 / 16) : 0
                     visible: height > 0
 
+                    // The shadow, drawn on its own behind the frame: an effect
+                    // that both rounds and shadows pads itself and stretches
+                    // the picture into the padding.
+                    RectangularShadow {
+                        anchors.fill: parent
+                        radius: 12
+                        offset.y: 6
+                        blur: 24
+                        color: Qt.rgba(0, 0, 0, 0.5)
+                    }
+
+                    // Decoded at the screen's real pixel size, so it is drawn
+                    // one to one and stays sharp.
                     Image {
                         id: shot
                         anchors.fill: parent
                         source: backend.downloaded ? "file://" + backend.themeDir + "/docs/screenshots/desktop.jpg" : ""
-                        sourceSize.height: 700
+                        sourceSize: Qt.size(Math.round(preview.width * Screen.devicePixelRatio), Math.round(preview.width * 10 / 16 * Screen.devicePixelRatio))
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
+                        smooth: true
+                        mipmap: true
                         visible: false
                     }
 
@@ -539,19 +555,19 @@ Window {
                         radius: 12
                         visible: false
                         layer.enabled: true
+                        layer.textureSize: Qt.size(Math.round(width * Screen.devicePixelRatio), Math.round(height * Screen.devicePixelRatio))
                     }
 
+                    // Only the rounded corners: no padding, so the picture
+                    // stays exactly inside its frame.
                     MultiEffect {
                         anchors.fill: parent
                         source: shot
+                        autoPaddingEnabled: false
                         maskEnabled: true
                         maskSource: shotMask
                         maskThresholdMin: 0.5
                         maskSpreadAtMin: 1
-                        shadowEnabled: true
-                        shadowColor: Qt.rgba(0, 0, 0, 0.5)
-                        shadowBlur: 0.6
-                        shadowVerticalOffset: 6
                     }
 
                     Rectangle {
