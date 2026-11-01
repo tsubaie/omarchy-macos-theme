@@ -512,6 +512,57 @@ Window {
 
                 Item { width: 1; height: 18 }
 
+                // The theme on a desktop, from the theme's own folder, so it
+                // shows the version installed; hidden until it is downloaded.
+                Item {
+                    id: preview
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width, 620)
+                    height: shot.status === Image.Ready ? width * shot.implicitHeight / shot.implicitWidth : 0
+                    visible: height > 0
+
+                    Image {
+                        id: shot
+                        anchors.fill: parent
+                        source: backend.downloaded ? "file://" + backend.themeDir + "/docs/screenshots/desktop.jpg" : ""
+                        sourceSize.width: 1240
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        visible: false
+                    }
+
+                    Rectangle {
+                        id: shotMask
+                        anchors.fill: parent
+                        radius: 12
+                        visible: false
+                        layer.enabled: true
+                    }
+
+                    MultiEffect {
+                        anchors.fill: parent
+                        source: shot
+                        maskEnabled: true
+                        maskSource: shotMask
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1
+                        shadowEnabled: true
+                        shadowColor: Qt.rgba(0, 0, 0, 0.5)
+                        shadowBlur: 0.6
+                        shadowVerticalOffset: 6
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                    }
+                }
+
+                Item { width: 1; height: preview.visible ? 22 : 0 }
+
                 // The facts, labels right-aligned against their values, as macOS lists them.
                 Grid {
                     anchors.horizontalCenter: parent.horizontalCenter
