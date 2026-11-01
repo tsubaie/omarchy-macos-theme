@@ -49,7 +49,10 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOut
 -- Frosted glass behind the bar (it is almost clear, so blur every pixel of it)
 -- and behind the dock, menus, launcher, notifications and popups.
 hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popups = true, ignore_alpha = 0.0 })
-hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|osd|clipboard|emojis|reminders|polkit|network-qr|dictation-hud|switcher|widgets)$" }, blur = true, ignore_alpha = 0.3 })
+hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher|widgets)$" }, blur = true, ignore_alpha = 0.3 })
+-- The volume and dictation HUDs are light glass, as Control Center is: blur
+-- under all but their clear pixels.
+hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud)$" }, blur = true, ignore_alpha = 0.01 })
 -- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
 -- The shade behind the menu bar is just there, never animated in.

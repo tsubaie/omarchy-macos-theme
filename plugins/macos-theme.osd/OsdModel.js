@@ -56,10 +56,36 @@ function stateForShow(iconName, rawMessage, rawValue, rawMax, rawProgressText, r
   }
 }
 
+// The HUD's icon for an OSD (HudIcons.js), by its kind and level: the
+// speaker by volume (muted at 0, as macOS shows it), the sun for brightness,
+// the microphone and the keyboard; "" for any other, which keeps its glyph.
+function hudIconName(iconKey, percent) {
+  var k = String(iconKey || "").toLowerCase()
+  if (k.indexOf("volume") === 0 || k === "muted" || k === "mute") {
+    if (k.indexOf("mute") >= 0 || percent <= 0) return "volume-muted"
+    if (percent <= 33) return "volume-low"
+    if (percent <= 66) return "volume-medium"
+    return "volume-high"
+  }
+  if (k === "brightness" || k === "display") return "brightness"
+  if (k.indexOf("microphone") === 0 || k.indexOf("mic") === 0) return "microphone"
+  if (k === "keyboard") return "keyboard"
+  return ""
+}
+
+// A keyboard layout's short name, as the bar writes it: "English (US)" is
+// "EN", "Arabic" is "AR".
+function layoutCode(name) {
+  var letters = String(name || "").replace(/[^A-Za-z]/g, "")
+  return letters.slice(0, 2).toUpperCase()
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     widestIcon: widestIcon,
     iconFor: iconFor,
-    stateForShow: stateForShow
+    stateForShow: stateForShow,
+    hudIconName: hudIconName,
+    layoutCode: layoutCode
   }
 }

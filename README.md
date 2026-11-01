@@ -21,13 +21,14 @@ cd omarchy-macos-theme
 | `--switcher` | App switcher (Alt+Tab) and workspace switcher (Super+Tab) |
 | `--wide-menu` | A wider, Spotlight-like Omarchy menu |
 | `--menubar` | The macOS menu bar: Inter, the app name in bold, Control Center |
-| `--osd` | The frosted volume and brightness capsule |
-| `--dictation-hud` | A dictation pill for [Voxtype](https://voxtype.io) |
+| `--bar-icons` | macOS icons for the bar's Network, Bluetooth, Audio and Display widgets |
+| `--osd` | The volume and brightness panel, and the keyboard language when it changes |
+| `--dictation-hud` | A dictation panel for [Voxtype](https://voxtype.io) |
 | `--lock` | The macOS lock screen |
 | `--widgets` | Desktop widgets: clock, calendar, weather and now playing |
 | `--all` | All of the above |
 | `--uninstall` | Undo everything (switch to another theme first) |
-| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `lock` or `widgets` |
+| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `bar-icons`, `lock` or `widgets` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
 | `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
@@ -135,7 +136,8 @@ The bar as macOS Tahoe draws it:
 
 - **Inter** for the shell's text (bar, popups, notifications), as macOS uses one sans serif throughout; terminals keep their own font. The bar is 24px tall, as the macOS menu bar is.
 - **The focused app's name in bold** right after the menu button, the way macOS shows it next to the Apple menu.
-- **Control Center**: one icon by the clock for network (Wi-Fi or Ethernet), Bluetooth and Tailscale with their state, a volume slider, and Display and Power. Each opens Omarchy's own panel for the full controls. The widgets it stands in for move to the bar's tray drawer, which keeps their panels working.
+- **Control Center**: one icon by the clock, laid out as macOS has it on the glass of your windows (it follows the Glass setting): Wi-Fi and Bluetooth beside what is playing, with its controls; Tailscale, Focus (Do Not Disturb), Display and Power; then brightness and sound sliders. A click on a switch's round icon turns it on or off; anywhere else on it opens Omarchy's own panel, on the monitor you clicked. Power opens in place to Lock, Log Out, Restart and Shut Down, the last three on a second click. The widgets it stands in for stay on the bar, unseen, which keeps their panels working and their updates coming; only those you have on the bar show in it.
+- **Camera and microphone in use**: a green and an orange dot by Control Center while an app has the camera or the microphone, and its name at the top of Control Center (for two minutes after, "recently").
 - **A soft shade** behind the see-through bar, as Tahoe has, so it reads on any wallpaper.
 - **macOS's arrangement** for Omarchy's own widgets. The right end holds only the tray drawer, the keyboard layout, Control Center and the clock, with the notification bell past it if you have it. The status widgets (indicators, world clock, weather, system update) sit in the middle, and the agents widget joins the drawer.
 
@@ -145,10 +147,16 @@ Widgets from other plugins stay where you put them. To show or hide any widget, 
 
 Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, with a magnifying glass and "Search…" instead of "Go…", on the same frosted glass. Everything in it works as before.
 
-### Volume capsule (`--osd`) and dictation HUD (`--dictation-hud`)
+### macOS bar icons (`--bar-icons`)
 
-- The volume and brightness popup as a frosted pill with a white slider.
-- For [Voxtype](https://voxtype.io) dictation: a frosted pill with a red mic and moving bars while recording, and "Transcribing" after.
+macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widgets, when they are on the bar (Control Center hides them). The widgets stay Omarchy's, updates and all: only the icon they draw changes, and Omarchy's comes back for any state without a macOS one.
+
+### Volume panel (`--osd`) and dictation HUD (`--dictation-hud`)
+
+- Volume and brightness as macOS 27.2 shows them: a rounded glass panel at the bottom middle with the speaker or sun on the left and a bar of sixteen steps. Icons from [Icons8](https://icons8.com) (`plugins/macos-theme.osd/icons8.json`).
+- The keyboard language, in the middle of the screen when it changes: its short name large and its full name under it.
+- For [Voxtype](https://voxtype.io) dictation: the same panel, the microphone and moving bars while recording, and "Transcribing" after.
+- All of them on the glass of your windows: the Glass setting's tint over the theme's blur.
 
   ![Dictation HUD](docs/screenshots/dictation-hud.png)
 
@@ -185,11 +193,12 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | `macos-theme.dock` | `--dock` | Omarchy's dock (`omarchy.dock` is turned off while it is installed); it also draws the genie and the snapping outline |
 | `macos-theme.switcher` | `--switcher` | Nothing; adds the Alt+Tab and Super+Tab switchers |
 | `macos-theme.osd` | `--osd` | Omarchy's on-screen display (`omarchy.osd` is turned off) |
-| `macos-theme.dictation-hud` | `--dictation-hud` | Nothing; adds a pill for Voxtype |
+| `macos-theme.dictation-hud` | `--dictation-hud` | Nothing; adds a panel for Voxtype |
+| `macos-theme.bar-icons` | `--bar-icons` | Nothing; gives Omarchy's own widgets macOS icons, from the bar, unseen |
 | `macos-theme.widgets` | `--widgets` | Nothing; adds the desktop widgets |
 | A clone of `omarchy.lock`, named after your user | `--lock` | Omarchy's lock screen (`omarchy.lock` is turned off) |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
-| `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets move to the bar's tray drawer |
+| `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets stay on the bar unseen, opened from Control Center |
 
 `--icons` installs the MacTahoe icon theme, which is not a plugin, into `~/.local/share/icons`.
 

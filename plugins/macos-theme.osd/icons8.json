@@ -1,0 +1,12 @@
+{
+  "source": "Icons8 (https://icons8.com), pack ios_filled",
+  "icons": {
+    "volume-high": 9982,
+    "volume-medium": 9983,
+    "volume-low": 9980,
+    "volume-muted": 9976,
+    "microphone": 9622,
+    "brightness": 9313,
+    "keyboard": 10333
+  }
+}

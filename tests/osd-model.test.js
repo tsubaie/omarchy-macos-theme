@@ -1,0 +1,25 @@
+// The volume HUD's icons and the language HUD. Run with: node tests/osd-model.test.js
+const assert = require("assert")
+const m = require("../plugins/macos-theme.osd/OsdModel.js")
+const icons = require("../plugins/macos-theme.osd/HudIcons.js")
+
+// The speaker by volume, muted at 0 or when muted.
+assert.strictEqual(m.hudIconName("volume", 0), "volume-muted")
+assert.strictEqual(m.hudIconName("volume", 20), "volume-low")
+assert.strictEqual(m.hudIconName("volume", 50), "volume-medium")
+assert.strictEqual(m.hudIconName("volume", 100), "volume-high")
+assert.strictEqual(m.hudIconName("volume-muted", 80), "volume-muted")
+assert.strictEqual(m.hudIconName("brightness", 50), "brightness")
+assert.strictEqual(m.hudIconName("mic-muted", 0), "microphone")
+assert.strictEqual(m.hudIconName("touchpad", 0), "")
+// Every name it gives has an icon, an SVG in the color asked for.
+for (const n of ["volume-muted", "volume-low", "volume-medium", "volume-high", "brightness", "microphone", "keyboard"]) {
+  const svg = Buffer.from(icons.icon(n, "#abcdef").split(",")[1], "base64").toString()
+  assert.ok(svg.startsWith("<svg") && svg.includes('fill="#abcdef"'), n)
+}
+assert.strictEqual(icons.icon("nope", "#fff"), "")
+for (const n of ["", "a", "ab", "abc"]) assert.strictEqual(icons.base64(n), Buffer.from(n).toString("base64"))
+// The language's short name.
+assert.strictEqual(m.layoutCode("English (US)"), "EN")
+assert.strictEqual(m.layoutCode("Arabic"), "AR")
+console.log("osd model: ok")
