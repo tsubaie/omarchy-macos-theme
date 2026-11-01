@@ -246,9 +246,16 @@ Column {
                                     }
 
                                     HoverHandler { cursorShape: Qt.OpenHandCursor }
-                                    PointHandler {
+                                    // Held down, not hovered: a PointHandler counted a hover too
+                                    // and froze the page whenever the pointer passed a handle.
+                                    // The drag that follows takes over from it; root.dragging
+                                    // then keeps the page still.
+                                    TapHandler {
+                                        id: press
                                         enabled: root.enabled
-                                        onActiveChanged: root.holding = active
+                                        gesturePolicy: TapHandler.DragThreshold
+                                        onPressedChanged: root.holding = pressed
+                                        onCanceled: root.holding = false
                                     }
 
                                     DragHandler {

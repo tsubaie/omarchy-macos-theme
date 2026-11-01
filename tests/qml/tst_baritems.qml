@@ -124,6 +124,27 @@ Item {
             compare(page.contentY, before)
         }
 
+        // The page scrolls with the wheel before a drag, and again after one.
+        function test_the_page_scrolls_before_and_after_a_drag() {
+            top.height = 300
+            wait(50)
+            page.contentY = 0
+            verify(page.interactive, "scrollable at first")
+            mouseWheel(top, 100, 150, 0, -360)
+            wait(400)
+            verify(page.contentY > 0, "the wheel scrolls before a drag: " + page.contentY)
+            page.contentY = 0
+            wait(30)
+            drag("menu", find("row-workspaces"), 0.8)
+            wait(100)
+            compare(list.holding, false)
+            verify(page.interactive, "scrollable after a drag")
+            mouseWheel(top, 100, 150, 0, -360)
+            wait(400)
+            verify(page.contentY > 0, "the wheel scrolls after a drag: " + page.contentY)
+            top.height = 900
+        }
+
         function test_switch_hides_and_shows() {
             mouseClick(find("switch-weather"))
             compare(spy.last.hidden, ["media", "weather"])
