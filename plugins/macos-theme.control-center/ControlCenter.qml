@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
@@ -212,7 +213,20 @@ BarWidget {
       var top = root
       while (top.parent) top = top.parent
       root.hideWidgets(top)
+      root.airdrop = root.widgetOnBar(top, "netmojo.omdrop")
     }
+  }
+
+  // Omdrop, AirDrop for Omarchy, where its plugin is on the bar: AirDrop's
+  // switch works through it, and is grayed out without it.
+  property var airdrop: null
+  function widgetOnBar(item, id) {
+    if ("moduleName" in item && item.moduleName === id && "activeItem" in item) return item.activeItem
+    for (var i = 0; i < item.children.length; i++) {
+      var found = widgetOnBar(item.children[i], id)
+      if (found) return found
+    }
+    return null
   }
 
   // Whether a widget is on this bar, so its controls show here, and the
@@ -385,7 +399,7 @@ BarWidget {
   // column it would wrap to the next, so the one beside it moves after it
   // instead and Power stays put.
   readonly property var pillOrder: {
-    var ids = []
+    var ids = ["airdrop"]
     if (live("omarchy.tailscale")) ids.push("tailscale")
     ids.push("focus")
     if (live("omarchy.monitor")) ids.push("display")
@@ -395,6 +409,12 @@ BarWidget {
   }
 
   function pillInfo(id) {
+    if (id === "airdrop") {
+      var a = airdrop
+      return { airdrop: true, title: "AirDrop", unavailable: !a, on: !!a && a.receiving === true,
+        subtitle: !a ? "Not Installed" : !a.usable ? "Not Available" : a.busy ? a.stateText
+          : !a.receiving ? "Off" : a.audience === "contacts" ? "Contacts Only" : "Everyone" }
+    }
     if (id === "tailscale") return { glyph: "󰖂", title: "Tailscale", subtitle: tailscaleOn ? "Connected" : "Off", on: tailscaleOn }
     // Focus is a switch alone: Omarchy has no panel for it.
     if (id === "focus") return { glyph: "󰖔", title: "Focus", subtitle: focusOn ? "On" : "Off", on: focusOn }
@@ -403,7 +423,10 @@ BarWidget {
   }
 
   function pillToggled(id) {
-    if (id === "tailscale") {
+    if (id === "airdrop") {
+      if (airdrop && airdrop.usable) airdrop.toggleOmdrop()
+      else pillActivated(id)
+    } else if (id === "tailscale") {
       tailscaleOn = !tailscaleOn
       run("omarchy-shell -q omarchy.tailscale toggleTailscale")
     } else if (id === "focus") {
@@ -413,7 +436,11 @@ BarWidget {
   }
 
   function pillActivated(id) {
-    if (id === "tailscale") openPanel("omarchy.tailscale")
+    if (id === "airdrop") {
+      if (!airdrop) return
+      root.open = false
+      airdrop.open()
+    } else if (id === "tailscale") openPanel("omarchy.tailscale")
     else if (id === "display") openPanel("omarchy.monitor")
     else if (id === "focus") pillToggled(id)
     else {
@@ -663,7 +690,9 @@ BarWidget {
             readonly property var info: root.pillInfo(modelData)
             width: modelData === "power" && root.powerOpen ? content.width : content.half
             height: root.pillHeight + (modelData === "power" && root.powerOpen ? Style.space(78) : 0)
-            glyph: info.glyph
+            glyph: info.glyph || ""
+            airdrop: info.airdrop === true
+            unavailable: info.unavailable === true
             title: info.title
             subtitle: info.subtitle
             on: info.on
@@ -726,8 +755,11 @@ BarWidget {
 
   // A round icon, blue while its switch is on.
   component Glyph: Rectangle {
+    id: glyphCircle
     property string glyph
     property bool on: false
+    // AirDrop's mark, which no font has: a dot in rings open at the bottom.
+    property bool airdrop: false
 
     width: Style.space(34)
     height: width
@@ -736,9 +768,31 @@ BarWidget {
 
     Text {
       anchors.centerIn: parent
+      visible: !glyphCircle.airdrop
       text: parent.glyph
       color: parent.on ? "#ffffff" : root.ink
       font.pixelSize: Math.round(parent.width * 0.52)
+    }
+
+    Shape {
+      visible: glyphCircle.airdrop
+      anchors.centerIn: parent
+      width: 18
+      height: 18
+      scale: glyphCircle.width * 0.56 / 18
+      preferredRendererType: Shape.CurveRenderer
+      ShapePath {
+        strokeColor: glyphCircle.on ? "#ffffff" : root.ink
+        fillColor: "transparent"
+        strokeWidth: 1.6
+        capStyle: ShapePath.RoundCap
+        PathSvg { path: "M7.2 11.54 A2.8 2.8 0 1 1 10.8 11.54 M5.66 13.38 A5.2 5.2 0 1 1 12.34 13.38 M4.11 15.22 A7.6 7.6 0 1 1 13.89 15.22" }
+      }
+      ShapePath {
+        strokeColor: "transparent"
+        fillColor: glyphCircle.on ? "#ffffff" : root.ink
+        PathSvg { path: "M7.6 9.4 A1.4 1.4 0 1 0 10.4 9.4 A1.4 1.4 0 1 0 7.6 9.4 Z" }
+      }
     }
   }
 
@@ -750,6 +804,9 @@ BarWidget {
     property string title
     property string subtitle
     property bool on: false
+    property bool airdrop: false
+    // Grayed out, and nothing to click, while what it works through is missing.
+    property bool unavailable: false
     signal toggled()
 
     // More of the switch, under its header while the pill is taller.
@@ -758,7 +815,9 @@ BarWidget {
     width: parent ? parent.width : 0
     height: root.pillHeight
     radius: root.pillHeight / 2
-    hoverable: true
+    hoverable: !unavailable
+    enabled: !unavailable
+    opacity: unavailable ? 0.4 : 1
     clip: true
     Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
     Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
@@ -768,6 +827,7 @@ BarWidget {
       x: (root.pillHeight - height) / 2
       y: (root.pillHeight - height) / 2
       glyph: pill.glyph
+      airdrop: pill.airdrop
       on: pill.on
       opacity: iconMouse.containsMouse ? 0.85 : 1
 

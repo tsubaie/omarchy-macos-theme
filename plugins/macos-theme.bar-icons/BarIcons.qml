@@ -16,6 +16,10 @@ Item {
 
     readonly property var widgets: ["omarchy.network", "omarchy.bluetooth", "omarchy.audio", "omarchy.monitor"]
     property var patched: []
+    // Omdrop draws its own icon rather than a glyph: its button gets AirDrop's,
+    // and its own comes back when this is removed.
+    readonly property string omdrop: "netmojo.omdrop"
+    property var omdropButtons: []
 
     visible: false
     implicitWidth: 0
@@ -39,6 +43,14 @@ Item {
     }
 
     function scan(item) {
+        if ("moduleName" in item && item.moduleName === root.omdrop) {
+            var own = buttonIn(item)
+            if (own && !root.omdropButtons.some(function(o) { return o.button === own })) {
+                root.omdropButtons.push({ button: own, original: own.iconComponent })
+                own.iconComponent = airdrop
+            }
+            return
+        }
         if ("moduleName" in item && root.widgets.indexOf(item.moduleName) >= 0 && item !== root) {
             var button = buttonIn(item)
             if (button && root.patched.indexOf(button) < 0) {
@@ -59,6 +71,7 @@ Item {
         triggeredOnStart: true
         onTriggered: {
             root.patched = root.patched.filter(function(b) { try { return !!b.parent } catch (e) { return false } })
+            root.omdropButtons = root.omdropButtons.filter(function(o) { try { return !!o.button.parent } catch (e) { return false } })
             root.scan(root.surface())
         }
     }
@@ -66,6 +79,9 @@ Item {
     Component.onDestruction: {
         for (var i = 0; i < patched.length; i++) {
             try { patched[i].iconComponent = null } catch (e) {}
+        }
+        for (var j = 0; j < omdropButtons.length; j++) {
+            try { omdropButtons[j].button.iconComponent = omdropButtons[j].original } catch (e) {}
         }
     }
 
@@ -87,6 +103,30 @@ Item {
             smooth: true
             mipmap: true
             source: button ? Icons.source(button.text, tint.toString()) : ""
+        }
+    }
+
+    // AirDrop's icon on Omdrop's button, in Omdrop's own color for its state,
+    // dimmed while it can't be used, as its own is struck through.
+    Component {
+        id: airdrop
+
+        Image {
+            readonly property var button: {
+                var item = parent
+                while (item && !("iconComponent" in item)) item = item.parent
+                return item
+            }
+            readonly property var widget: button ? button.parent : null
+            readonly property color tint: widget && widget.barIconColor !== undefined ? widget.barIconColor
+                : button ? button.foreground : "white"
+            width: 18
+            height: 18
+            sourceSize: Qt.size(72, 72)
+            smooth: true
+            mipmap: true
+            opacity: widget && widget.usable === false ? 0.45 : 1
+            source: Icons.source("airdrop", tint.toString())
         }
     }
 }

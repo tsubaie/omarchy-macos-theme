@@ -6,32 +6,30 @@
 
 var DIM = 0.3
 
+// An arc of the Wi-Fi fan, 45° either side of straight up from (9, cy).
 function arc(r, cy, opacity) {
     var dx = (r * 0.7071).toFixed(2), y = (cy - r * 0.7071).toFixed(2)
     return '<path d="M' + (9 - dx).toFixed(2) + ' ' + y + ' A' + r + ' ' + r + ' 0 0 1 ' + (9 + +dx).toFixed(2) + ' ' + y
-        + '" fill="none" stroke="C" stroke-width="1.9" stroke-linecap="round" opacity="' + opacity + '"/>'
+        + '" fill="none" stroke="C" stroke-width="2" stroke-linecap="round" opacity="' + opacity + '"/>'
 }
 
-// Wi-Fi: the dot and up to three arcs lit; `mark` adds a slash or an "!".
+// Wi-Fi as macOS draws it: a filled wedge and two arcs over it, lit from the
+// wedge out by strength (0 to 4); `mark` adds a slash or an "!".
 function wifi(lit, mark) {
-    var parts = ['<circle cx="9" cy="14.6" r="1.45" fill="C" opacity="' + (lit > 0 ? 1 : DIM) + '"/>']
-    var radii = [4, 7.3, 10.6]
-    for (var i = 0; i < 3; i++) parts.push(arc(radii[i], 14.6, lit > i + 1 ? 1 : DIM))
+    var cy = 14.9, w = (3.6 * 0.7071).toFixed(2)
+    var parts = ['<path d="M9 ' + cy + ' L' + (9 - w).toFixed(2) + ' ' + (cy - w).toFixed(2) + ' A3.6 3.6 0 0 1 ' + (9 + +w).toFixed(2) + ' ' + (cy - w).toFixed(2)
+        + ' Z" fill="C" stroke="C" stroke-width="1" stroke-linejoin="round" opacity="' + (lit > 0 ? 1 : DIM) + '"/>']
+    parts.push(arc(7.2, cy, lit > 1 ? 1 : DIM))
+    parts.push(arc(11.2, cy, lit > 2 ? 1 : DIM))
     if (mark === "slash") parts.push('<path d="M3 2.5 L15.5 16" stroke="C" stroke-width="1.7" stroke-linecap="round"/>')
     if (mark === "!") parts.push('<path d="M16.6 9.5 V13" stroke="C" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.6" cy="15.6" r="0.95" fill="C"/>')
     return parts.join("")
 }
 
-// Ethernet: macOS's network mark, ‹···›.
-function ethernet(opacity) {
-    return '<g opacity="' + opacity + '" fill="none" stroke="C" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-        + '<path d="M5 4.5 L1.5 9 L5 13.5"/><path d="M13 4.5 L16.5 9 L13 13.5"/></g>'
-        + '<g fill="C" opacity="' + opacity + '"><circle cx="6.3" cy="9" r="1.1"/><circle cx="9" cy="9" r="1.1"/><circle cx="11.7" cy="9" r="1.1"/></g>'
-}
-
-// The plain rune, as macOS draws it whether or not anything is connected.
+// The plain rune in a fine line, as macOS draws it whether or not anything is
+// connected.
 function bluetooth(opacity) {
-    return '<path d="M4.8 5.6 L13 12.4 L9 16 V2 L13 5.6 L4.8 12.4" fill="none" stroke="C" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="' + opacity + '"/>'
+    return '<path d="M4.8 5.6 L13 12.4 L9 16 V2 L13 5.6 L4.8 12.4" fill="none" stroke="C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="' + opacity + '"/>'
 }
 
 // The speaker with up to three waves lit, or struck through when muted.
@@ -62,14 +60,15 @@ function g(cp) { return String.fromCodePoint(cp) }
 
 var ICONS = {}
 // Network (network/Model.js): Wi-Fi by strength, restricted, Ethernet, off.
+// Ethernet shows as Wi-Fi too, full when connected, as the bar's network icon.
 ICONS[g(0xF092F)] = wifi(0)
 ICONS[g(0xF091F)] = wifi(1)
 ICONS[g(0xF0922)] = wifi(2)
 ICONS[g(0xF0925)] = wifi(3)
 ICONS[g(0xF0928)] = wifi(4)
 ICONS[g(0xF0929)] = wifi(0, "!")
-ICONS[g(0xF0200)] = ethernet(1)
-ICONS[g(0xF0202)] = ethernet(0.45)
+ICONS[g(0xF0200)] = wifi(4)
+ICONS[g(0xF0202)] = wifi(0)
 ICONS[g(0xF092E)] = wifi(0, "slash")
 // Bluetooth (bluetooth/Panel.qml): off, connected, on.
 ICONS[g(0xF00B2)] = bluetooth(0.4)
@@ -84,6 +83,11 @@ ICONS[g(0xF026)] = speaker(1)
 // Display (monitor/Panel.qml): one screen, several.
 ICONS[g(0xF0379)] = DISPLAY
 ICONS[g(0xF037A)] = DISPLAYS
+// AirDrop, for Omdrop's own drawn icon, which has no glyph to key it by: a
+// dot in three rings open at the bottom.
+ICONS["airdrop"] = '<g fill="none" stroke="C" stroke-width="1.6" stroke-linecap="round">'
+    + '<path d="M7.2 11.54 A2.8 2.8 0 1 1 10.8 11.54"/><path d="M5.66 13.38 A5.2 5.2 0 1 1 12.34 13.38"/>'
+    + '<path d="M4.11 15.22 A7.6 7.6 0 1 1 13.89 15.22"/></g><circle cx="9" cy="9.4" r="1.4" fill="C"/>'
 
 // The SVG for a glyph in a color, or "" for one without a macOS icon, which
 // then keeps Omarchy's glyph.
