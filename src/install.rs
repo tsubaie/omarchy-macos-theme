@@ -248,6 +248,19 @@ pub fn download(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The theme's version: its last commit and that commit's date, such as
+/// "43e4764, 2026-11-01". None when the folder isn't a git checkout.
+pub fn version(dir: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["log", "-1", "--format=%h, %cs"])
+        .output()
+        .ok()?;
+    let version = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    (output.status.success() && !version.is_empty()).then_some(version)
+}
+
 /// A snapshot `install.sh` took, as `--backups --json` lists it.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Backup {

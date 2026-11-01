@@ -20,6 +20,8 @@ pub mod qobject {
         #[qproperty(bool, downloaded)]
         #[qproperty(QString, error)]
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
+        #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
+        #[qproperty(QString, app_version, cxx_name = "appVersion")]
         type ThemeBackend = super::ThemeBackendRust;
 
         /// Reads what is installed again.
@@ -83,6 +85,8 @@ pub struct ThemeBackendRust {
     downloaded: bool,
     error: QString,
     theme_dir: QString,
+    theme_version: QString,
+    app_version: QString,
     dir: PathBuf,
 }
 
@@ -96,6 +100,8 @@ impl Default for ThemeBackendRust {
             downloaded: install::is_downloaded(&dir),
             error: QString::default(),
             theme_dir: QString::from(dir.display().to_string().as_str()),
+            theme_version: QString::default(),
+            app_version: QString::from(env!("CARGO_PKG_VERSION")),
             dir,
         }
     }
@@ -105,6 +111,7 @@ impl Default for ThemeBackendRust {
 struct Outcome {
     status: Result<Status>,
     backups: Result<Vec<Backup>>,
+    version: Option<String>,
     error: Option<String>,
 }
 
@@ -180,6 +187,7 @@ impl qobject::ThemeBackend {
             let outcome = Outcome {
                 status,
                 backups,
+                version: install::version(&dir),
                 error,
             };
             let queued = qt_thread.queue(move |mut backend| {
@@ -193,6 +201,8 @@ impl qobject::ThemeBackend {
     }
 
     fn finish(mut self: Pin<&mut Self>, outcome: Outcome) {
+        self.as_mut()
+            .set_theme_version(QString::from(outcome.version.unwrap_or_default().as_str()));
         let mut error = outcome.error;
         match outcome.status {
             Ok(status) => {
