@@ -146,7 +146,9 @@ Window {
         { id: "overview", title: "About", icon: "about", section: 0,
           keywords: "about version license open source github omarchy" },
         { id: "general", title: "General", icon: "general", section: 1,
-          keywords: "theme colors glass window browser apps electron snap snapping halves corners mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
+          keywords: "theme colors title bars gaps motion wallpapers mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
+        { id: "windows", title: "Windows", icon: "windows", section: 1,
+          keywords: "window glass translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners" },
         { id: "dock", title: "Dock", icon: "dock", section: 1,
           keywords: "dock magnification window previews downloads trash" },
         { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
@@ -419,26 +421,8 @@ Window {
                     SettingRow {
                         label: "macOS theme"
                         note: "Colors, glass, title bars, gaps, motion and wallpapers"
-                        PieceSwitch { piece: "theme" }
-                    }
-                    SettingRow {
-                        label: "Window glass"
-                        note: "How solid windows are; 1 is solid"
-                        SettingSlider { key: "glass"; from: 0.5; to: 1; fallback: 0.7 }
-                    }
-                    SettingRow {
-                        label: "Browser and app glass"
-                        note: "Browsers, web apps and Electron apps"
-                        SettingSlider { key: "web-glass"; from: 0.5; to: 1; fallback: 1 }
-                    }
-                    SettingRow {
-                        label: "Snap windows to halves and corners"
                         last: true
-                        MacSwitch {
-                            checked: window.settingValue("snapping", 1) === 1
-                            enabled: !backend.busy && window.pieceOn("theme")
-                            onToggled: on => window.markSetting("snapping", on ? 1 : 0, 1)
-                        }
+                        PieceSwitch { piece: "theme" }
                     }
                 }
 
@@ -451,6 +435,45 @@ Window {
                     SettingRow { label: "Spotlight-like menu"; PieceSwitch { piece: "wide-menu" } }
                     SettingRow { label: "Volume and brightness capsule"; PieceSwitch { piece: "osd" } }
                     SettingRow { label: "Dictation pill"; note: "For Voxtype"; last: true; PieceSwitch { piece: "dictation-hud" } }
+                }
+            }
+
+            // Windows: how see-through they are, the blur behind them, snapping.
+            Column {
+                visible: backend.downloaded && window.page === "windows"
+                width: parent.width
+                spacing: 18
+
+                Group {
+                    title: "Glass"
+
+                    SettingRow {
+                        label: "Window glass"
+                        note: "How see-through windows are; 1 is solid"
+                        SettingSlider { key: "glass"; from: 0.5; to: 1; fallback: 0.7 }
+                    }
+                    SettingRow {
+                        label: "Browser and Electron app glass"
+                        note: "Browsers, web apps, and Electron apps such as Claude, VS Code, Slack and Discord. Solid by default, since their menus are hard to read on glass."
+                        SettingSlider { key: "web-glass"; from: 0.5; to: 1; fallback: 1 }
+                    }
+                    SettingRow {
+                        label: "Frosted blur"
+                        note: "Blurs what is behind see-through windows, menus, the bar and the dock. Off, they stay see-through, unblurred."
+                        last: true
+                        SettingSwitch { key: "blur" }
+                    }
+                }
+
+                Group {
+                    title: "Arrangement"
+
+                    SettingRow {
+                        label: "Snap windows to halves and corners"
+                        note: "Drag a window by its title bar to an edge or corner of the screen"
+                        last: true
+                        SettingSwitch { key: "snapping" }
+                    }
                 }
             }
 
@@ -889,8 +912,18 @@ Window {
         onToggled: on => window.markPiece(piece, on)
     }
 
+    // A switch for an on/off install.sh setting (1 on, 0 off; on by default).
+    component SettingSwitch: MacSwitch {
+        property string key: ""
+        checked: window.settingValue(key, 1) === 1
+        enabled: !backend.busy && window.pieceOn("theme")
+        onToggled: on => window.markSetting(key, on ? 1 : 0, 1)
+    }
+
     // A slider for one install.sh setting, set when let go.
     component SettingSlider: MacSlider {
+        // The value is drawn to the left of the slider; the row keeps room for it.
+        readonly property int leading: 48
         property string key: ""
         property real fallback: 0
         property string needs: "theme"

@@ -27,7 +27,8 @@ Made for Omarchy 4 and later. Open source, MIT.
 | Page | What's on it |
 |---|---|
 | **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, whether the theme is up to date with an **Update** button when it isn't, and links to both projects |
-| **General** | The theme itself, window glass, browser and app glass, snapping windows to halves and corners, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, and the dictation pill |
+| **General** | The theme itself, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, and the dictation pill |
+| **Windows** | How see-through windows are, the same for browsers and Electron apps (Claude, VS Code, Slack…), the frosted blur behind see-through windows, and snapping windows to halves and corners |
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash) and how far its icons grow |
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |
 | **Widgets** | The desktop widgets: clock, calendar, weather and now playing |
@@ -72,6 +73,7 @@ Turning off **macOS theme** while it's your current Omarchy theme is refused: sw
 |---|---|---|
 | Window glass | 0.5 (see-through) to 1 (solid) | 0.7 |
 | Browser and app glass | 0.5 to 1 | 1 (solid, since browser menus are hard to read on glass) |
+| Frosted blur | on or off; off, see-through windows stay see-through, unblurred | on |
 | Snapping | on or off | on |
 | Dock magnification | 1 (off) to 2 | 1.75 |
 
@@ -153,7 +155,7 @@ To work against a checkout of the theme instead of the downloaded copy:
 OMARCHY_MACOS_THEME_DIR=~/Projects/omarchy-macos-theme ./target/release/omarchy-macos-studio
 ```
 
-Open a given page with `--page <id>`: `overview`, `general`, `dock`, `lock`, `widgets`, `menubar` or `backups`.
+Open a given page with `--page <id>`: `overview`, `general`, `windows`, `dock`, `lock`, `widgets`, `menubar` or `backups`.
 
 ## Project layout
 

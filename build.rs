@@ -14,6 +14,7 @@ fn main() {
         "assets/icon-omarchy.svg",
         "assets/icons/general.svg",
         "assets/icons/dock.svg",
+        "assets/icons/windows.svg",
         "assets/icons/lock.svg",
         "assets/icons/widgets.svg",
         "assets/icons/menubar.svg",

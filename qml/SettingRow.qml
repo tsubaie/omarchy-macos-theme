@@ -25,7 +25,9 @@ Item {
         id: texts
         anchors.verticalCenter: parent.verticalCenter
         x: 14
-        width: parent.width - slot.width - 42
+        // Room for the control, and for anything it shows to its left, such
+        // as a slider's value.
+        width: parent.width - slot.width - 42 - (slot.children.length > 0 && slot.children[0].leading ? slot.children[0].leading : 0)
         spacing: 2
 
         Text {
