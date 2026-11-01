@@ -50,7 +50,7 @@ PanelWindow {
   // leaves it on.
   readonly property bool popupOpen: menuItem !== null || settingsMenu || trashMenu || downloadsMenu
   readonly property bool menuOpen: popupOpen || stackOpen
-  readonly property bool tucked: autohide && !(revealed || menuOpen || dragging || insertIndex >= 0)
+  readonly property bool tucked: autohide && !(revealed || menuOpen || dragging || insertIndex >= 0 || previewSlot !== null)
   readonly property bool contentShown: shown && !tucked
 
   readonly property int gap: Style.spacing.sm
@@ -245,6 +245,7 @@ PanelWindow {
   }
 
   function closeMenu() {
+    window.previewSlot = null
     window.stackOpen = false
     window.trashMenu = false
     window.downloadsMenu = false
@@ -303,6 +304,7 @@ PanelWindow {
     Region { item: menuTail.visible ? menuTail : null }
     Region { item: submenu.visible ? submenu : null }
     Region { item: stack.visible ? stack : null }
+    Region { item: preview.visible ? preview : null }
   }
 
   onAutohideChanged: window.revealed = false
@@ -628,6 +630,7 @@ PanelWindow {
   component UnpinnedSlot: Slot {
     id: unpinnedSlot
     tip: window.appName(unpinnedSlot.modelData)
+    previewItem: unpinnedSlot.modelData
 
     required property var modelData
 
@@ -736,7 +739,7 @@ PanelWindow {
 
     readonly property string text: window.tipSlot ? window.tipSlot.tip : ""
 
-    visible: window.contentShown && text !== "" && !menu.visible && !window.stackOpen && !window.dragging
+    visible: window.contentShown && text !== "" && !menu.visible && !window.stackOpen && !window.dragging && !preview.visible
     width: tipText.implicitWidth + Style.space(20)
     height: tipText.implicitHeight + Style.space(8)
     radius: Style.space(6)
@@ -760,6 +763,118 @@ PanelWindow {
     }
   }
 
+  // Live previews of an app's windows, over its icon after a short hover.
+  // Once one is open, moving to another app switches straight to its windows.
+  // A click on a preview brings that window forward.
+  property Item previewSlot: null
+  property Item previewCandidate: null
+  readonly property var previewWindows: previewSlot && previewSlot.previewItem ? previewSlot.previewItem.windows : []
+  readonly property int previewHeight: Math.round(120 * Style.fontScale)
+
+  function hoverPreview(slot, on) {
+    if (on) {
+      previewLeave.stop()
+      var has = !!slot.previewItem && slot.previewItem.windows.length > 0
+      if (window.previewSlot) window.previewSlot = has ? slot : null
+      else if (has) { window.previewCandidate = slot; previewDwell.restart() }
+    } else {
+      if (window.previewCandidate === slot) { previewDwell.stop(); window.previewCandidate = null }
+      previewLeave.restart()
+    }
+  }
+
+  Timer {
+    id: previewDwell
+    interval: 600
+    onTriggered: if (window.previewCandidate && window.previewCandidate.hovered) window.previewSlot = window.previewCandidate
+  }
+
+  Timer {
+    id: previewLeave
+    interval: 300
+    onTriggered: if (!previewHover.hovered && !(window.previewSlot && window.previewSlot.hovered)) window.previewSlot = null
+  }
+
+  Rectangle {
+    id: preview
+
+    visible: window.contentShown && window.previewWindows.length > 0 && !menu.visible && !window.stackOpen && !window.dragging
+    width: previewRow.implicitWidth + Style.space(16)
+    height: previewRow.implicitHeight + Style.space(16)
+    radius: Style.space(12)
+    color: Qt.rgba(0.11, 0.11, 0.12, 0.88)
+    border.width: 1
+    border.color: Qt.rgba(1, 1, 1, 0.14)
+    readonly property real lift: window.previewSlot ? window.iconSize * (window.previewSlot.magScale - 1) : 0
+    readonly property real along: window.previewSlot ? window.previewSlot.magShift : 0
+    x: window.previewSlot ? window.popupX(window.previewSlot, preview) + (window.vertical ? (window.position === "left" ? preview.lift : -preview.lift) : preview.along) : 0
+    y: window.previewSlot ? window.popupY(window.previewSlot, preview) - Style.space(4) + (window.vertical ? preview.along : (window.position === "top" ? preview.lift : -preview.lift)) : 0
+
+    HoverHandler {
+      id: previewHover
+      onHoveredChanged: hovered ? previewLeave.stop() : previewLeave.restart()
+    }
+
+    Row {
+      id: previewRow
+      anchors.centerIn: parent
+      spacing: Style.space(8)
+
+      Repeater {
+        model: window.previewWindows
+
+        delegate: Rectangle {
+          id: card
+          required property var modelData
+          readonly property real aspect: shot.sourceSize.height > 0 ? shot.sourceSize.width / shot.sourceSize.height : 1.6
+          width: Math.round(Math.max(0.6, Math.min(2, aspect)) * window.previewHeight) + Style.space(12)
+          height: window.previewHeight + title.implicitHeight + Style.space(18)
+          radius: Style.space(8)
+          color: cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+
+          ScreencopyView {
+            id: shot
+            x: Style.space(6)
+            y: Style.space(6)
+            width: parent.width - Style.space(12)
+            height: window.previewHeight
+            captureSource: preview.visible ? card.modelData.toplevel : null
+            live: preview.visible
+            constraintSize: Qt.size(width * 2, height * 2)
+            smooth: true
+          }
+
+          Text {
+            id: title
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Style.space(6)
+            width: parent.width - Style.space(12)
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            text: String(card.modelData.toplevel ? card.modelData.toplevel.title || "" : "")
+            color: card.modelData.minimized ? Qt.rgba(1, 1, 1, 0.55) : "#ffffff"
+            font.family: "Inter"
+            font.pixelSize: Math.round(12 * Style.fontScale)
+          }
+
+          MouseArea {
+            id: cardMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              var target = card.modelData
+              window.closeMenu()
+              if (window.dock) window.dock.bringForward(target)
+            }
+          }
+        }
+      }
+    }
+  }
+
   component Slot: Item {
     id: slot
 
@@ -771,9 +886,13 @@ PanelWindow {
     // The name shown above the icon on hover, as in the macOS dock.
     property string tip: ""
 
+    // The app whose windows a hover previews; null for the other slots.
+    property var previewItem: null
+
     onHoveredChanged: {
       if (hovered) window.tipSlot = slot
       else if (window.tipSlot === slot) window.tipSlot = null
+      window.hoverPreview(slot, hovered)
     }
     Component.onDestruction: if (window.tipSlot === slot) window.tipSlot = null
 
@@ -855,6 +974,7 @@ PanelWindow {
   component AppSlot: Slot {
     id: appSlot
     tip: window.appName(appSlot.modelData)
+    previewItem: appSlot.modelData
 
     required property int index
     required property string key

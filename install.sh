@@ -10,6 +10,7 @@
 #   ./install.sh --wide-menu      + Spotlight-like Omarchy menu: wider, magnifying glass, "Search"
 #   ./install.sh --menubar        + macOS menu bar: Inter, bold app name, Control Center, shade
 #   ./install.sh --lock           + macOS lock screen: date, large clock, account picture, glass field
+#   ./install.sh --widgets        + desktop widgets: clock, calendar, weather, now playing
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above (MacTahoe icons stay)
 #
@@ -22,7 +23,7 @@
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
-#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar lock
+#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
 # have their .lua files and ghostty.conf stripped for safety, and those carry
@@ -56,11 +57,12 @@ MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center
 # drawer rather than leaving the bar, since their panels live in them.
 CONTROL_CENTER_WIDGETS="omarchy.network omarchy.bluetooth omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power"
 SWITCHER_ID="macos-theme.switcher"
+WIDGETS_ID="macos-theme.widgets"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
 # Each piece, by the name --add, --remove and --status use.
-FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar lock"
+FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets"
 declare -A add=() remove=() settings=()
 status=false json=false legacy=false switch_to=""
 (( $# )) || legacy=true
@@ -74,7 +76,8 @@ while (( $# )); do
     --wide-menu) add[wide-menu]=1; legacy=true ;;
     --menubar) add[menubar]=1; legacy=true ;;
     --lock) add[lock]=1; legacy=true ;;
-    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar lock; do add[$f]=1; done; legacy=true ;;
+    --widgets) add[widgets]=1; legacy=true ;;
+    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar lock widgets; do add[$f]=1; done; legacy=true ;;
     --add|--remove)
       [[ " $FEATURES " == *" ${2:-} "* ]] || { echo "Unknown feature: ${2:-} (one of: $FEATURES)" >&2; exit 1; }
       if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
@@ -138,6 +141,7 @@ installed() {
     dictation-hud) [[ -d $PLUGINS_DIR/$HUD_ID ]] ;;
     menubar) [[ -d $PLUGINS_DIR/macos-theme.menubar ]] ;;
     lock) [[ -n $(macos_locks) ]] ;;
+    widgets) [[ -d $PLUGINS_DIR/$WIDGETS_ID ]] ;;
   esac
 }
 
@@ -259,6 +263,11 @@ remove_menubar() {
   done
   say "Removed the menu bar look and put the system widgets back on the bar"
 }
+remove_widgets() {
+  omarchy plugin disable "$WIDGETS_ID" >/dev/null 2>&1 || true
+  rm -rf "${PLUGINS_DIR:?}/$WIDGETS_ID"
+  say "Removed the desktop widgets"
+}
 remove_lock() {
   local dir
   for dir in $(macos_locks); do
@@ -316,7 +325,7 @@ if (( ${#remove[@]} )); then
     exit 1
   fi
   # Plugins before the theme they sit on.
-  for f in lock osd dock wide-menu switcher menubar dictation-hud rows icons theme; do
+  for f in widgets lock osd dock wide-menu switcher menubar dictation-hud rows icons theme; do
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
   say "Done. Backups of edited files end in .bak.$STAMP"
@@ -475,6 +484,10 @@ if want wide-menu; then
   else
     echo "    Could not clone Omarchy's menu; it keeps its own width." >&2
   fi
+fi
+if want widgets; then
+  install_plugin "$WIDGETS_ID"
+  say "Installed the desktop widgets (top left: clock, calendar, weather, now playing)"
 fi
 if want lock; then
   # Clone Omarchy's lock (only a clone may unlock), take this Omarchy's own

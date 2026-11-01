@@ -24,9 +24,10 @@ cd omarchy-macos-theme
 | `--osd` | The frosted volume and brightness capsule |
 | `--dictation-hud` | A dictation pill for [Voxtype](https://voxtype.io) |
 | `--lock` | The macOS lock screen |
+| `--widgets` | Desktop widgets: clock, calendar, weather and now playing |
 | `--all` | All of the above |
 | `--uninstall` | Undo everything (switch to another theme first) |
-| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar` or `lock` |
+| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `lock` or `widgets` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
 | `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
@@ -84,6 +85,7 @@ On floating workspaces, windows behave like a Mac's:
 Omarchy's dock, which appears on floating workspaces, reworked to behave like the macOS Dock:
 
 - A borderless frosted platter with 48px icons, and the app's name on hover.
+- **Window previews**: hover an open app for a moment and live pictures of its windows appear above it, each with its title (dimmed when minimized). Moving to another app switches to its windows; click one to bring it forward.
 - **Magnification** like macOS: icons near the pointer grow (up to 1.75×) and their neighbors slide aside, with the platter stretching to fit. Change `magnifyPeak` in `DockWindow.qml` for more or less.
 - **Pinned apps on the left.** Running apps that aren't pinned sit to the right of a divider, minimized or not.
 - **A dot under every running app.** Pins survive restarts.
@@ -141,6 +143,14 @@ Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, 
 
   ![Dictation HUD](docs/screenshots/dictation-hud.png)
 
+### Desktop widgets (`--widgets`)
+- A column at the top left of the desktop, behind your windows, on frosted glass:
+  - **Clock**: an analog face with a red second hand.
+  - **Calendar**: the month, with today in a red disc; the week starts as your language has it.
+  - **Weather**: the place, temperature, sky, and today's high and low, on blue by day and navy by night. It uses the place you gave Omarchy's weather, or Omarchy's own lookup of your city, and [Open-Meteo](https://open-meteo.com), every 15 minutes; °F only where it is the custom.
+  - **Now Playing**: the artwork, song and artist, with previous, play/pause and next, from Omarchy's media service.
+- They show on your first screen. To pick another, add `"widgets": { "screen": "HDMI-A-1" }` to `~/.config/omarchy/shell.json`, with a name from `hyprctl monitors`; they move right away.
+
 ### Lock screen (`--lock`)
 - The date and a large clock at the top, in 12- or 24-hour time as your bar's clock shows it, over the sharp wallpaper.
 - Your account picture (`~/.face`, or your initial on a gray disc), your name and a glass password pill at the bottom, with an arrow to submit and the fingerprint icon when one is enrolled.
@@ -160,6 +170,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | `macos-theme.switcher` | `--switcher` | Nothing; adds the Alt+Tab and Super+Tab switchers |
 | `macos-theme.osd` | `--osd` | Omarchy's on-screen display (`omarchy.osd` is turned off) |
 | `macos-theme.dictation-hud` | `--dictation-hud` | Nothing; adds a pill for Voxtype |
+| `macos-theme.widgets` | `--widgets` | Nothing; adds the desktop widgets |
 | A clone of `omarchy.lock`, named after your user | `--lock` | Omarchy's lock screen (`omarchy.lock` is turned off) |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
 | `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets move to the bar's tray drawer |

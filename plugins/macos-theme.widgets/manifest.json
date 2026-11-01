@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.widgets",
+  "name": "Desktop Widgets",
+  "version": "1.0.0",
+  "description": "macOS-style desktop widgets: clock, calendar, weather and now playing, in a column at the top left.",
+  "license": "MIT",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Widgets.qml"
+  }
+}
