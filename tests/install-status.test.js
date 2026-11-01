@@ -22,6 +22,11 @@ if [ "$1 $2" = "plugin clone" ]; then
   printf '{ "omarchy": { "clonedFrom": "%s" } }' "$3" > "$dir/manifest.json"
   echo "Cloned $3 to $dir and switched"
 fi
+# A bar move leaves a mark in shell.json, so a test can tell the bar was rearranged.
+if [ "$1" = "bar" ] && [ -s "$XDG_CONFIG_HOME/omarchy/shell.json" ]; then
+  jq '.bar.layout.left = ((.bar.layout.left // []) + [{"id": "moved"}])' "$XDG_CONFIG_HOME/omarchy/shell.json" > "$XDG_CONFIG_HOME/omarchy/shell.json.tmp" &&
+    mv "$XDG_CONFIG_HOME/omarchy/shell.json.tmp" "$XDG_CONFIG_HOME/omarchy/shell.json"
+fi
 exit 0
 `, { mode: 0o755 })
 
@@ -106,9 +111,15 @@ try {
   assert.strictEqual(run("--preview", "--set", "blur=21").status, 1)
   assert.strictEqual(run("--preview", "--set", "clock=left").status, 1)
   assert.strictEqual(run("--set", "blur=15", "--set", "dock-size=60").status, 0)
+  const before = status().settings
   const removed = run("--remove", "theme")
   assert.strictEqual(removed.status, 0, removed.stdout + removed.stderr)
   assert.strictEqual(status().features.theme, false)
+  // Added again, it is as you left it: your settings and wallpapers.
+  assert.strictEqual(run("--add", "theme").status, 0)
+  assert.deepStrictEqual(status().settings, before)
+  assert.ok(fs.existsSync(path.join(themeDir, "backgrounds/mine.jpg")))
+  assert.strictEqual(run("--remove", "theme").status, 0)
   const kept = fs.readdirSync(path.join(home, ".config/omarchy/macos-theme-backups"))
   assert.ok(kept.some((d) => fs.existsSync(path.join(home, ".config/omarchy/macos-theme-backups", d, "backgrounds/mine.jpg"))))
 
@@ -168,6 +179,22 @@ try {
   fs.rmSync(shellJson)
   assert.strictEqual(run("--show-widgets", "calendar").status, 0)
   assert.deepStrictEqual(status().widgets, ["calendar"])
+
+  // The menu bar removed and added again gets back the bar you arranged.
+  const arranged = { left: [{ id: "omarchy.workspaces" }], center: [], right: [{ id: "omarchy.clock" }, { id: "omarchy.network" }] }
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: arranged } }))
+  fs.mkdirSync(path.join(home, ".config/omarchy/plugins/macos-theme.menubar"), { recursive: true })
+  assert.strictEqual(run("--remove", "menubar").status, 0)
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: { left: [], right: [] } } }))
+  const back = run("--add", "menubar")
+  assert.strictEqual(back.status, 0, back.stderr)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout, arranged)
+
+  // Installed again, the menu bar leaves the bar exactly as you arranged it.
+  const mine = { left: [{ id: "macos-theme.app-name" }], right: [{ id: "omarchy.clock" }] }
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: mine } }))
+  assert.strictEqual(run("--add", "menubar").status, 0)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout, mine)
 
   // Unknown pieces are refused.
   assert.strictEqual(run("--remove", "everything").status, 1)

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Builds HudIcons.js from the Icons8 SVGs here (see ../icons8.json) for the
-volume and dictation HUDs: each icon's path, drawn in the color asked for.
+volume and dictation HUDs, and LayoutIcons.js from workspaces/icons/ (see
+workspaces/icons8.json) for the bar's workspace layouts: each icon's path,
+drawn in the color asked for.
 Run it after changing an SVG: python3 plugins/macos-theme.osd/icons/make.py"""
 import json, pathlib, re
 
@@ -44,3 +46,14 @@ if (typeof module !== "undefined") module.exports = { icon: icon, base64: base64
 for plugin in ("macos-theme.osd", "macos-theme.dictation-hud"):
     (here.parent.parent / plugin / "HudIcons.js").write_text(js)
 print("HudIcons.js:", ", ".join(paths))
+
+# The same for the workspace layouts, from workspaces/icons/, as
+# workspaces/LayoutIcons.js (the bar and its layout menu draw them).
+layouts = here.parent.parent.parent / "workspaces"
+layout_paths = {}
+for svg in sorted((layouts / "icons").glob("*.svg")):
+    text = svg.read_text()
+    assert 'viewBox="0 0 50 50"' in text, svg
+    layout_paths[svg.stem] = re.findall(r' d="([^"]+)"', text)
+(layouts / "LayoutIcons.js").write_text(js.replace("var PATHS = %s" % json.dumps(paths, indent=2), "var PATHS = %s" % json.dumps(layout_paths, indent=2)).replace("The HUD icons", "The workspace layout icons"))
+print("LayoutIcons.js:", ", ".join(layout_paths))

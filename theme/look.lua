@@ -56,7 +56,17 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOut
 
 -- Frosted glass behind the bar (it is almost clear, so blur every pixel of it)
 -- and behind the dock, menus, launcher, notifications and popups.
-hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popups = true, ignore_alpha = 0.0 })
+local function bar_glass()
+  hl.layer_rule({ match = { namespace = "^omarchy-bar$" }, blur = true, blur_popups = true, ignore_alpha = 0.0 })
+end
+bar_glass()
+-- Omarchy's Glassy bar and window toggles load after this file. Their blur
+-- (default.hypr.glass: size 4, 2 passes) would replace BLUR, and their bar
+-- rule skips anything under 30% opaque, which the theme's clear bar is: no
+-- blur at all. So their blur does nothing while this theme is current, and
+-- the bar's rule is set again once the whole config has loaded.
+package.loaded["default.hypr.glass"] = function() end
+hl.on("config.reloaded", bar_glass)
 hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher|widgets)$" }, blur = true, ignore_alpha = 0.3 })
 -- The volume and dictation HUDs are light glass, as Control Center is: blur
 -- under all but their clear pixels.
@@ -455,19 +465,36 @@ local function drop(window, drag, cursor)
   end
 end
 
+-- A floating window's title bar is its only handle: one moved above the
+-- screen (opened too high, or moved by an app or a script) could never be
+-- dragged back. So a floating window keeps its title bar below the bar and
+-- above the bottom, with REACHABLE of it on screen sideways; it slides back
+-- as little as that takes. Checked on the active window while it is not
+-- dragged, so one stuck off screen comes back as soon as it is clicked.
+local REACHABLE = 120
+local function keep_reachable(window)
+  if not window.floating or (window.fullscreen or 0) ~= 0 or not window.monitor or not window.monitor.width then return end
+  local x, y, width, height = usable_area(window.monitor)
+  local bar = hl.plugin.hyprbars and BAR_HEIGHT or 0
+  local nx = math.max(x + REACHABLE - window.size.x, math.min(window.at.x, x + width - REACHABLE))
+  local ny = math.max(y + bar, math.min(window.at.y, y + height - REACHABLE + bar))
+  if nx ~= window.at.x or ny ~= window.at.y then
+    hl.dispatch(hl.dsp.window.move({ x = math.floor(nx), y = math.floor(ny), window = window }))
+  end
+end
+
 local function snap_tick()
   local window = hl.get_active_window()
   local cursor = hl.get_cursor_pos()
   local seen = snap_seen
   snap_seen = nil
   -- Floating windows on a floating workspace snap; any other window can
-  -- only be dropped onto another workspace.
+  -- only be dropped onto another workspace (and is still watched, to keep
+  -- its title bar in reach).
   if window and (window.fullscreen or 0) == 0 and window.monitor then
     local floating = window.floating and on_floating_workspace(window) and SNAPPING == 1
-    if floating or STRIP then
-      snap_seen = { address = window.address, x = window.at.x, y = window.at.y, w = window.size.x, h = window.size.y,
-                    cx = cursor.x, cy = cursor.y, floating = floating }
-    end
+    snap_seen = { address = window.address, x = window.at.x, y = window.at.y, w = window.size.x, h = window.size.y,
+                  cx = cursor.x, cy = cursor.y, floating = floating }
   end
   local now = snap_seen
   if seen and now and seen.address == now.address and snap_drag and snap_drag.unsnapped and not snap_drag.resized then
@@ -526,10 +553,14 @@ local function snap_tick()
       snap_drag = nil
     end
   end
+  -- Still, and no drag on: keep its title bar in reach.
+  if window and not snap_drag and seen and seen.address == window.address and seen.x == window.at.x and seen.y == window.at.y then
+    keep_reachable(window)
+  end
   hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
 end
 
-if SNAPPING == 1 or STRIP then hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK }) end
+hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
 
 -- Letting go of a drag refocuses the window, which Hyprland reports even
 -- though it already had focus: that is the release, so snap right away.

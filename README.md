@@ -89,6 +89,7 @@ On floating workspaces, windows behave like a Mac's:
   - to the very middle of the top edge (with `--switcher`) to move it to another workspace: see below.
 
   The left and right edges count when the window's own edge reaches them, not only the pointer, so it doesn't matter where you hold the title bar. A frosted outline shows the spot while you drag (with `--dock`), and the window snaps when you let go.
+- **A title bar always in reach**: a floating window that ends up above the screen, below it or almost off a side (opened too high, or moved by an app) slides back as soon as it's the active window, just far enough that its title bar is on screen to drag. Super + drag moves any window from anywhere in it too.
 - **Snapped windows make room for each other**: a window snapped beside a full-screen one takes its half and the other gives way, and a half gives way to a quarter.
 - **Drag a snapped window out** and it gets its own size back.
 - **Windows moved here from a tiled workspace** float at a regular size in the middle, instead of filling the screen, and come to the front.
@@ -148,6 +149,7 @@ The bar as macOS Tahoe draws it:
 - **Control Center**: one icon by the clock, laid out as macOS has it on the glass of your windows (it follows the Glass setting): Wi-Fi and Bluetooth beside what is playing, with its controls; Tailscale, Focus (Do Not Disturb), Display and Power; then brightness and sound sliders. A click on a switch's round icon turns it on or off; anywhere else on it opens Omarchy's own panel, on the monitor you clicked. Power opens in place to Lock, Log Out, Restart and Shut Down, the last three on a second click. The widgets it stands in for stay on the bar, unseen, which keeps their panels working and their updates coming; only those you have on the bar show in it.
 - **Camera and microphone in use**: a green and an orange dot by Control Center while an app has the camera or the microphone, and its name at the top of Control Center (for two minutes after, "recently").
 - **A soft shade** behind the see-through bar, as Tahoe has, so it reads on any wallpaper.
+- **Workspaces you click to go to**: a click always goes to a workspace, and a right-click opens its menu, as a macOS menu-bar item's: Tiling, Scrolling or Floating, each with an icon that maps its windows (Icons8), with a check by the one it has, set without going there, and an item to make it the layout of new workspaces. The workspace you're on shows its layout's icon on a soft light pill, as macOS lights an open menu-bar item. Super+L still cycles the shown one's. (Omarchy's own cycles the layout on a click on the shown workspace.)
 - **macOS's arrangement** for Omarchy's own widgets. The right end holds only the tray drawer, the keyboard layout, Control Center and the clock, with the notification bell past it if you have it. The status widgets (indicators, world clock, weather, system update) sit in the middle, and the agents widget joins the drawer.
 
 Widgets from other plugins stay where you put them. To show or hide any widget, drag it between the bar and the tray drawer (the "<"). `--uninstall` puts Omarchy's widgets back in its default layout.
@@ -158,7 +160,7 @@ Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, 
 
 ### macOS bar icons (`--bar-icons`)
 
-macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widgets, when they are on the bar (Control Center hides them). The widgets stay Omarchy's, updates and all: only the icon they draw changes, and Omarchy's comes back for any state without a macOS one.
+macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widgets, when they are on the bar (Control Center hides them), and a robot in a speech bubble (Icons8's Message Bot) for its Agents widget, still lit in the alert color when an account runs low. The widgets stay Omarchy's, updates and all: only the icon they draw changes, and Omarchy's comes back for any state without a macOS one.
 
 ### Volume panel (`--osd`) and dictation HUD (`--dictation-hud`)
 
@@ -208,6 +210,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | A clone of `omarchy.lock`, named after your user | `--lock` | Omarchy's lock screen (`omarchy.lock` is turned off) |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
 | `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets stay on the bar unseen, opened from Control Center |
+| A clone of `omarchy.workspaces`, named after your user, with `WorkspaceMenu.qml` and the layout icons | `--menubar` | Omarchy's workspaces on the bar; a click goes to a workspace, a right-click opens its layout menu. Each `--menubar` takes Omarchy's widget afresh and patches it, so its updates come along |
 
 `--icons` installs the MacTahoe icon theme, which is not a plugin, into `~/.local/share/icons`.
 

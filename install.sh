@@ -63,6 +63,9 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 THEME_DIR="$CONFIG/omarchy/themes/macos"
 # Outside themes/, or every backup would show up in the theme picker.
 BACKUP_DIR="$CONFIG/omarchy/macos-theme-backups"
+# The bar's arrangement when the menu bar was last removed, to come back with
+# it (a piece removed and added again keeps your settings).
+BAR_REMEMBERED="$BACKUP_DIR/bar-layout.json"
 PLUGINS_DIR="$CONFIG/omarchy/plugins"
 LOOKNFEEL="$CONFIG/hypr/looknfeel.lua"
 GTK_CSS="$CONFIG/gtk-4.0/gtk.css"
@@ -171,6 +174,17 @@ wide_menus() {
   local dir
   for dir in "$PLUGINS_DIR"/*.menu; do
     [[ -f $dir/Menu.qml ]] && grep -q "macOS theme: wider" "$dir/Menu.qml" && echo "$dir"
+  done
+  return 0
+}
+
+# The bar's workspaces are a clone of Omarchy's widget, patched by
+# workspaces-patch.pl so a right-click opens a layout menu (WorkspaceMenu.qml).
+WORKSPACES_MARK="macOS theme: a click always goes"
+workspaces_clones() {
+  local dir
+  for dir in "$PLUGINS_DIR"/*; do
+    grep -qs '"clonedFrom": "omarchy.workspaces"' "$dir/manifest.json" && echo "$dir"
   done
   return 0
 }
@@ -466,9 +480,21 @@ remove_switcher() {
 }
 remove_menubar() {
   local id after=omarchy.tray
+  # The arrangement you made, for when the menu bar comes back.
+  mkdir -p "$BACKUP_DIR"
+  jq -e '.bar.layout | objects' "$SHELL_JSON" >"$BAR_REMEMBERED" 2>/dev/null || rm -f "$BAR_REMEMBERED"
   for id in $MENUBAR_IDS; do
     omarchy plugin disable "$id" >/dev/null 2>&1 || true
     rm -rf "${PLUGINS_DIR:?}/$id"
+  done
+  # Omarchy's workspaces back, after the menu button, in place of the
+  # theme's clone (a clone of the user's own is left be).
+  local dir
+  for dir in $(workspaces_clones); do
+    grep -qsF "$WORKSPACES_MARK" "$dir/Workspaces.qml" || continue
+    omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
+    omarchy plugin enable omarchy.workspaces --section left --index 1 >/dev/null 2>&1 || true
+    rm -rf "${dir:?}"
   done
   # Omarchy's widgets back to its default bar: the clock in the middle, the
   # system icons in a row after the tray.
@@ -603,17 +629,22 @@ want() { [[ -n ${add[$1]:-} ]]; }
 # 1. The theme, as a local theme (so its .lua and ghostty.conf are kept).
 if want theme; then
   declare -A kept_look=()
-  if [[ -f $THEME_DIR/look.lua ]]; then
-    for k in $LOOK_SETTINGS; do kept_look[$k]=$(look_get "$k"); done
+  # The settings and wallpapers come from the theme installed, or, when it
+  # was removed, from the copy kept then: added again, it is as you left it.
+  from=$THEME_DIR
+  [[ -f $from/look.lua ]] || from=$(ls -dt "$BACKUP_DIR"/macos.*/ 2>/dev/null | head -n1) || true
+  if [[ -n $from && -f $from/look.lua ]]; then
+    for k in $LOOK_SETTINGS; do kept_look[$k]=$(THEME_DIR=$from look_get "$k"); done
   fi
   if [[ -d $THEME_DIR ]]; then
     keep_theme
     say "Backed up your existing macos theme to $kept"
+    from=$kept
   fi
   mkdir -p "$THEME_DIR"
   cp -r "$REPO/theme/." "$THEME_DIR/"
   # Wallpapers and files you added stay; the theme's own files are the new ones.
-  [[ -n $kept ]] && cp -rn "$kept/." "$THEME_DIR/"
+  [[ -n $from && -d $from ]] && cp -rn "${from%/}/." "$THEME_DIR/"
   # So do the settings you chose.
   for k in "${!kept_look[@]}"; do look_set "$k" "${kept_look[$k]}"; done
   say "Installed the theme to $THEME_DIR"
@@ -704,40 +735,66 @@ if want switcher; then
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
 fi
 if want menubar; then
-  # A re-run keeps the clock where the user put it (--set clock).
-  keep_clock=; installed menubar && keep_clock=$(clock_position)
-  # A re-run keeps the widgets Control Center stands in for where they are, as
-  # the Menu Bar page may have put some of them on the bar.
+  # Installed already, this only updates the plugins: the bar stays exactly
+  # as you arranged it, put back as it was once they are in.
   fresh=true; installed menubar && fresh=false
+  kept_layout=
+  $fresh || kept_layout=$(jq -ce '.bar.layout | objects' "$SHELL_JSON" 2>/dev/null) || true
   for id in $MENUBAR_IDS; do install_plugin "$id"; done
-  # The bold app name follows the menu button, as on macOS, and Control Center
-  # sits by the clock; the widgets it stands in for go to the tray drawer the
-  # first time.
-  omarchy bar put macos-theme.app-name --section left >/dev/null 2>&1 || true
-  omarchy bar move macos-theme.app-name --before omarchy.workspaces >/dev/null 2>&1 || true
-  omarchy bar move omarchy.clock --section right >/dev/null 2>&1 || true
-  omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
-  omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
-  [[ -n $keep_clock ]] && { set_clock "$keep_clock" 2>/dev/null || true; }
-  if $fresh; then
+  # The workspaces: a click goes there, a right-click picks the layout, as a
+  # macOS menu-bar item's menu does (Omarchy's cycles the shown one's layout
+  # on a click). A clone of this Omarchy's widget, patched; none yet means
+  # making one.
+  ws_dir=$(workspaces_clones | head -n1)
+  [[ -n $ws_dir ]] || ws_dir=$(omarchy plugin clone omarchy.workspaces 2>/dev/null | sed -n 's/^Cloned omarchy.workspaces to \(.*\) and switched.*/\1/p')
+  if [[ -n $ws_dir && -f $ws_dir/Workspaces.qml ]]; then
+    # This Omarchy's own widget each time, then patched: its updates come
+    # along, and so does a newer patch.
+    ws_src=$(omarchy-plugin-catalog 2>/dev/null | jq -r '.[] | select(.firstParty and .id == "omarchy.workspaces") | .sourceDir' | head -n1) || true
+    [[ -n $ws_src && -f $ws_src/Workspaces.qml ]] && cp "$ws_src/Workspaces.qml" "$ws_dir/Workspaces.qml"
+    cp "$REPO"/workspaces/{WorkspaceMenu.qml,LayoutIcon.qml,LayoutIcons.js} "$ws_dir/"
+    perl -0pi "$REPO/workspaces-patch.pl" "$ws_dir/Workspaces.qml"
+    grep -qF "$WORKSPACES_MARK" "$ws_dir/Workspaces.qml" ||
+      echo "    Could not patch this Omarchy version's workspaces; a click on the shown one still cycles its layout." >&2
+  else
+    echo "    Could not clone Omarchy's workspaces; a click on the shown one still cycles its layout." >&2
+  fi
+  if [[ -n $kept_layout ]]; then
+    # The arrangement as it was, the workspaces being this clone's.
+    [[ -n $ws_dir ]] && kept_layout=$(jq -c --arg ws "$(basename "$ws_dir")" \
+      'walk(if type == "object" and .id? == "omarchy.workspaces" then .id = $ws else . end)' <<<"$kept_layout")
+    shell_set '.bar.layout' "$kept_layout"
+  elif [[ -s $BAR_REMEMBERED ]] && layout=$(jq -ce 'objects' "$BAR_REMEMBERED" 2>/dev/null); then
+    # Back after being removed: the arrangement it had then.
+    shell_set '.bar.layout' "$layout"
+    rm -f "$BAR_REMEMBERED"
+    say "Put the bar back as you had arranged it"
+  else
+    # The first time, macOS's arrangement: the bold app name after the menu
+    # button, Control Center by the clock, and the widgets it stands in for in
+    # the tray drawer; Omarchy's other widgets as macOS keeps their like,
+    # status in the middle, the input menu by Control Center, the bell past
+    # the clock. Widgets from other plugins stay where their owner put them.
+    omarchy bar put macos-theme.app-name --section left >/dev/null 2>&1 || true
+    omarchy bar move macos-theme.app-name --before omarchy.workspaces >/dev/null 2>&1 || true
+    omarchy bar move omarchy.clock --section right >/dev/null 2>&1 || true
+    omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
+    omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
     for id in $CONTROL_CENTER_WIDGETS; do
       omarchy bar move "$id" --section tray >/dev/null 2>&1 || true
     done
+    for move in \
+      "omarchy.tray --section right --index 0" \
+      "omarchy.keyboard-layout --before macos-theme.control-center" \
+      "omarchy.agents --section tray" \
+      "omarchy.indicators --section centerBegin" \
+      "omarchy.elsewhen --section centerEnd --index 0" \
+      "omarchy.weather --after omarchy.elsewhen" \
+      "omarchy.system-update --after omarchy.weather" \
+      "jankeesvw.notification-center --after omarchy.clock"; do
+      omarchy bar move $move >/dev/null 2>&1 || true
+    done
   fi
-  # Omarchy's other widgets as macOS keeps their like: status in the middle,
-  # the input menu by Control Center, the bell past the clock. Widgets from
-  # other plugins stay where their owner put them.
-  for move in \
-    "omarchy.tray --section right --index 0" \
-    "omarchy.keyboard-layout --before macos-theme.control-center" \
-    "omarchy.agents --section tray" \
-    "omarchy.indicators --section centerBegin" \
-    "omarchy.elsewhen --section centerEnd --index 0" \
-    "omarchy.weather --after omarchy.elsewhen" \
-    "omarchy.system-update --after omarchy.weather" \
-    "jankeesvw.notification-center --after omarchy.clock"; do
-    omarchy bar move $move >/dev/null 2>&1 || true
-  done
   say "Installed the macOS menu bar (Inter, app name, Control Center, a shade for legibility)"
 fi
 [[ -n $(fc-list Inter) ]] || echo "    The theme uses the Inter font, which is not installed. Install it with: sudo pacman -S inter-font" >&2

@@ -803,7 +803,7 @@ BarWidget {
     id: glyphCircle
     property string glyph
     property bool on: false
-    // AirDrop's mark, which no font has: a dot in rings open at the bottom.
+    // AirDrop's mark, which no font has: Icons8's, rings open at the bottom around a dot.
     property bool airdrop: false
 
     width: Style.space(34)
@@ -819,24 +819,19 @@ BarWidget {
       font.pixelSize: Math.round(parent.width * 0.52)
     }
 
+    // Icons8's AirDrop (icons8.com, ios), drawn for 30 units, as vector
+    // shapes so it is sharp at any size.
     Shape {
       visible: glyphCircle.airdrop
       anchors.centerIn: parent
-      width: 18
-      height: 18
-      scale: glyphCircle.width * 0.56 / 18
+      width: 30
+      height: 30
+      scale: glyphCircle.width * 0.6 / 30
       preferredRendererType: Shape.CurveRenderer
-      ShapePath {
-        strokeColor: glyphCircle.on ? "#ffffff" : root.ink
-        fillColor: "transparent"
-        strokeWidth: 1.6
-        capStyle: ShapePath.RoundCap
-        PathSvg { path: "M7.2 11.54 A2.8 2.8 0 1 1 10.8 11.54 M5.66 13.38 A5.2 5.2 0 1 1 12.34 13.38 M4.11 15.22 A7.6 7.6 0 1 1 13.89 15.22" }
-      }
       ShapePath {
         strokeColor: "transparent"
         fillColor: glyphCircle.on ? "#ffffff" : root.ink
-        PathSvg { path: "M7.6 9.4 A1.4 1.4 0 1 0 10.4 9.4 A1.4 1.4 0 1 0 7.6 9.4 Z" }
+        PathSvg { path: "M15,3c-7.168,0 -13,5.832 -13,13c0,4.774 2.59345,8.94408 6.43945,11.20508l1.08008,-1.68164c-3.293,-1.903 -5.51953,-5.45444 -5.51953,-9.52344c0,-6.065 4.935,-11 11,-11c6.065,0 11,4.935 11,11c0,4.069 -2.22653,7.62044 -5.51953,9.52344l1.08008,1.68164c3.846,-2.261 6.43945,-6.43108 6.43945,-11.20508c0,-7.168 -5.832,-13 -13,-13zM15,7c-4.962,0 -9,4.038 -9,9c0,3.364 1.85956,6.29975 4.60156,7.84375l1.08008,-1.68359c-2.19,-1.184 -3.68164,-3.50016 -3.68164,-6.16016c0,-3.86 3.14,-7 7,-7c3.86,0 7,3.14 7,7c0,2.66 -1.49164,4.97711 -3.68164,6.16211l1.08008,1.68164c2.742,-1.545 4.60156,-4.47975 4.60156,-7.84375c0,-4.962 -4.038,-9 -9,-9zM15,11c-2.757,0 -5,2.243 -5,5c0,1.955 1.13834,3.63308 2.77734,4.45508l1.08203,-1.68164c-1.09,-0.45 -1.85937,-1.52244 -1.85937,-2.77344c0,-1.654 1.346,-3 3,-3c1.654,0 3,1.346 3,3c0,1.251 -0.77033,2.32248 -1.86133,2.77148l1.08203,1.68359c1.64,-0.821 2.7793,-2.50008 2.7793,-4.45508c0,-2.757 -2.243,-5 -5,-5zM15,15c-0.55228,0 -1,0.44772 -1,1c0,0.55228 0.44772,1 1,1c0.55228,0 1,-0.44772 1,-1c0,-0.55228 -0.44772,-1 -1,-1z" }
       }
     }
   }

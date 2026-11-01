@@ -1,11 +1,13 @@
 import QtQuick
+import Quickshell
 import "Icons.js" as Icons
 
 // macOS style icons on Omarchy's own Network, Bluetooth, Audio and Display
-// widgets. They stay Omarchy's widgets, updates and all: this only hands each
-// one's bar button an icon for the glyph it picked, and Omarchy's glyph comes
-// back for any it shows that has no macOS icon, or when this is removed.
-// It sits on the bar, unseen, as that is where the widgets are within reach.
+// widgets, and a chat bot on its Agents widget. They stay Omarchy's widgets,
+// updates and all: this only hands each one's bar button an icon for the
+// glyph it picked, and Omarchy's glyph comes back for any it shows that has
+// no icon here, or when this is removed. It sits on the bar, unseen, as that
+// is where the widgets are within reach.
 Item {
     id: root
 
@@ -14,7 +16,7 @@ Item {
     property string moduleName: ""
     property var settings: ({})
 
-    readonly property var widgets: ["omarchy.network", "omarchy.bluetooth", "omarchy.audio", "omarchy.monitor"]
+    readonly property var widgets: ["omarchy.network", "omarchy.bluetooth", "omarchy.audio", "omarchy.monitor", "omarchy.agents"]
     property var patched: []
     // Omdrop draws its own icon rather than a glyph: its button gets AirDrop's,
     // and its own comes back when this is removed.
@@ -97,11 +99,15 @@ Item {
             }
             readonly property color tint: !button ? "white"
                 : (button.active && button.useActiveColor ? button.activeColor : button.foreground)
-            width: 18
-            height: 18
-            sourceSize: Qt.size(72, 72)
+            // Drawn at exactly the pixels it covers: rendered large and scaled
+            // down, or at a size between pixels (18 points is 22.5 pixels at a
+            // 1.25 scale), an icon's edges come out soft. Qt renders an SVG at
+            // its source size times the screen's scale.
+            readonly property real dpr: QsWindow.window ? QsWindow.window.devicePixelRatio : 1
+            width: Math.round(18 * dpr) / dpr
+            height: width
+            sourceSize: Qt.size(width, height)
             smooth: true
-            mipmap: true
             source: button ? Icons.source(button.text, tint.toString()) : ""
         }
     }
@@ -120,11 +126,15 @@ Item {
             readonly property var widget: button ? button.parent : null
             readonly property color tint: widget && widget.barIconColor !== undefined ? widget.barIconColor
                 : button ? button.foreground : "white"
-            width: 18
-            height: 18
-            sourceSize: Qt.size(72, 72)
+            // Drawn at exactly the pixels it covers: rendered large and scaled
+            // down, or at a size between pixels (18 points is 22.5 pixels at a
+            // 1.25 scale), an icon's edges come out soft. Qt renders an SVG at
+            // its source size times the screen's scale.
+            readonly property real dpr: QsWindow.window ? QsWindow.window.devicePixelRatio : 1
+            width: Math.round(18 * dpr) / dpr
+            height: width
+            sourceSize: Qt.size(width, height)
             smooth: true
-            mipmap: true
             opacity: widget && widget.usable === false ? 0.45 : 1
             source: Icons.source("airdrop", tint.toString())
         }
