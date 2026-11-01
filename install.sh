@@ -246,7 +246,7 @@ bar_widgets() {
     [.[] | select((.kinds // []) | index("bar-widget"))] as $all
     | ([$all[] | select(.enabled and .clonedFrom != "") | .clonedFrom]) as $replaced
     | [$all[] | select((.id as $id | $replaced | index($id)) | not)]
-    | map({key: .id, value: {name: .name, enabled: .enabled}}) | from_entries' 2>/dev/null || echo "{}"
+    | map({key: .id, value: {name: .name, enabled: .enabled, drawer: (.id == "omarchy.tray" or .clonedFrom == "omarchy.tray")}}) | from_entries' 2>/dev/null || echo "{}"
 }
 
 # The bar as {sections: {left: [{id, name}], …}, hidden: [{id, name}]}.
@@ -257,7 +257,7 @@ bar_json() {
   jq -n --argjson w "$widgets" --argjson l "$layout" --arg order "$BAR_SECTIONS" '
     ($order | split(" ")) as $sections
     | ([$sections[] as $s | ($l[$s] // [])[] | .id? // empty]) as $placed
-    | {sections: ($sections | map({key: ., value: [($l[.] // [])[] | .id? // empty | {id: ., name: ($w[.].name // .)}]}) | from_entries),
+    | {sections: ($sections | map({key: ., value: [($l[.] // [])[] | .id? // empty | {id: ., name: ($w[.].name // .)} + (if $w[.].drawer then {drawer: true} else {} end)]}) | from_entries),
        hidden: [$w | to_entries[] | select((.value.enabled | not) and (.key as $id | $placed | index($id) | not)) | {id: .key, name: .value.name}] | sort_by(.name)}'
 }
 

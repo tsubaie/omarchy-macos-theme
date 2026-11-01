@@ -38,7 +38,8 @@ try {
   // but not one that a turned-on copy stands in for.
   const bar = JSON.parse(run("--bar", "--json").stdout)
   assert.deepStrictEqual(bar.sections.right, [{ id: "omarchy.weather", name: "Weather" }, { id: "omarchy.clock", name: "Clock" }])
-  assert.deepStrictEqual(bar.sections.left, [{ id: "me.tray", name: "My tray" }])
+  // The tray, which holds the drawer's items, is marked as such.
+  assert.deepStrictEqual(bar.sections.left, [{ id: "me.tray", name: "My tray", drawer: true }])
   assert.deepStrictEqual(bar.hidden, [{ id: "omarchy.media", name: "Media" }])
 
   // Hide Weather, show Media at the front of the right, Clock after it.
