@@ -9,7 +9,12 @@ Item {
     property real to: 1
     property real value: 0
     property bool enabled: true
+    property string accessibleName: ""
     signal moved(real value)
+
+    Accessible.role: Accessible.Slider
+    Accessible.name: accessibleName
+    Accessible.description: shown.toFixed(2)
 
     // While dragging it shows where the knob is, and otherwise the value it
     // is given, so it follows the setting again once the theme has it.
@@ -54,7 +59,6 @@ Item {
         id: area
         anchors.fill: parent
         enabled: root.enabled
-        cursorShape: Qt.PointingHandCursor
         function valueAt(mouseX) {
             const p = Math.max(0, Math.min(1, (mouseX - knob.width / 2) / track.width))
             return root.from + p * (root.to - root.from)

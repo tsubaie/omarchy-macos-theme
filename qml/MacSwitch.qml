@@ -1,22 +1,32 @@
 import QtQuick
 
-// The macOS switch: a green capsule when on, gray when off, with a white knob
-// that slides across.
+// The macOS switch: the accent blue when on, gray when off, with a white knob
+// that slides across. The small size, as macOS uses inside grouped rows so
+// they keep one height (HIG, Toggles: "consider using a mini switch").
 Item {
     id: root
 
     property bool checked: false
     property bool enabled: true
+    // What it turns on or off, for screen readers; a row gives it its label.
+    property string accessibleName: ""
     signal toggled(bool checked)
 
-    implicitWidth: 38
-    implicitHeight: 22
+    implicitWidth: 32
+    implicitHeight: 18
     opacity: enabled ? 1 : 0.4
+
+    Accessible.role: Accessible.CheckBox
+    Accessible.name: accessibleName
+    Accessible.checkable: true
+    Accessible.checked: checked
+    Accessible.onToggleAction: if (enabled) toggled(!checked)
+    Accessible.onPressAction: if (enabled) toggled(!checked)
 
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.checked ? "#30d158" : "#4a4a4e"
+        color: root.checked ? "#0a84ff" : "#4a4a4e"
         Behavior on color { ColorAnimation { duration: 150 } }
 
         Rectangle {
@@ -33,7 +43,6 @@ Item {
     MouseArea {
         anchors.fill: parent
         enabled: root.enabled
-        cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled(!root.checked)
     }
 }

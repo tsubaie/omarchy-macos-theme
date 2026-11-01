@@ -15,8 +15,8 @@ Rectangle {
         id: heading
         visible: root.title !== ""
         text: root.title
-        color: Qt.rgba(1, 1, 1, 0.55)
-        font.pixelSize: 12
+        color: Qt.rgba(1, 1, 1, 0.85)
+        font.pixelSize: 13
         font.weight: Font.DemiBold
         leftPadding: 4
     }

@@ -7,7 +7,8 @@ fn main() {
             .qml_file("qml/MacSwitch.qml")
             .qml_file("qml/MacSlider.qml")
             .qml_file("qml/Group.qml")
-            .qml_file("qml/SettingRow.qml"),
+            .qml_file("qml/SettingRow.qml")
+            .qml_file("qml/SearchField.qml"),
     )
     .qrc_resources(["assets/icon.svg"])
     .qt_module("Network")

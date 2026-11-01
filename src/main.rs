@@ -14,6 +14,9 @@ fn main() {
     if let Some(mut app) = app.as_mut() {
         app.as_mut()
             .set_application_name(&QString::from("macOS Theme"));
+        // Where the app keeps its own small state, such as the last pane.
+        app.as_mut()
+            .set_organization_name(&QString::from("omarchy"));
         // Inter is the theme's stand-in for Apple's SF Pro; Qt falls back to
         // the system sans when it isn't installed.
         let mut font = QFont::default();

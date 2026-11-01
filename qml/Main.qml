@@ -15,7 +15,7 @@ Window {
     minimumWidth: 700
     minimumHeight: 460
     visible: true
-    title: "macOS Theme"
+    title: window.page === "overview" ? "macOS Theme" : window.pages.find(p => p.id === window.page).title
     color: "#1e1e1e"
 
     ThemeBackend {
@@ -104,46 +104,100 @@ Window {
         }
     }
 
-    // The page shown first: --page <id> opens another, such as --page backups.
+    // The page shown first: --page <id> when given, else the last one viewed
+    // (HIG, Settings: "Restore the most recently viewed pane").
     property string page: {
         const args = Qt.application.arguments
-        const asked = args[args.indexOf("--page") + 1]
-        return args.indexOf("--page") >= 0 && pages.some(p => p.id === asked) ? asked : "overview"
+        const asked = args.indexOf("--page") >= 0 ? args[args.indexOf("--page") + 1] : prefs.lastPage
+        return pages.some(p => p.id === asked) ? asked : "overview"
+    }
+    // Written at once, so it survives the app being killed rather than closed.
+    onPageChanged: { prefs.lastPage = page; prefs.sync() }
+
+    Settings {
+        id: prefs
+        property string lastPage: "overview"
     }
 
+    // Search, as in System Settings: it filters the sidebar as people type and
+    // also finds the settings inside each page, by the words on its rows.
+    property string query: ""
+    readonly property var results: pages.filter(p => {
+        const words = query.toLowerCase().split(/\s+/).filter(w => w)
+        const text = (p.title + " " + p.keywords).toLowerCase()
+        return words.every(w => text.indexOf(w) >= 0)
+    })
+    // The result ↑ and ↓ move to while searching; Return opens it.
+    property int resultIndex: 0
+    onQueryChanged: resultIndex = 0
+
+    Shortcut {
+        sequences: [StandardKey.Find]
+        onActivated: searchField.focusField()
+    }
+
+    // Sections group the sidebar as System Settings does; keywords are the
+    // words on each page's rows, which search also finds.
     readonly property var pages: [
-        { id: "overview", title: "Overview", icon: 0xF02FC, tint: "#0a84ff" },
-        { id: "general", title: "General", icon: 0xF0493, tint: "#8e8e93" },
-        { id: "dock", title: "Dock", icon: 0xF10A9, tint: "#0a84ff" },
-        { id: "lock", title: "Lock Screen", icon: 0xF033E, tint: "#5e5ce6" },
-        { id: "widgets", title: "Widgets", icon: 0xF072C, tint: "#ff9f0a" },
-        { id: "menubar", title: "Menu Bar", icon: 0xF10AB, tint: "#30b0c7" },
-        { id: "backups", title: "Backups", icon: 0xF006F, tint: "#34c759" }
+        { id: "overview", title: "Overview", icon: 0xF02FC, tint: "#0a84ff", section: 0,
+          keywords: "about version license open source github omarchy" },
+        { id: "general", title: "General", icon: 0xF0493, tint: "#8e8e93", section: 1,
+          keywords: "theme colors glass window browser apps electron snap snapping halves corners mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
+        { id: "dock", title: "Dock", icon: 0xF10A9, tint: "#0a84ff", section: 1,
+          keywords: "dock magnification window previews downloads trash" },
+        { id: "lock", title: "Lock Screen", icon: 0xF033E, tint: "#5e5ce6", section: 1,
+          keywords: "lock screen password clock account picture preview" },
+        { id: "widgets", title: "Widgets", icon: 0xF072C, tint: "#ff9f0a", section: 1,
+          keywords: "desktop widgets clock calendar weather now playing music" },
+        { id: "menubar", title: "Menu Bar", icon: 0xF10AB, tint: "#30b0c7", section: 1,
+          keywords: "menu bar inter font app name control center" },
+        { id: "backups", title: "Backups", icon: 0xF006F, tint: "#34c759", section: 2,
+          keywords: "backup back up restore undo export import another computer snapshot" }
     ]
 
-    // Sidebar.
+    // The sidebar: a panel floating inside the window on glass, as macOS
+    // Tahoe draws it, with search at the top (HIG, Search fields: "Include
+    // search at the top of the sidebar when filtering… navigation there").
     Rectangle {
         id: sidebar
-        width: 230
-        height: parent.height
-        color: "#262628"
+        x: 8
+        y: 8
+        width: 232
+        height: parent.height - 16
+        radius: 14
+        color: Qt.rgba(1, 1, 1, 0.055)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
 
         Column {
             anchors.fill: parent
             anchors.margins: 10
-            anchors.topMargin: 16
             spacing: 2
+
+            SearchField {
+                id: searchField
+                width: parent.width
+                onTextChanged: window.query = text
+                onMove: step => {
+                    if (window.results.length > 0)
+                        window.resultIndex = Math.max(0, Math.min(window.results.length - 1, window.resultIndex + step))
+                }
+                onAccepted: if (window.results.length > 0) window.open(window.results[window.resultIndex].id)
+            }
+
+            Item { width: 1; height: 8 }
 
             // The theme, as macOS puts the account at the top.
             Item {
                 width: parent.width
-                height: 58
+                height: 52
+                visible: window.query === ""
 
                 AppIcon {
                     id: badge
-                    x: 6
+                    x: 4
                     anchors.verticalCenter: parent.verticalCenter
-                    size: 40
+                    size: 36
                 }
 
                 Column {
@@ -161,68 +215,100 @@ Window {
                     Text {
                         text: !backend.downloaded ? "Not downloaded"
                             : window.status.active ? "Current theme" : "Installed, not current"
-                        color: Qt.rgba(1, 1, 1, 0.5)
+                        color: Qt.rgba(1, 1, 1, 0.55)
                         font.pixelSize: 11
                     }
                 }
             }
 
-            Item { width: 1; height: 8 }
+            Item { width: 1; height: window.query === "" ? 6 : 0 }
 
             Repeater {
-                model: window.pages
+                model: window.results
 
-                delegate: Rectangle {
+                delegate: Column {
+                    id: entry
                     required property var modelData
-                    readonly property bool selected: window.page === modelData.id
-
+                    required property int index
+                    readonly property bool selected: window.query === "" ? window.page === modelData.id : index === window.resultIndex
+                    // A little room where a new section starts, as in System Settings.
+                    readonly property bool newSection: window.query === "" && index > 0 && window.results[index - 1].section !== modelData.section
                     width: parent.width
-                    height: 30
-                    radius: 6
-                    color: selected ? "#0a84ff" : hover.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
-                    HoverHandler { id: hover }
+                    Item { width: 1; height: entry.newSection ? 10 : 0 }
 
                     Rectangle {
-                        id: icon
-                        x: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 20
-                        height: 20
-                        radius: 5
-                        color: modelData.tint
+                        width: parent.width
+                        height: 28
+                        radius: 6
+                        color: entry.selected ? "#0a84ff" : hover.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
+
+                        Accessible.role: Accessible.PageTab
+                        Accessible.name: entry.modelData.title
+                        Accessible.selected: entry.selected
+                        Accessible.onPressAction: window.open(entry.modelData.id)
+
+                        HoverHandler { id: hover }
+
+                        Rectangle {
+                            id: icon
+                            x: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 20
+                            height: 20
+                            radius: 5
+                            color: entry.modelData.tint
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: String.fromCodePoint(entry.modelData.icon)
+                                color: "white"
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                            }
+                        }
 
                         Text {
-                            anchors.centerIn: parent
-                            text: String.fromCodePoint(modelData.icon)
+                            anchors.left: icon.right
+                            anchors.leftMargin: 9
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: entry.modelData.title
                             color: "white"
-                            font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 13
                         }
-                    }
 
-                    Text {
-                        anchors.left: icon.right
-                        anchors.leftMargin: 9
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.title
-                        color: "white"
-                        font.pixelSize: 13
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: window.page = modelData.id
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: window.open(entry.modelData.id)
+                        }
                     }
                 }
             }
+
+            Text {
+                visible: window.query !== "" && window.results.length === 0
+                width: parent.width
+                topPadding: 24
+                horizontalAlignment: Text.AlignHCenter
+                text: "No Results"
+                color: Qt.rgba(1, 1, 1, 0.55)
+                font.pixelSize: 13
+            }
         }
+    }
+
+    // Opens a page; from a search, the search is done.
+    function open(id) {
+        window.page = id
+        window.query = ""
+        searchField.clear()
     }
 
     // Content.
     Flickable {
         id: content
         anchors.left: sidebar.right
+        anchors.leftMargin: 4
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -244,8 +330,9 @@ Window {
                     id: pageTitle
                     text: window.pages.find(p => p.id === window.page).title
                     color: "white"
-                    font.pixelSize: 22
-                    font.weight: Font.Bold
+                    // Title 3, emphasized: what macOS uses for a pane's title.
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
                 }
 
                 Text {
@@ -586,7 +673,7 @@ Window {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "Not affiliated with Apple or Omarchy. macOS is a trademark of Apple Inc."
-                    color: Qt.rgba(1, 1, 1, 0.35)
+                    color: Qt.rgba(1, 1, 1, 0.55)
                     font.pixelSize: 11
                 }
             }
@@ -684,6 +771,7 @@ Window {
     Rectangle {
         id: applyBar
         anchors.left: sidebar.right
+        anchors.leftMargin: 8
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 52
@@ -775,9 +863,13 @@ Window {
 
     // The macOS push button: gray, rounded, white text.
     component MacButton: Rectangle {
+        id: button
         property string text: ""
         property bool enabled: true
         property bool primary: false
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+        Accessible.onPressAction: if (enabled) clicked()
         signal clicked()
         width: label.width + 24
         height: 24
@@ -797,7 +889,6 @@ Window {
             id: press
             anchors.fill: parent
             enabled: parent.enabled
-            cursorShape: Qt.PointingHandCursor
             onClicked: parent.clicked()
         }
     }

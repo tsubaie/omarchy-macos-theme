@@ -11,6 +11,14 @@ Item {
     default property alias control: slot.data
 
     width: parent ? parent.width : 0
+
+    // The control on the right is named after the row, for screen readers.
+    Component.onCompleted: {
+        for (let i = 0; i < slot.data.length; i++) {
+            const control = slot.data[i]
+            if (control.accessibleName !== undefined && control.accessibleName === "") control.accessibleName = root.label
+        }
+    }
     height: Math.max(44, texts.height + 20)
 
     Column {
