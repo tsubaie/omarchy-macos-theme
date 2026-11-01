@@ -1,7 +1,8 @@
 import QtQuick
 
 // The macOS slider: a thin track, blue up to a round white knob. It reports
-// its value when let go, so the theme is changed once per drag.
+// where the knob is as it is dragged (dragged), and its value when let go
+// (moved), so the theme is changed once per drag and previews can follow.
 Item {
     id: root
 
@@ -11,6 +12,7 @@ Item {
     property bool enabled: true
     property string accessibleName: ""
     signal moved(real value)
+    signal dragged(real value)
 
     Accessible.role: Accessible.Slider
     Accessible.name: accessibleName
@@ -63,8 +65,8 @@ Item {
             const p = Math.max(0, Math.min(1, (mouseX - knob.width / 2) / track.width))
             return root.from + p * (root.to - root.from)
         }
-        onPressed: mouse => root.dragValue = valueAt(mouse.x)
-        onPositionChanged: mouse => { if (pressed) root.dragValue = valueAt(mouse.x) }
+        onPressed: mouse => { root.dragValue = valueAt(mouse.x); root.dragged(root.dragValue) }
+        onPositionChanged: mouse => { if (pressed) { root.dragValue = valueAt(mouse.x); root.dragged(root.dragValue) } }
         onReleased: root.moved(root.dragValue)
     }
 }

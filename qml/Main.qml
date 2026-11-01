@@ -133,6 +133,18 @@ Window {
         pendingSettings = next
     }
 
+    // Sliders show their value as they move (backend.preview); dropping the
+    // changes puts those settings back as installed.
+    // Glass is previewed in the window itself (GlassPreview); blur on the
+    // desktop too, where it changes in place, and the dock's settings on the dock.
+    readonly property var previewable: ["blur", "magnification", "dock-size"]
+    function discard() {
+        for (const key in pendingSettings)
+            if (previewable.includes(key)) backend.preview(key, setting(key, pendingSettings[key]))
+        revert()
+    }
+    onClosing: discard()
+
     function revert() {
         pendingBar = null
         pendingWidgets = null
@@ -207,7 +219,7 @@ Window {
         { id: "windows", title: "Windows", icon: "windows", section: 1,
           keywords: "window glass translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners" },
         { id: "dock", title: "Dock", icon: "dock", section: 1,
-          keywords: "dock magnification window previews downloads trash" },
+          keywords: "dock magnification size icon size bigger smaller resize window previews downloads trash" },
         { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
           keywords: "lock screen password clock account picture preview" },
         { id: "widgets", title: "Widgets", icon: "widgets", section: 1,
@@ -459,7 +471,7 @@ Window {
                 visible: window.pendingCount > 0 || window.applying
                 text: "Revert"
                 enabled: !backend.busy
-                onClicked: window.revert()
+                onClicked: window.discard()
             }
             MacButton {
                 anchors.verticalCenter: parent.verticalCenter
@@ -572,6 +584,8 @@ Window {
                 width: parent.width
                 spacing: 18
 
+                GlassPreview { width: parent.width }
+
                 Group {
                     title: "Glass"
 
@@ -617,8 +631,13 @@ Window {
                 SettingRow {
                     label: "Magnification"
                     note: "How far icons grow under the pointer; 1 is off"
-                    last: true
                     SettingSlider { key: "magnification"; from: 1; to: 2; fallback: 1.75; needs: "dock" }
+                }
+                SettingRow {
+                    label: "Size"
+                    note: "How big the dock's icons are, in points"
+                    last: true
+                    SettingSlider { key: "dock-size"; from: 32; to: 80; fallback: 48; decimals: 0; needs: "dock" }
                 }
             }
 
@@ -766,7 +785,7 @@ Window {
                                     title: "Restore the backup from " + window.when(modelData.created) + "?",
                                     text: "Your theme goes back to how it was then. Your setup now is backed up first, so you can undo this.",
                                     button: "Restore",
-                                    action: () => { window.revert(); backend.restore(modelData.id) }
+                                    action: () => { window.discard(); backend.restore(modelData.id) }
                                 }
                             }
                         }
@@ -880,7 +899,7 @@ Window {
                                 title: "Update the macOS theme?",
                                 text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once.",
                                 button: "Update",
-                                action: () => { window.revert(); backend.update() }
+                                action: () => { window.discard(); backend.update() }
                             }
                         }
                     }
@@ -947,7 +966,7 @@ Window {
                 title: "Import " + file.split("/").pop() + "?",
                 text: "Your theme is set up to match it: its pieces, settings, dock, widgets and wallpapers. Your setup now is backed up first, so you can undo this.",
                 button: "Import",
-                action: () => { window.revert(); backend.importFrom(file) }
+                action: () => { window.discard(); backend.importFrom(file) }
             }
         }
     }
@@ -1075,7 +1094,102 @@ Window {
     }
 
     // A slider for one install.sh setting, set when let go.
+    // Glass and blur as they will look, over the wallpaper: a window and a
+    // browser, each as see-through as its slider says, the wallpaper behind
+    // them blurred as strongly as the blur slider says. It follows the sliders
+    // as they move; the desktop changes on Apply.
+    component GlassPreview: Rectangle {
+        id: preview
+        readonly property real blurAmount: window.settingValue("blur", 10)
+        height: 168
+        radius: 10
+        color: "#1c1c1e"
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: ShaderEffectSource {
+                sourceItem: Rectangle { width: preview.width; height: preview.height; radius: preview.radius }
+            }
+        }
+
+        Image {
+            id: wallpaper
+            anchors.fill: parent
+            source: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/.local/state/omarchy/current/background"
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            sourceSize.width: 900
+        }
+
+        MockWindow {
+            x: parent.width * 0.06; y: 22; width: parent.width * 0.5; height: 128
+            glass: window.settingValue("glass", 0.7); title: "Files"
+            backdrop: wallpaper; blurAmount: preview.blurAmount
+        }
+        MockWindow {
+            x: parent.width * 0.44; y: 36; width: parent.width * 0.5; height: 116
+            glass: window.settingValue("web-glass", 1); title: "Browser"
+            backdrop: wallpaper; blurAmount: preview.blurAmount
+        }
+    }
+
+    // One window of the preview: the wallpaper behind it blurred, then its
+    // body and title bar at its glass.
+    component MockWindow: Item {
+        id: mock
+        property real glass: 1
+        property string title: ""
+        // What shows through it, and how strongly it is blurred (0 to 20).
+        property Item backdrop: null
+        property real blurAmount: 0
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: ShaderEffectSource {
+                sourceItem: Rectangle { width: mock.width; height: mock.height; radius: 9 }
+            }
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            visible: mock.glass < 1
+            source: ShaderEffectSource {
+                sourceItem: mock.backdrop
+                sourceRect: Qt.rect(mock.x, mock.y, mock.width, mock.height)
+            }
+            blurEnabled: mock.blurAmount > 0
+            blur: Math.min(1, mock.blurAmount / 20)
+            blurMax: 48
+        }
+        Rectangle { anchors.fill: parent; color: "#262628"; opacity: mock.glass }
+        Rectangle {
+            width: parent.width; height: 24
+            color: "#323232"; opacity: mock.glass
+        }
+        Row {
+            x: 10; y: 8; spacing: 6
+            Repeater {
+                model: ["#ff5f57", "#febc2e", "#28c840"]
+                Rectangle { width: 9; height: 9; radius: 4.5; color: modelData }
+            }
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter; y: 5
+            text: mock.title; color: "#e5e5e7"; font.pixelSize: 11; font.weight: Font.DemiBold
+        }
+        Column {
+            x: 14; y: 38; spacing: 9
+            Repeater {
+                model: [0.7, 0.5, 0.62, 0.4]
+                Rectangle { width: mock.width * modelData; height: 7; radius: 3.5; color: Qt.rgba(1, 1, 1, 0.22) }
+            }
+        }
+    }
+
     component SettingSlider: MacSlider {
+        id: settingSlider
         // The value is drawn to the left of the slider; the row keeps room for it.
         readonly property int leading: 48
         property string key: ""
@@ -1086,7 +1200,19 @@ Window {
         width: 180
         value: window.settingValue(key, fallback)
         enabled: !backend.busy && window.pieceOn(needs)
-        onMoved: v => window.markSetting(key, decimals === 0 ? Math.round(v) : v, fallback)
+        function take(v) {
+            window.markSetting(key, decimals === 0 ? Math.round(v) : v, fallback)
+            if (window.previewable.includes(key) && !previewSoon.running) previewSoon.start()
+        }
+        onDragged: v => take(v)
+        onMoved: v => take(v)
+
+        // Shown as it moves, at most every few frames while the knob is held.
+        Timer {
+            id: previewSoon
+            interval: 80
+            onTriggered: backend.preview(settingSlider.key, window.settingValue(settingSlider.key, settingSlider.fallback))
+        }
 
         Text {
             anchors.right: parent.left

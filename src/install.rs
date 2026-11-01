@@ -69,13 +69,14 @@ impl Setting {
             "glass" => ("glass", (0.5, 1.0)),
             "web-glass" => ("web-glass", (0.5, 1.0)),
             "magnification" => ("magnification", (1.0, 2.0)),
+            "dock-size" => ("dock-size", (32.0, 80.0)),
             "snapping" => ("snapping", (0.0, 1.0)),
             "blur" => ("blur", (0.0, 20.0)),
             _ => bail!("unknown setting {key:?}"),
         };
         // Two decimals are all the sliders show; snapping is a switch, 0 or 1,
-        // and blur a whole-number strength.
-        let value = if key == "snapping" || key == "blur" {
+        // blur a whole-number strength and the dock's size whole points.
+        let value = if matches!(key, "snapping" | "blur" | "dock-size") {
             value.round()
         } else {
             (value * 100.0).round() / 100.0
@@ -100,7 +101,7 @@ pub struct Status {
     pub active: bool,
     /// Each piece and whether it is installed.
     pub features: BTreeMap<String, bool>,
-    /// Glass, web glass, snapping, blur and the dock's magnification.
+    /// Glass, web glass, snapping, blur, and the dock's magnification and size.
     pub settings: BTreeMap<String, f64>,
     /// Where the bar's clock sits: "left", "center" or "right". Older themes
     /// don't report it.
@@ -606,6 +607,19 @@ pub fn import(dir: &Path, file: &Path) -> Result<()> {
     run(dir, &["--import", file]).map(drop)
 }
 
+/// Shows settings at once, for a slider being dragged: `install.sh --preview`
+/// writes them with no snapshot or theme refresh. Apply sets them properly.
+///
+/// # Errors
+///
+/// Fails when `install.sh` refuses them or can't run.
+pub fn preview(dir: &Path, settings: &[Setting]) -> Result<()> {
+    let args: Vec<String> = settings.iter().flat_map(|s| ["--set".to_owned(), s.arg()]).collect();
+    let mut all = vec!["--preview"];
+    all.extend(args.iter().map(String::as_str));
+    run(dir, &all).map(drop)
+}
+
 fn run(dir: &Path, args: &[&str]) -> Result<String> {
     let script = dir.join("install.sh");
     let output = Command::new("bash")
@@ -660,6 +674,9 @@ mod tests {
         assert_eq!(arg("blur", 14.6).expect("in range"), "blur=15");
         assert_eq!(arg("blur", 0.0).expect("off"), "blur=0");
         assert!(arg("blur", 21.0).is_err());
+        assert_eq!(arg("dock-size", 55.6).expect("in range"), "dock-size=56");
+        assert!(arg("dock-size", 31.0).is_err());
+        assert!(arg("dock-size", 81.0).is_err());
         assert!(arg("glass", 0.2).is_err());
         assert!(arg("web-glass", 1.5).is_err());
         assert!(arg("size", 1.0).is_err());

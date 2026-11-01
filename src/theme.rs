@@ -38,6 +38,11 @@ pub mod qobject {
         #[qinvokable]
         fn apply(self: Pin<&mut Self>, changes: &QString);
 
+        /// Shows a setting at once while its slider is dragged, without
+        /// waiting for Apply; the newest value wins.
+        #[qinvokable]
+        fn preview(self: Pin<&mut Self>, key: &QString, value: f64);
+
         /// Pulls the theme's new commits and installs the pieces in use again.
         #[qinvokable]
         fn update(self: Pin<&mut Self>);
@@ -85,16 +90,18 @@ pub mod qobject {
     impl cxx_qt::Threading for ThemeBackend {}
 }
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Command;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use anyhow::Result;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 
-use crate::install::{self, Backup, Changes, Status};
+use crate::install::{self, Backup, Changes, Setting, Status};
 
 /// The Rust side of [`qobject::ThemeBackend`].
 pub struct ThemeBackendRust {
@@ -111,6 +118,15 @@ pub struct ThemeBackendRust {
     omarchy_version: QString,
     omarchy_logo: QString,
     dir: PathBuf,
+    previews: Arc<Mutex<Previews>>,
+}
+
+/// Settings waiting to be previewed, newest value per key, and whether a
+/// worker is showing them: one `install.sh --preview` at a time.
+#[derive(Default)]
+struct Previews {
+    waiting: BTreeMap<String, Setting>,
+    running: bool,
 }
 
 impl Default for ThemeBackendRust {
@@ -132,6 +148,7 @@ impl Default for ThemeBackendRust {
             // copied in, in its green.
             omarchy_logo: QString::from(install::green_omarchy_logo().unwrap_or_default().as_str()),
             dir,
+            previews: Arc::default(),
         }
     }
 }
@@ -166,6 +183,36 @@ impl qobject::ThemeBackend {
             Ok(changes) => self.run(move |dir| install::apply(dir, &changes)),
             Err(error) => self.set_error(QString::from(format!("{error:#}").as_str())),
         }
+    }
+
+    pub fn preview(self: Pin<&mut Self>, key: &QString, value: f64) {
+        let setting = match Setting::try_new(&key.to_string(), value) {
+            Ok(setting) => setting,
+            Err(error) => return eprintln!("not previewing: {error:#}"),
+        };
+        let previews = Arc::clone(&self.rust().previews);
+        {
+            let mut queue = previews.lock().unwrap_or_else(PoisonError::into_inner);
+            queue.waiting.insert(key.to_string(), setting);
+            if queue.running {
+                return;
+            }
+            queue.running = true;
+        }
+        let dir = self.rust().dir.clone();
+        thread::spawn(move || loop {
+            let batch: Vec<Setting> = {
+                let mut queue = previews.lock().unwrap_or_else(PoisonError::into_inner);
+                if queue.waiting.is_empty() {
+                    queue.running = false;
+                    return;
+                }
+                std::mem::take(&mut queue.waiting).into_values().collect()
+            };
+            if let Err(error) = install::preview(&dir, &batch) {
+                eprintln!("could not preview: {error:#}");
+            }
+        });
     }
 
     pub fn back_up(self: Pin<&mut Self>) {
