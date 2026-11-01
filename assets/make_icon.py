@@ -1,42 +1,57 @@
-"""The app icon: Omarchy's mark in lime on a green-to-navy macOS squircle.
+"""The app icon: Omarchy's maze mark in lime on a deep-teal macOS squircle.
 
-The mark, colors and proportions follow the design "Lime Geometric Frame Icon";
-trace_mark.py measures the mark from it. Run:
+Styled as Apple draws its icons: a top-to-bottom gradient in one hue, a soft
+sheen and a bright rim catching light from above, a slightly darker bottom
+edge, and a soft shadow under the mark. The mark is measured from the design
+"Lime Geometric Frame Icon" by trace_mark.py. Run:
   python3 trace_mark.py design.png > mark.txt && python3 make_icon.py mark.txt > icon.svg
 """
 import math
 import pathlib
-import re
 import sys
 
 SIZE, C = 1024, 512
-# Measured from the design by trace_mark.py, in icon coordinates.
 MARK = pathlib.Path(sys.argv[1]).read_text().strip()
 
+BG_TOP, BG_BOTTOM = "#127C78", "#073E46"
+MARK_TOP, MARK_BOTTOM = "#C6F592", "#A1E35F"
 
-def squircle(n=5.0, steps=720):
+
+def squircle(n=5.0, steps=720, inset=0):
     """A superellipse, the continuous curve of macOS icons."""
+    r = C - inset
     pts = []
     for i in range(steps):
         t = 2 * math.pi * i / steps
         c, s = math.cos(t), math.sin(t)
-        x = C + C * math.copysign(abs(c) ** (2 / n), c)
-        y = C + C * math.copysign(abs(s) ** (2 / n), s)
+        x = C + r * math.copysign(abs(c) ** (2 / n), c)
+        y = C + r * math.copysign(abs(s) ** (2 / n), s)
         pts.append(f"{x:.1f},{y:.1f}")
     return "M" + " L".join(pts) + " Z"
 
 
+SQ = squircle()
 print(f"""<svg xmlns="http://www.w3.org/2000/svg" width="{SIZE}" height="{SIZE}" viewBox="0 0 {SIZE} {SIZE}">
   <defs>
-    <linearGradient id="sky" x1="0.05" y1="0.05" x2="0.95" y2="0.95">
-      <stop offset="0" stop-color="#48E092"/>
-      <stop offset="0.27" stop-color="#0AAA93"/>
-      <stop offset="0.5" stop-color="#03697B"/>
-      <stop offset="0.73" stop-color="#024A68"/>
-      <stop offset="1" stop-color="#022C4B"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="{BG_TOP}"/><stop offset="1" stop-color="{BG_BOTTOM}"/>
     </linearGradient>
+    <radialGradient id="sheen" cx="0.5" cy="0" r="0.75">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.25" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="0.85" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="200" x2="0" y2="830">
+      <stop offset="0" stop-color="{MARK_TOP}"/><stop offset="1" stop-color="{MARK_BOTTOM}"/>
+    </linearGradient>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="125%"><feGaussianBlur stdDeviation="12"/></filter>
   </defs>
-  <!-- Filled shapes only, no clipping or filters, so Qt's SVG renderer draws it as browsers do. -->
-  <path d="{squircle()}" fill="url(#sky)"/>
-  <path d="{MARK}" fill="#ACEB72"/>
+  <!-- Filled shapes only, no clipping, so Qt's SVG renderer draws it as browsers do. -->
+  <path d="{SQ}" fill="url(#bg)"/>
+  <path d="{SQ}" fill="url(#sheen)"/>
+  <path d="{MARK}" fill="#000" fill-opacity="0.28" transform="translate(0 12)" filter="url(#soft)"/>
+  <path d="{MARK}" fill="url(#ink)"/>
+  <path d="{squircle(inset=2)}" fill="none" stroke="url(#rim)" stroke-width="4"/>
 </svg>""")
