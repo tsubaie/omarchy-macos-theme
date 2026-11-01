@@ -24,7 +24,14 @@ unsafe_op_in_unsafe_fn = "warn"
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 
+# Everyday release builds: quick to rebuild, and still small.
 [profile.release]
+lto = "thin"
+strip = true
+
+# For packages: the smallest program, at the cost of a slower build
+# (cargo build --profile dist).
+[profile.dist]
+inherits = "release"
 lto = true
 codegen-units = 1
-strip = true

@@ -157,6 +157,8 @@ CXX-Qt finds Qt through `qmake6`. If your system names it differently, set `QMAK
 QMAKE=qmake6 cargo build --release
 ```
 
+Release builds use thin link-time optimization so they rebuild quickly; packages use the `dist` profile for the smallest program (`cargo build --profile dist`). For the quickest rebuilds while working, use a debug build (`cargo build`, or `./dev.sh`).
+
 To work against a checkout of the theme instead of the downloaded copy:
 
 ```bash
