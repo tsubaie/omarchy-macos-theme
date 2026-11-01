@@ -53,11 +53,19 @@ cargo build --release
 ./target/release/omarchy-macos-studio
 ```
 
+To put it in the app launcher, with its name and icon (which the bar, the dock and the app switcher show for its window):
+
+```bash
+./install-desktop.sh                                  # it manages ~/.local/share/omarchy-macos-theme
+./install-desktop.sh ~/Projects/omarchy-macos-theme   # or a checkout of the theme
+./install-desktop.sh --remove                         # take it out again
+```
+
 The first build compiles CXX-Qt's C++ and takes a few minutes; later builds take seconds. The program is about 2 MB and uses about 70 MB of memory while open, nothing while closed.
 
 On first run, if the theme isn't downloaded yet, the app offers a **Download** button. It clones the theme into `~/.local/share/omarchy-macos-theme`, the same place [Omarchy Sync](https://github.com/tsubaie/OmaSync) keeps it, so the two share one copy.
 
-An Arch package (AUR) with a launcher entry is planned.
+An Arch package (AUR) is planned.
 
 ## Using it
 
