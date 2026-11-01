@@ -9,7 +9,8 @@ fn main() {
             .qml_file("qml/Group.qml")
             .qml_file("qml/SettingRow.qml")
             .qml_file("qml/SearchField.qml")
-            .qml_file("qml/TrafficLights.qml"),
+            .qml_file("qml/TrafficLights.qml")
+            .qml_file("qml/BarItems.qml"),
     )
     .qrc_resources([
         "assets/icon-omarchy.svg",

@@ -57,7 +57,32 @@ Window {
     property var pendingSettings: ({})
     // Where the bar's clock goes, waiting for Apply; "" while unchanged.
     property string pendingClock: ""
-    readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length + (pendingClock ? 1 : 0)
+
+    // The menu bar's items as the installer lists them, and the arrangement
+    // waiting for Apply (null while unchanged).
+    readonly property var bar: {
+        try { return JSON.parse(backend.barJson) } catch (e) { return {} }
+    }
+    readonly property var barNames: {
+        const names = {}
+        for (const s in bar.sections || {}) for (const item of bar.sections[s]) names[item.id] = item.name
+        for (const item of bar.hidden || []) names[item.id] = item.name
+        return names
+    }
+    readonly property var barNow: {
+        const sections = {}
+        for (const s in bar.sections || {}) sections[s] = bar.sections[s].map(item => item.id)
+        return { sections: sections, hidden: (bar.hidden || []).map(item => item.id) }
+    }
+    property var pendingBar: null
+
+    // Taking an arrangement back to the one on the bar takes the change away.
+    function markBar(layout) {
+        pendingBar = JSON.stringify(layout) === JSON.stringify(barNow) ? null : layout
+    }
+
+    readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
+        + (pendingClock ? 1 : 0) + (pendingBar ? 1 : 0)
 
     function clockPosition() {
         return pendingClock || status.clock || "right"
@@ -94,6 +119,7 @@ Window {
 
     function revert() {
         pendingClock = ""
+        pendingBar = null
         pendingPieces = {}
         pendingSettings = {}
     }
@@ -101,6 +127,7 @@ Window {
     function apply() {
         const changes = { add: [], remove: [], set: pendingSettings }
         if (pendingClock) changes.clock = pendingClock
+        if (pendingBar) changes.bar = pendingBar
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
         applying = true
         backend.apply(JSON.stringify(changes))
@@ -169,7 +196,7 @@ Window {
         { id: "widgets", title: "Widgets", icon: "widgets", section: 1,
           keywords: "desktop widgets clock calendar weather now playing music" },
         { id: "menubar", title: "Menu Bar", icon: "menubar", section: 1,
-          keywords: "menu bar inter font app name control center clock time date position left center middle right" },
+          keywords: "menu bar inter font app name control center clock time date position left center middle right items icons widgets show hide rearrange order drag tray" },
         { id: "backups", title: "Backups", icon: "backups", section: 2,
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
@@ -621,6 +648,30 @@ Window {
                         enabled: !backend.busy && window.status.clock !== undefined
                         onPicked: value => window.markClock(value)
                     }
+                }
+            }
+
+            // The menu bar's items: show, hide and drag to rearrange.
+            Column {
+                visible: backend.downloaded && window.page === "menubar" && window.bar.sections !== undefined
+                width: parent.width
+                spacing: 8
+
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: "Drag an item by its handle to move it, within a part of the bar or into another. The switch shows or hides it."
+                    color: Qt.rgba(1, 1, 1, 0.55)
+                    font.pixelSize: 12
+                    leftPadding: 4
+                }
+
+                BarItems {
+                    width: parent.width
+                    layout: window.pendingBar || window.barNow
+                    names: window.barNames
+                    enabled: !backend.busy
+                    onChanged: layout => window.markBar(layout)
                 }
             }
 

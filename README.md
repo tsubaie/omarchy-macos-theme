@@ -32,7 +32,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash) and how far its icons grow |
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |
 | **Widgets** | The desktop widgets: clock, calendar, weather and now playing |
-| **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; and where the clock sits: left, center or right |
+| **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; where the clock sits; and every item on the bar, grouped by where it sits, to show or hide with a switch and drag to rearrange |
 | **Backups** | Back up now, restore any backup, and export or import your setup |
 
 - **Changes wait for Apply.** Flipping switches and moving sliders changes nothing until you press **Apply** in the toolbar at the top. Then every change goes to the installer in one call, so the theme reloads once. **Revert** throws the changes away.

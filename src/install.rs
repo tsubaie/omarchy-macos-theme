@@ -107,6 +107,68 @@ pub struct Status {
     pub clock: Option<String>,
 }
 
+/// The bar's sections, as `install.sh --bar-layout` takes them.
+const BAR_SECTIONS: [&str; 6] = [
+    "left",
+    "centerBegin",
+    "center",
+    "centerEnd",
+    "right",
+    "tray",
+];
+
+/// How the bar's items are to be shown, hidden and ordered:
+/// `{"sections": {"right": ["omarchy.clock", …], …}, "hidden": [ids]}`.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+pub struct BarLayout {
+    #[serde(default)]
+    sections: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    hidden: Vec<String>,
+}
+
+impl BarLayout {
+    /// Checks the sections and that every id is a plain widget id, so nothing
+    /// else reaches the installer, which checks them against the bar too.
+    fn check(self) -> Result<Self> {
+        if let Some(section) = self
+            .sections
+            .keys()
+            .find(|s| !BAR_SECTIONS.contains(&s.as_str()))
+        {
+            bail!("the bar has no section {section:?}");
+        }
+        let plain = |id: &String| {
+            !id.is_empty()
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        };
+        if let Some(id) = self
+            .sections
+            .values()
+            .flatten()
+            .chain(&self.hidden)
+            .find(|id| !plain(id))
+        {
+            bail!("not a bar item: {id:?}");
+        }
+        Ok(self)
+    }
+}
+
+/// The bar's items by section and the hidden ones, as `install.sh --bar
+/// --json` lists them, passed on to the window as it comes.
+///
+/// # Errors
+///
+/// Fails when the installer can't list them, as one older than this does.
+pub fn bar(dir: &Path) -> Result<String> {
+    let json = run(dir, &["--bar", "--json"])?;
+    serde_json::from_str::<serde_json::Value>(&json).context("reading the bar")?;
+    Ok(json.trim().to_owned())
+}
+
 /// The places the bar's clock can sit, as `install.sh --set clock=` takes them.
 const CLOCK_POSITIONS: [&str; 3] = ["left", "center", "right"];
 
@@ -151,6 +213,7 @@ pub struct Changes {
     remove: Vec<Piece>,
     set: Vec<Setting>,
     clock: Option<&'static str>,
+    bar: Option<BarLayout>,
 }
 
 /// The changes as the window sends them, before they are checked.
@@ -164,6 +227,8 @@ struct RawChanges {
     set: BTreeMap<String, f64>,
     #[serde(default)]
     clock: Option<String>,
+    #[serde(default)]
+    bar: Option<BarLayout>,
 }
 
 impl Changes {
@@ -200,6 +265,7 @@ impl Changes {
                         .with_context(|| format!("the clock can't go {place:?}"))
                 })
                 .transpose()?,
+            bar: raw.bar.map(BarLayout::check).transpose()?,
         };
         if let Some(piece) = changes
             .add
@@ -213,7 +279,11 @@ impl Changes {
 
     /// Whether there is nothing to apply.
     pub fn is_empty(&self) -> bool {
-        self.add.is_empty() && self.remove.is_empty() && self.set.is_empty() && self.clock.is_none()
+        self.add.is_empty()
+            && self.remove.is_empty()
+            && self.set.is_empty()
+            && self.clock.is_none()
+            && self.bar.is_none()
     }
 
     /// The arguments for one `install.sh` call.
@@ -230,6 +300,10 @@ impl Changes {
         }
         if let Some(place) = self.clock {
             args.extend(["--set".to_owned(), format!("clock={place}")]);
+        }
+        if let Some(bar) = &self.bar {
+            let json = serde_json::to_string(bar).expect("a bar layout is plain JSON");
+            args.extend(["--bar-layout".to_owned(), json]);
         }
         args
     }
@@ -557,6 +631,26 @@ mod tests {
             ]
         );
         assert!(Changes::from_json("{}").expect("nothing to do").is_empty());
+    }
+
+    #[test]
+    fn a_bar_layout_is_checked_and_passed_whole() {
+        let changes = Changes::from_json(
+            r#"{"bar":{"sections":{"right":["omarchy.clock","netmojo.omdrop"]},"hidden":["omarchy.weather"]}}"#,
+        )
+        .expect("a layout");
+        assert_eq!(
+            changes.args(),
+            [
+                "--bar-layout",
+                r#"{"sections":{"right":["omarchy.clock","netmojo.omdrop"]},"hidden":["omarchy.weather"]}"#
+            ]
+        );
+        assert!(
+            Changes::from_json(r#"{"bar":{"sections":{"middle":["omarchy.clock"]}}}"#).is_err()
+        );
+        assert!(Changes::from_json(r#"{"bar":{"sections":{"right":["a b"]}}}"#).is_err());
+        assert!(Changes::from_json(r#"{"bar":{"hidden":["--uninstall;x"]}}"#).is_err());
     }
 
     #[test]

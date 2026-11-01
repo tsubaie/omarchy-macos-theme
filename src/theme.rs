@@ -16,6 +16,7 @@ pub mod qobject {
         #[qml_element]
         #[qproperty(QString, status_json, cxx_name = "statusJson")]
         #[qproperty(QString, backups_json, cxx_name = "backupsJson")]
+        #[qproperty(QString, bar_json, cxx_name = "barJson")]
         #[qproperty(bool, busy)]
         #[qproperty(bool, downloaded)]
         #[qproperty(QString, error)]
@@ -99,6 +100,7 @@ use crate::install::{self, Backup, Changes, Status};
 pub struct ThemeBackendRust {
     status_json: QString,
     backups_json: QString,
+    bar_json: QString,
     busy: bool,
     downloaded: bool,
     error: QString,
@@ -117,6 +119,7 @@ impl Default for ThemeBackendRust {
         Self {
             status_json: QString::from("{}"),
             backups_json: QString::from("[]"),
+            bar_json: QString::from("{}"),
             busy: false,
             downloaded: install::is_downloaded(&dir),
             error: QString::default(),
@@ -138,6 +141,7 @@ struct Outcome {
     status: Result<Status>,
     backups: Result<Vec<Backup>>,
     version: Option<String>,
+    bar: Option<String>,
     updates: u32,
     error: Option<String>,
 }
@@ -233,6 +237,7 @@ impl qobject::ThemeBackend {
                 status,
                 backups,
                 version: install::version(&dir),
+                bar: downloaded.then(|| install::bar(&dir).ok()).flatten(),
                 updates: if downloaded {
                     install::updates_behind(&dir)
                 } else {
@@ -265,6 +270,10 @@ impl qobject::ThemeBackend {
                 error.get_or_insert_with(|| format!("{status_error:#}"));
             }
         }
+        // A theme older than the bar settings lists no bar; updating brings it.
+        self.as_mut().set_bar_json(QString::from(
+            outcome.bar.unwrap_or_else(|| "{}".to_owned()).as_str(),
+        ));
         // A theme older than backups lists none; updating it brings them.
         let backups = outcome.backups.unwrap_or_default();
         let json = serde_json::to_string(&backups).unwrap_or_else(|_| "[]".to_owned());
