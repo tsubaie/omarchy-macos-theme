@@ -33,6 +33,33 @@ function condition(code, isDay) {
   return { text: "", icon: "\ue33d" }
 }
 
+// Which scene the weather widget paints behind its text for a WMO code.
+function scene(code) {
+  var c = Number(code)
+  if (c === 0 || c === 1) return "clear"
+  if (c === 2) return "partly"
+  if (c === 45 || c === 48) return "fog"
+  if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82)) return "rain"
+  if ((c >= 71 && c <= 77) || c === 85 || c === 86) return "snow"
+  if (c >= 95) return "thunder"
+  return "cloudy"
+}
+
+// The time of day the sky shows, from today's sunrise and sunset (ms): the
+// warm "dawn" and "dusk" span the half hour before and the 45 minutes after
+// the sun crosses the horizon, mirrored at sunset. Without the times, the
+// forecast's day flag decides.
+function dayPhase(now, sunrise, sunset, isDay) {
+  if (typeof sunrise !== "number" || typeof sunset !== "number") return isDay ? "day" : "night"
+  var min = 60 * 1000
+  if (now >= sunrise - 30 * min && now < sunrise + 45 * min) return "dawn"
+  if (now >= sunset - 45 * min && now < sunset + 30 * min) return "dusk"
+  return now > sunrise && now < sunset ? "day" : "night"
+}
+
+// Wind from this speed (km/h, a strong breeze) blows through the scene.
+var WINDY_KMH = 30
+
 // Fahrenheit where it is the custom; a known country decides before the locale.
 function usesImperial(country, localeName) {
   var c = String(country || "").toUpperCase()
@@ -46,9 +73,9 @@ function forecastUrl(latitude, longitude) {
   return "https://api.open-meteo.com/v1/forecast"
     + "?latitude=" + encodeURIComponent(String(latitude))
     + "&longitude=" + encodeURIComponent(String(longitude))
-    + "&current=temperature_2m,weather_code,is_day"
-    + "&daily=temperature_2m_max,temperature_2m_min"
-    + "&forecast_days=1&timezone=auto"
+    + "&current=temperature_2m,weather_code,is_day,wind_speed_10m"
+    + "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
+    + "&forecast_days=1&timezone=auto&timeformat=unixtime"
 }
 
 // The forecast reply as what the widget shows, or null when it is unusable.
@@ -66,7 +93,11 @@ function parseForecast(raw, imperial) {
     low: daily && daily.temperature_2m_min ? temp(daily.temperature_2m_min[0]) : null,
     text: cond.text,
     icon: cond.icon,
-    day: Number(now.is_day) !== 0
+    day: Number(now.is_day) !== 0,
+    scene: scene(now.weather_code),
+    sunrise: daily && daily.sunrise ? daily.sunrise[0] * 1000 : null,
+    sunset: daily && daily.sunset ? daily.sunset[0] * 1000 : null,
+    windy: Number(now.wind_speed_10m) >= WINDY_KMH
   }
 }
 
@@ -81,4 +112,89 @@ function parsePlace(raw) {
   return { name: String(data.name || ""), latitude: lat, longitude: lon, country: String(data.country || "") }
 }
 
-if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace }
+// The widgets, in their first-run order down the left edge.
+var WIDGETS = ["clock", "calendar", "weather", "playing"]
+var NAMES = { clock: "Clock", calendar: "Calendar", weather: "Weather", playing: "Now Playing" }
+
+function occupied(layout, col, row) {
+  for (var i = 0; i < layout.length; i++) if (layout[i].col === col && layout[i].row === row) return layout[i]
+  return null
+}
+
+// Where each shown widget sits, as [{ id, col, row }] grid cells, from what
+// shell.json saved. Unknown ids and repeats are dropped, a widget on a taken
+// cell moves to a free one, and nothing saved (or nothing usable) means all
+// of them down the left edge, so the desktop never loses every widget.
+function normalizeLayout(saved) {
+  var out = []
+  if (Array.isArray(saved)) {
+    var later = []
+    for (var i = 0; i < saved.length; i++) {
+      var w = saved[i] || {}
+      var id = String(w.id || "")
+      if (WIDGETS.indexOf(id) < 0 || find(out, id) || later.indexOf(id) >= 0) continue
+      var col = Number(w.col), row = Number(w.row)
+      if (Number.isInteger(col) && Number.isInteger(row) && col >= 0 && row >= 0 && !occupied(out, col, row))
+        out.push({ id: id, col: col, row: row })
+      else
+        later.push(id)
+    }
+    for (var j = 0; j < later.length; j++) {
+      var cell = freeCell(out, 64, 64)
+      out.push({ id: later[j], col: cell.col, row: cell.row })
+    }
+  }
+  if (out.length === 0) out = WIDGETS.map(function(id, n) { return { id: id, col: 0, row: n } })
+  return out
+}
+
+function find(layout, id) {
+  for (var i = 0; i < layout.length; i++) if (layout[i].id === id) return layout[i]
+  return null
+}
+
+// The widgets not shown, in their usual order.
+function hidden(layout) {
+  return WIDGETS.filter(function(id) { return !find(layout, id) })
+}
+
+// The first free cell, down each column from the left; null when all are taken.
+function freeCell(layout, cols, rows) {
+  for (var c = 0; c < cols; c++)
+    for (var r = 0; r < rows; r++)
+      if (!occupied(layout, c, r)) return { col: c, row: r }
+  return null
+}
+
+// A widget dropped on a cell; one already there swaps into the cell it left.
+function moveTo(layout, id, col, row) {
+  var moving = find(layout, id)
+  if (!moving) return layout
+  var other = occupied(layout, col, row)
+  return layout.map(function(w) {
+    if (w.id === id) return { id: w.id, col: col, row: row }
+    if (other && w.id === other.id) return { id: w.id, col: moving.col, row: moving.row }
+    return { id: w.id, col: w.col, row: w.row }
+  })
+}
+
+// Without a widget, but never the last one: right-click is the way back.
+function remove(layout, id) {
+  return layout.length <= 1 ? layout : layout.filter(function(w) { return w.id !== id })
+}
+
+function add(layout, id, cols, rows) {
+  if (WIDGETS.indexOf(id) < 0 || find(layout, id)) return layout
+  var cell = freeCell(layout, cols, rows)
+  return cell ? layout.concat([{ id: id, col: cell.col, row: cell.row }]) : layout
+}
+
+// The cell nearest a position, kept on the grid.
+function snap(x, y, cell, cols, rows) {
+  return {
+    col: Math.max(0, Math.min(cols - 1, Math.round(x / cell))),
+    row: Math.max(0, Math.min(rows - 1, Math.round(y / cell)))
+  }
+}
+
+if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap }

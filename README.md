@@ -147,8 +147,9 @@ Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, 
 - A column at the top left of the desktop, behind your windows, on frosted glass:
   - **Clock**: an analog face with a red second hand.
   - **Calendar**: the month, with today in a red disc; the week starts as your language has it.
-  - **Weather**: the place, temperature, sky, and today's high and low, on blue by day and navy by night. It uses the place you gave Omarchy's weather, or Omarchy's own lookup of your city, and [Open-Meteo](https://open-meteo.com), every 15 minutes; °F only where it is the custom.
+  - **Weather**: the place, temperature, sky, and today's high and low, over a moving scene of the weather outside: a sun or a moon and stars, clouds, rain, snow, fog, lightning, and wind streaks when it blows, with a warm sky at sunrise and sunset. It uses the place you gave Omarchy's weather, or Omarchy's own lookup of your city, and [Open-Meteo](https://open-meteo.com), every 15 minutes; °F only where it is the custom.
   - **Now Playing**: the artwork, song and artist, with previous, play/pause and next, from Omarchy's media service.
+- **Drag a widget** to move it: it snaps to a grid, and dropping it on another widget swaps the two. **Right-click a widget** to remove it, or to add back one you removed. Where they sit is saved in `~/.config/omarchy/shell.json` (`widgets.layout`).
 - They show on your first screen. To pick another, add `"widgets": { "screen": "HDMI-A-1" }` to `~/.config/omarchy/shell.json`, with a name from `hyprctl monitors`; they move right away.
 
 ### Lock screen (`--lock`)

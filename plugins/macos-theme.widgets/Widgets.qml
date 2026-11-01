@@ -85,6 +85,16 @@ Item {
     onTriggered: root.place ? root.fetchWeather() : root.findPlace()
   }
 
+  // Dawn, day, dusk or night now, rechecked every minute.
+  readonly property string dayPhase: root.weather
+    ? Model.dayPhase(minute.date.getTime(), root.weather.sunrise, root.weather.sunset, root.weather.day)
+    : "day"
+
+  SystemClock {
+    id: minute
+    precision: SystemClock.Minutes
+  }
+
   // Now playing: Omarchy's media service picks the player, as its bar widget does.
   readonly property var media: shell && shell.firstPartyServiceFor ? shell.firstPartyServiceFor("omarchy.media") : null
   readonly property var player: media ? media.activePlayer : (Mpris.players.values.length > 0 ? Mpris.players.values[0] : null)
@@ -119,6 +129,57 @@ Item {
   readonly property var targetScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
     || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
 
+  // The grid: each widget sits in a cell a widget plus a gap wide, from the
+  // top left; dragging one snaps it to the nearest cell, and dropping it on
+  // another swaps them. Where each sits is saved in shell.json.
+  readonly property int cell: size + gap
+  readonly property var layout: Model.normalizeLayout(config.layout)
+  readonly property int cols: Math.max(1, Math.floor((window.width - area.x + gap) / cell))
+  readonly property int rows: Math.max(1, Math.floor((window.height - area.y + gap) / cell))
+  readonly property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/shell.json"
+
+  // Shown at once, then written to shell.json (through a temporary file, so
+  // the shell never reads half of it), one write at a time.
+  property var pendingLayout: null
+
+  function save(layout) {
+    root.config = Object.assign({}, root.config, { layout: layout })
+    root.pendingLayout = layout
+    if (!saver.running) root.writeNext()
+  }
+
+  function writeNext() {
+    if (!root.pendingLayout) return
+    saver.command = ["sh", "-c",
+      'f="$1"; [ -s "$f" ] || echo "{}" > "$f"; t=$(mktemp "$f.XXXXXX") && jq --argjson v "$2" ".widgets.layout = \\$v" "$f" > "$t" && mv "$t" "$f" || rm -f "$t"',
+      "sh", root.configPath, JSON.stringify(root.pendingLayout)]
+    root.pendingLayout = null
+    saver.running = true
+  }
+
+  Process {
+    id: saver
+    onExited: root.writeNext()
+  }
+
+  // The right-click menu: Remove Widget, and Add for each widget not shown.
+  property string menuFor: ""
+  property point menuAt: Qt.point(0, 0)
+
+  function openMenu(id, x, y) {
+    root.menuFor = id
+    root.menuAt = Qt.point(x, y)
+    menuLeave.stop()
+  }
+
+  Timer {
+    id: menuLeave
+    interval: 700
+    onTriggered: root.menuFor = ""
+  }
+
+  readonly property var contents: ({ clock: clockContent, calendar: calendarContent, weather: weatherContent, playing: playingContent })
+
   PanelWindow {
     id: window
     screen: root.targetScreen
@@ -128,313 +189,491 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
-    anchors { top: true; left: true }
-    margins { top: root.gap; left: Math.round(20 * root.s) }
-    implicitWidth: column.width
-    implicitHeight: column.height
+    anchors { top: true; bottom: true; left: true; right: true }
 
-    Column {
-      id: column
-      spacing: root.gap
+    // Only the widgets (and the menu) take clicks; the rest of the desktop is
+    // left alone. A drag keeps the pointer past these bounds until released.
+    mask: Region {
+      x: tiles.childrenRect.x + area.x
+      y: tiles.childrenRect.y + area.y
+      width: tiles.childrenRect.width
+      height: tiles.childrenRect.height
 
-      // Clock: an analog face with a red second hand.
-      Glass {
-        Canvas {
-          id: face
-          anchors.fill: parent
-          anchors.margins: root.pad
-          readonly property date now: clock.date
-          onNowChanged: requestPaint()
-          onPaint: {
-            var ctx = getContext("2d")
-            var w = width, r = w / 2
-            ctx.reset()
-            ctx.translate(r, r)
-            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2)
-            ctx.fillStyle = "rgba(28, 28, 30, 0.85)"; ctx.fill()
-            // Numbers 1 to 12.
-            ctx.fillStyle = "white"
-            ctx.font = "500 " + Math.round(r * 0.2) + "px Inter"
-            ctx.textAlign = "center"; ctx.textBaseline = "middle"
-            for (var i = 1; i <= 12; i++) {
-              var a = i * Math.PI / 6
-              ctx.fillText(String(i), Math.sin(a) * r * 0.78, -Math.cos(a) * r * 0.78)
+      Region { item: root.menuFor ? menu : null }
+    }
+
+    Item {
+      id: area
+      x: Math.round(20 * root.s)
+      y: root.gap
+      width: parent.width - x
+      height: parent.height - y
+
+      Item {
+        id: tiles
+        anchors.fill: parent
+
+        Repeater {
+          model: Model.WIDGETS
+
+          delegate: Glass {
+            id: tile
+            required property string modelData
+            readonly property var spot: Model.find(root.layout, modelData)
+            readonly property bool dragging: dragArea.drag.active
+
+            visible: spot !== null
+            x: spot ? spot.col * root.cell : 0
+            y: spot ? spot.row * root.cell : 0
+            z: dragging ? 10 : 0
+            scale: dragging ? 1.04 : 1
+            opacity: dragging ? 0.92 : 1
+
+            Behavior on x { enabled: !tile.dragging && !Style.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on y { enabled: !tile.dragging && !Style.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on scale { NumberAnimation { duration: 120 } }
+
+            // Under the content, so the media buttons still take their clicks.
+            MouseArea {
+              id: dragArea
+              anchors.fill: parent
+              acceptedButtons: Qt.LeftButton | Qt.RightButton
+              drag.target: tile
+              drag.threshold: 6
+              cursorShape: dragArea.drag.active ? Qt.ClosedHandCursor : Qt.ArrowCursor
+              onPressed: function(event) {
+                if (event.button === Qt.RightButton) {
+                  var p = mapToItem(area, event.x, event.y)
+                  root.openMenu(tile.modelData, p.x, p.y)
+                } else root.menuFor = ""
+              }
+              onReleased: {
+                if (!tile.spot) return
+                var cell = Model.snap(tile.x, tile.y, root.cell, root.cols, root.rows)
+                // Back under the layout's control, then to the cell it snapped to.
+                tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
+                tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
+                if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
+                  root.save(Model.moveTo(root.layout, tile.modelData, cell.col, cell.row))
+              }
             }
-            function hand(angle, length, width, color) {
-              ctx.save(); ctx.rotate(angle)
-              ctx.beginPath(); ctx.moveTo(0, r * 0.1); ctx.lineTo(0, -length)
-              ctx.lineWidth = width; ctx.lineCap = "round"; ctx.strokeStyle = color; ctx.stroke()
-              ctx.restore()
+
+            Loader {
+              anchors.fill: parent
+              sourceComponent: root.contents[tile.modelData]
             }
-            var h = now.getHours() % 12, m = now.getMinutes(), sec = now.getSeconds()
-            hand((h + m / 60) * Math.PI / 6, r * 0.5, r * 0.07, "white")
-            hand((m + sec / 60) * Math.PI / 30, r * 0.74, r * 0.05, "white")
-            hand(sec * Math.PI / 30, r * 0.8, r * 0.022, root.red)
-            ctx.beginPath(); ctx.arc(0, 0, r * 0.05, 0, Math.PI * 2); ctx.fillStyle = root.red; ctx.fill()
           }
         }
       }
 
-      // Calendar: the month with today in a red disc.
-      Glass {
-        id: calendar
-        readonly property date today: clock.date
-        readonly property var rows: Model.monthGrid(today.getFullYear(), today.getMonth(), root.formatLocale.firstDayOfWeek)
-        readonly property real cell: (width - root.pad * 2) / 7
+      Rectangle {
+        id: menu
+        visible: root.menuFor !== ""
+        x: Math.min(root.menuAt.x, area.width - width - root.gap)
+        y: Math.min(root.menuAt.y, area.height - height - root.gap)
+        z: 20
+        width: Math.max(Math.round(170 * root.s), menuColumn.implicitWidth + Math.round(12 * root.s))
+        height: menuColumn.implicitHeight + Math.round(12 * root.s)
+        radius: Math.round(10 * root.s)
+        color: Qt.rgba(0.16, 0.16, 0.18, 0.92)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.14)
+
+        HoverHandler {
+          onHoveredChanged: hovered ? menuLeave.stop() : menuLeave.restart()
+        }
 
         Column {
-          x: root.pad
-          y: root.pad
-          spacing: Math.round(2 * root.s)
+          id: menuColumn
+          anchors.centerIn: parent
+          width: parent.width - Math.round(12 * root.s)
 
-          Text {
-            textFormat: Text.PlainText
-            text: root.formatLocale.toString(calendar.today, "MMMM").toUpperCase()
-            color: root.red
-            font.family: "Inter"
-            font.weight: Font.Bold
-            font.pixelSize: Math.round(11 * root.s)
-            bottomPadding: Math.round(3 * root.s)
+          MenuRow {
+            label: "Remove Widget"
+            enabled: root.layout.length > 1
+            onChosen: root.save(Model.remove(root.layout, root.menuFor))
           }
 
-          Row {
-            Repeater {
-              model: 7
-              delegate: Text {
-                required property int index
-                width: calendar.cell
-                horizontalAlignment: Text.AlignHCenter
-                textFormat: Text.PlainText
-                text: root.formatLocale.standaloneDayName((root.formatLocale.firstDayOfWeek + index) % 7, Locale.NarrowFormat)
-                color: Qt.rgba(1, 1, 1, 0.55)
-                font.family: "Inter"
-                font.weight: Font.DemiBold
-                font.pixelSize: Math.round(9 * root.s)
-              }
-            }
+          Rectangle {
+            visible: Model.hidden(root.layout).length > 0
+            width: parent.width
+            height: visible ? Math.round(9 * root.s) : 0
+            color: "transparent"
+            Rectangle { anchors.centerIn: parent; width: parent.width - Math.round(12 * root.s); height: 1; color: Qt.rgba(1, 1, 1, 0.14) }
           }
 
           Repeater {
-            model: calendar.rows
-            delegate: Row {
-              required property var modelData
-              Repeater {
-                model: modelData
-                delegate: Item {
-                  required property int modelData
-                  readonly property bool isToday: modelData === calendar.today.getDate()
-                  width: calendar.cell
-                  height: Math.round(calendar.cell * 0.82)
+            model: Model.hidden(root.layout)
+            delegate: MenuRow {
+              required property string modelData
+              label: "Add " + Model.NAMES[modelData]
+              onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows))
+            }
+          }
+        }
+      }
+    }
+  }
 
-                  Rectangle {
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, parent.height) + 2
-                    height: width
-                    radius: width / 2
-                    color: root.red
-                    visible: parent.isToday
-                  }
+  component MenuRow: Rectangle {
+    id: row
+    property string label: ""
+    signal chosen()
+    width: parent ? parent.width : 0
+    height: Math.round(26 * root.s)
+    radius: Math.round(6 * root.s)
+    color: rowMouse.containsMouse && row.enabled ? "#0a84ff" : "transparent"
 
-                  Text {
-                    anchors.centerIn: parent
-                    textFormat: Text.PlainText
-                    text: parent.modelData > 0 ? Commons.I18n.formatNumber(parent.modelData) : ""
-                    color: "white"
-                    font.family: "Inter"
-                    font.weight: parent.isToday ? Font.Bold : Font.Medium
-                    font.pixelSize: Math.round(9.5 * root.s)
-                  }
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      x: Math.round(10 * root.s)
+      textFormat: Text.PlainText
+      text: row.label
+      color: row.enabled ? "white" : Qt.rgba(1, 1, 1, 0.35)
+      font.family: "Inter"
+      font.pixelSize: Math.round(13 * root.s)
+    }
+
+    MouseArea {
+      id: rowMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      enabled: row.enabled
+      // The action first: Remove reads which widget the menu is for. An Add
+      // row is gone once its widget is added, so the menu is held beforehand.
+      onClicked: {
+        var owner = root
+        row.chosen()
+        owner.menuFor = ""
+      }
+    }
+  }
+
+  // Clock: an analog face with a red second hand.
+  Component {
+    id: clockContent
+    Item {
+      Canvas {
+        id: face
+        anchors.fill: parent
+        anchors.margins: root.pad
+        readonly property date now: clock.date
+        onNowChanged: requestPaint()
+        onPaint: {
+          var ctx = getContext("2d")
+          var w = width, r = w / 2
+          ctx.reset()
+          ctx.translate(r, r)
+          ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2)
+          ctx.fillStyle = "rgba(28, 28, 30, 0.85)"; ctx.fill()
+          // Numbers 1 to 12.
+          ctx.fillStyle = "white"
+          ctx.font = "500 " + Math.round(r * 0.2) + "px Inter"
+          ctx.textAlign = "center"; ctx.textBaseline = "middle"
+          for (var i = 1; i <= 12; i++) {
+            var a = i * Math.PI / 6
+            ctx.fillText(String(i), Math.sin(a) * r * 0.78, -Math.cos(a) * r * 0.78)
+          }
+          function hand(angle, length, width, color) {
+            ctx.save(); ctx.rotate(angle)
+            ctx.beginPath(); ctx.moveTo(0, r * 0.1); ctx.lineTo(0, -length)
+            ctx.lineWidth = width; ctx.lineCap = "round"; ctx.strokeStyle = color; ctx.stroke()
+            ctx.restore()
+          }
+          var h = now.getHours() % 12, m = now.getMinutes(), sec = now.getSeconds()
+          hand((h + m / 60) * Math.PI / 6, r * 0.5, r * 0.07, "white")
+          hand((m + sec / 60) * Math.PI / 30, r * 0.74, r * 0.05, "white")
+          hand(sec * Math.PI / 30, r * 0.8, r * 0.022, root.red)
+          ctx.beginPath(); ctx.arc(0, 0, r * 0.05, 0, Math.PI * 2); ctx.fillStyle = root.red; ctx.fill()
+        }
+      }
+    }
+  }
+
+  // Calendar: the month with today in a red disc.
+  Component {
+    id: calendarContent
+    Item {
+      id: calendar
+      anchors.fill: parent
+      readonly property date today: clock.date
+      readonly property var rows: Model.monthGrid(today.getFullYear(), today.getMonth(), root.formatLocale.firstDayOfWeek)
+      readonly property real cell: (width - root.pad * 2) / 7
+
+      Column {
+        x: root.pad
+        y: root.pad
+        spacing: Math.round(2 * root.s)
+
+        Text {
+          textFormat: Text.PlainText
+          text: root.formatLocale.toString(calendar.today, "MMMM").toUpperCase()
+          color: root.red
+          font.family: "Inter"
+          font.weight: Font.Bold
+          font.pixelSize: Math.round(11 * root.s)
+          bottomPadding: Math.round(3 * root.s)
+        }
+
+        Row {
+          Repeater {
+            model: 7
+            delegate: Text {
+              required property int index
+              width: calendar.cell
+              horizontalAlignment: Text.AlignHCenter
+              textFormat: Text.PlainText
+              text: root.formatLocale.standaloneDayName((root.formatLocale.firstDayOfWeek + index) % 7, Locale.NarrowFormat)
+              color: Qt.rgba(1, 1, 1, 0.55)
+              font.family: "Inter"
+              font.weight: Font.DemiBold
+              font.pixelSize: Math.round(9 * root.s)
+            }
+          }
+        }
+
+        Repeater {
+          model: calendar.rows
+          delegate: Row {
+            required property var modelData
+            Repeater {
+              model: modelData
+              delegate: Item {
+                required property int modelData
+                readonly property bool isToday: modelData === calendar.today.getDate()
+                width: calendar.cell
+                height: Math.round(calendar.cell * 0.82)
+
+                Rectangle {
+                  anchors.centerIn: parent
+                  width: Math.min(parent.width, parent.height) + 2
+                  height: width
+                  radius: width / 2
+                  color: root.red
+                  visible: parent.isToday
+                }
+
+                Text {
+                  anchors.centerIn: parent
+                  textFormat: Text.PlainText
+                  text: parent.modelData > 0 ? Commons.I18n.formatNumber(parent.modelData) : ""
+                  color: "white"
+                  font.family: "Inter"
+                  font.weight: parent.isToday ? Font.Bold : Font.Medium
+                  font.pixelSize: Math.round(9.5 * root.s)
                 }
               }
             }
           }
         }
       }
+    }
 
-      // Weather: the place, the temperature, the sky and today's high and low,
-      // on blue by day and navy by night, as the macOS widget is.
-      Glass {
-        fill: root.weather && !root.weather.day ? ["#1c2541", "#0b132b"] : ["#3a8dde", "#2160b0"]
+  }
 
-        Column {
-          x: root.pad
-          y: root.pad
-          width: parent.width - root.pad * 2
+  // Weather: the place, the temperature, the sky and today's high and low,
+  // on blue by day and navy by night, as the macOS widget is.
+  Component {
+    id: weatherContent
+    Item {
+      anchors.fill: parent
 
-          Text {
-            width: parent.width
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            text: root.place && root.place.name ? root.place.name : "Weather"
-            color: "white"
-            font.family: "Inter"
-            font.weight: Font.DemiBold
-            font.pixelSize: Math.round(13 * root.s)
-          }
+      WeatherScene {
+        anchors.fill: parent
+        visible: !!root.weather
+        scene: root.weather ? root.weather.scene : "cloudy"
+        phase: root.dayPhase
+        windy: root.weather ? root.weather.windy : false
+        radius: root.radius
+      }
 
-          Text {
-            textFormat: Text.PlainText
-            text: root.weather ? Commons.I18n.formatNumber(root.weather.temp) + "°" : "--"
-            color: "white"
-            font.family: "Inter Display"
-            font.weight: Font.Normal
-            font.pixelSize: Math.round(40 * root.s)
-          }
+      Column {
+        x: root.pad
+        layer.enabled: true
+        layer.effect: MultiEffect {
+          shadowEnabled: true
+          shadowColor: Qt.rgba(0, 0, 0, 0.45)
+          shadowBlur: 0.5
+          shadowVerticalOffset: 1
+        }
+        y: root.pad
+        width: parent.width - root.pad * 2
+
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: root.place && root.place.name ? root.place.name : "Weather"
+          color: "white"
+          font.family: "Inter"
+          font.weight: Font.DemiBold
+          font.pixelSize: Math.round(13 * root.s)
         }
 
-        Column {
-          x: root.pad
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: root.pad
-          width: parent.width - root.pad * 2
-
-          Text {
-            textFormat: Text.PlainText
-            text: root.weather ? root.weather.icon : ""
-            color: "white"
-            font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: Math.round(16 * root.s)
-          }
-
-          Text {
-            width: parent.width
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            text: root.weather ? root.weather.text : ""
-            color: "white"
-            font.family: "Inter"
-            font.weight: Font.DemiBold
-            font.pixelSize: Math.round(11 * root.s)
-          }
-
-          Text {
-            textFormat: Text.PlainText
-            visible: !!root.weather && root.weather.high !== null
-            text: root.weather ? "H:" + Commons.I18n.formatNumber(root.weather.high) + "°  L:" + Commons.I18n.formatNumber(root.weather.low) + "°" : ""
-            color: "white"
-            font.family: "Inter"
-            font.weight: Font.DemiBold
-            font.pixelSize: Math.round(11 * root.s)
-          }
+        Text {
+          textFormat: Text.PlainText
+          text: root.weather ? Commons.I18n.formatNumber(root.weather.temp) + "°" : "--"
+          color: "white"
+          font.family: "Inter Display"
+          font.weight: Font.Normal
+          font.pixelSize: Math.round(40 * root.s)
         }
       }
 
-      // Now playing: the artwork, the song and its artist, and the controls.
-      Glass {
-        id: playing
-        readonly property bool has: !!root.player && !!(root.player.trackTitle || root.player.trackArtist)
+      Column {
+        x: root.pad
+        layer.enabled: true
+        layer.effect: MultiEffect {
+          shadowEnabled: true
+          shadowColor: Qt.rgba(0, 0, 0, 0.45)
+          shadowBlur: 0.5
+          shadowVerticalOffset: 1
+        }
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: root.pad
+        width: parent.width - root.pad * 2
 
-        Item {
-          id: art
-          x: root.pad
-          y: root.pad
-          width: Math.round(56 * root.s)
-          height: width
-
-          Rectangle {
-            id: artMask
-            anchors.fill: parent
-            radius: Math.round(8 * root.s)
-            visible: false
-            layer.enabled: true
-          }
-
-          Rectangle {
-            anchors.fill: parent
-            radius: artMask.radius
-            color: Qt.rgba(1, 1, 1, 0.12)
-            visible: artImage.status !== Image.Ready
-
-            Text {
-              anchors.centerIn: parent
-              textFormat: Text.PlainText
-              text: "♪"
-              color: Qt.rgba(1, 1, 1, 0.6)
-              font.pixelSize: Math.round(parent.height * 0.45)
-            }
-          }
-
-          Image {
-            id: artImage
-            anchors.fill: parent
-            source: playing.has && root.player.trackArtUrl ? root.player.trackArtUrl : ""
-            sourceSize: Qt.size(width * 2, height * 2)
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            visible: false
-          }
-
-          MultiEffect {
-            anchors.fill: parent
-            source: artImage
-            visible: artImage.status === Image.Ready
-            maskEnabled: true
-            maskSource: artMask
-            maskThresholdMin: 0.5
-            maskSpreadAtMin: 1
-          }
+        Text {
+          textFormat: Text.PlainText
+          text: root.weather ? root.weather.icon : ""
+          color: "white"
+          font.family: "JetBrainsMono Nerd Font"
+          font.pixelSize: Math.round(16 * root.s)
         }
 
-        Column {
-          x: root.pad
-          y: art.y + art.height + Math.round(8 * root.s)
-          width: parent.width - root.pad * 2
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: root.weather ? root.weather.text : ""
+          color: "white"
+          font.family: "Inter"
+          font.weight: Font.DemiBold
+          font.pixelSize: Math.round(11 * root.s)
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          visible: !!root.weather && root.weather.high !== null
+          text: root.weather ? "H:" + Commons.I18n.formatNumber(root.weather.high) + "°  L:" + Commons.I18n.formatNumber(root.weather.low) + "°" : ""
+          color: "white"
+          font.family: "Inter"
+          font.weight: Font.DemiBold
+          font.pixelSize: Math.round(11 * root.s)
+        }
+      }
+    }
+
+  }
+
+  // Now playing: the artwork, the song and its artist, and the controls.
+  Component {
+    id: playingContent
+    Item {
+      id: playing
+      anchors.fill: parent
+      readonly property bool has: !!root.player && !!(root.player.trackTitle || root.player.trackArtist)
+
+      Item {
+        id: art
+        x: root.pad
+        y: root.pad
+        width: Math.round(56 * root.s)
+        height: width
+
+        Rectangle {
+          id: artMask
+          anchors.fill: parent
+          radius: Math.round(8 * root.s)
+          visible: false
+          layer.enabled: true
+        }
+
+        Rectangle {
+          anchors.fill: parent
+          radius: artMask.radius
+          color: Qt.rgba(1, 1, 1, 0.12)
+          visible: artImage.status !== Image.Ready
 
           Text {
-            width: parent.width
-            elide: Text.ElideRight
+            anchors.centerIn: parent
             textFormat: Text.PlainText
-            text: playing.has ? (root.player.trackTitle || "") : "Not Playing"
-            color: "white"
-            font.family: "Inter"
-            font.weight: Font.DemiBold
-            font.pixelSize: Math.round(12 * root.s)
-          }
-
-          Text {
-            width: parent.width
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            text: playing.has ? (root.player.trackArtist || "") : ""
+            text: "♪"
             color: Qt.rgba(1, 1, 1, 0.6)
-            font.family: "Inter"
-            font.pixelSize: Math.round(11 * root.s)
+            font.pixelSize: Math.round(parent.height * 0.45)
           }
         }
 
-        Row {
-          anchors.horizontalCenter: parent.horizontalCenter
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Math.round(10 * root.s)
-          spacing: Math.round(20 * root.s)
-          visible: playing.has
-
-          Control { glyph: String.fromCodePoint(0xF04AE); action: "previous" }
-          Control { glyph: String.fromCodePoint(root.player && root.player.isPlaying ? 0xF03E4 : 0xF040A); action: "playPause"; big: true }
-          Control { glyph: String.fromCodePoint(0xF04AD); action: "next" }
+        Image {
+          id: artImage
+          anchors.fill: parent
+          source: playing.has && root.player.trackArtUrl ? root.player.trackArtUrl : ""
+          sourceSize: Qt.size(width * 2, height * 2)
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+          visible: false
         }
+
+        MultiEffect {
+          anchors.fill: parent
+          source: artImage
+          visible: artImage.status === Image.Ready
+          maskEnabled: true
+          maskSource: artMask
+          maskThresholdMin: 0.5
+          maskSpreadAtMin: 1
+        }
+      }
+
+      Column {
+        x: root.pad
+        y: art.y + art.height + Math.round(8 * root.s)
+        width: parent.width - root.pad * 2
+
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: playing.has ? (root.player.trackTitle || "") : "Not Playing"
+          color: "white"
+          font.family: "Inter"
+          font.weight: Font.DemiBold
+          font.pixelSize: Math.round(12 * root.s)
+        }
+
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: playing.has ? (root.player.trackArtist || "") : ""
+          color: Qt.rgba(1, 1, 1, 0.6)
+          font.family: "Inter"
+          font.pixelSize: Math.round(11 * root.s)
+        }
+      }
+
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Math.round(10 * root.s)
+        spacing: Math.round(20 * root.s)
+        visible: playing.has
+
+        Control { glyph: String.fromCodePoint(0xF04AE); action: "previous" }
+        Control { glyph: String.fromCodePoint(root.player && root.player.isPlaying ? 0xF03E4 : 0xF040A); action: "playPause"; big: true }
+        Control { glyph: String.fromCodePoint(0xF04AD); action: "next" }
       }
     }
   }
 
-  // A widget's frosted square; Hyprland blurs what is behind it. A gradient
-  // in place of the glass when fill is given.
+  // A widget's frosted square; Hyprland blurs what is behind it.
   component Glass: Rectangle {
-    id: glass
-    property var fill: null
     width: root.size
     height: root.size
     radius: root.radius
     color: Qt.rgba(0.16, 0.16, 0.18, 0.5)
-    gradient: fill ? fillGradient : null
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.12)
-
-    Gradient {
-      id: fillGradient
-      GradientStop { position: 0; color: glass.fill ? glass.fill[0] : "transparent" }
-      GradientStop { position: 1; color: glass.fill ? glass.fill[1] : "transparent" }
-    }
   }
 
   component Control: Text {
