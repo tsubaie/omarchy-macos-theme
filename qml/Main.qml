@@ -56,6 +56,9 @@ Window {
     // the theme reloads once however many there are.
     property var pendingPieces: ({})
     property var pendingSettings: ({})
+    // The time the page pictures show, kept to the minute.
+    property date now: new Date()
+    Timer { interval: 15000; running: true; repeat: true; onTriggered: window.now = new Date() }
     // The menu bar's items as the installer lists them, and the arrangement
     // waiting for Apply (null while unchanged).
     readonly property var bar: {
@@ -546,6 +549,8 @@ Window {
                 width: parent.width
                 spacing: 18
 
+                GeneralScene { width: parent.width }
+
                 Group {
                     title: "Theme"
 
@@ -620,6 +625,7 @@ Window {
             }
 
             // Dock.
+            DockScene { visible: backend.downloaded && window.page === "dock"; width: parent.width }
             Group {
                 visible: backend.downloaded && window.page === "dock"
 
@@ -642,6 +648,7 @@ Window {
             }
 
             // Lock screen.
+            LockScene { visible: backend.downloaded && window.page === "lock"; width: parent.width }
             Group {
                 visible: backend.downloaded && window.page === "lock"
 
@@ -667,6 +674,8 @@ Window {
                 visible: backend.downloaded && window.page === "widgets"
                 width: parent.width
                 spacing: 18
+
+                WidgetsScene { width: parent.width }
 
                 Group {
                     SettingRow {
@@ -702,6 +711,7 @@ Window {
             }
 
             // Menu bar.
+            MenuBarScene { visible: backend.downloaded && window.page === "menubar"; width: parent.width }
             Group {
                 visible: backend.downloaded && window.page === "menubar"
 
@@ -748,6 +758,8 @@ Window {
                 visible: backend.downloaded && window.page === "backups"
                 width: parent.width
                 spacing: 18
+
+                BackupsScene { width: parent.width }
 
                 Group {
                     title: "This Computer"
@@ -823,7 +835,11 @@ Window {
                 visible: window.page === "overview"
                 width: parent.width
                 spacing: 6
-                topPadding: 16
+                topPadding: 4
+
+                HomeScene { width: parent.width }
+
+                Item { width: 1; height: 14 }
 
                 AppIcon {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -1094,13 +1110,15 @@ Window {
     }
 
     // A slider for one install.sh setting, set when let go.
-    // Glass and blur as they will look, over the wallpaper: a window and a
-    // browser, each as see-through as its slider says, the wallpaper behind
-    // them blurred as strongly as the blur slider says. It follows the sliders
-    // as they move; the desktop changes on Apply.
-    component GlassPreview: Rectangle {
-        id: preview
-        readonly property real blurAmount: window.settingValue("blur", 10)
+    // The picture at the top of each page: a macOS-like wallpaper in a card,
+    // with what the page sets drawn over it, following its switches and
+    // sliders as they move. Its content goes over the wallpaper.
+    component Scene: Rectangle {
+        id: scene
+        default property alias content: stage.data
+        property alias wallpaper: wallpaperImage
+        // Blurred and dimmed behind everything, as the lock screen does.
+        property bool frosted: false
         height: 168
         radius: 10
         color: "#1c1c1e"
@@ -1110,28 +1128,385 @@ Window {
         layer.effect: MultiEffect {
             maskEnabled: true
             maskSource: ShaderEffectSource {
-                sourceItem: Rectangle { width: preview.width; height: preview.height; radius: preview.radius }
+                sourceItem: Rectangle { width: scene.width; height: scene.height; radius: scene.radius }
             }
         }
 
         Image {
-            id: wallpaper
+            id: wallpaperImage
             anchors.fill: parent
-            source: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/.local/state/omarchy/current/background"
+            // The theme's macOS-like waves, the same on every page and machine.
+            source: "file://" + backend.themeDir + "/theme/backgrounds/1-pawel-czerwinski.jpg"
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             sourceSize.width: 900
+            visible: !scene.frosted
         }
+        MultiEffect {
+            anchors.fill: parent
+            visible: scene.frosted
+            source: wallpaperImage
+            blurEnabled: true
+            blur: 1
+            blurMax: 48
+            brightness: -0.15
+        }
+        Item { id: stage; anchors.fill: parent }
+    }
+
+    // Glass and blur as they will look, over the wallpaper: a window and a
+    // browser, each as see-through as its slider says, the wallpaper behind
+    // them blurred as strongly as the blur slider says. It follows the sliders
+    // as they move; the desktop changes on Apply.
+    component GlassPreview: Scene {
+        id: preview
+        readonly property real blurAmount: window.settingValue("blur", 10)
 
         MockWindow {
             x: parent.width * 0.06; y: 22; width: parent.width * 0.5; height: 128
             glass: window.settingValue("glass", 0.7); title: "Files"
-            backdrop: wallpaper; blurAmount: preview.blurAmount
+            backdrop: preview.wallpaper; blurAmount: preview.blurAmount
         }
         MockWindow {
             x: parent.width * 0.44; y: 36; width: parent.width * 0.5; height: 116
             glass: window.settingValue("web-glass", 1); title: "Browser"
-            backdrop: wallpaper; blurAmount: preview.blurAmount
+            backdrop: preview.wallpaper; blurAmount: preview.blurAmount
+        }
+    }
+
+    // General: Files with striped rows, the Spotlight-like menu, and the
+    // volume capsule and dictation pill where they show, each while it is on.
+    component GeneralScene: Scene {
+        id: general
+        readonly property bool osdTop: window.placeValue("volume-hud") === "top"
+        readonly property bool pillTop: window.placeValue("dictation-hud") === "top"
+
+        MockWindow {
+            x: 18; y: 18; width: parent.width * 0.42; height: 132
+            glass: 0.92; title: "Files"; rows: window.pieceOn("rows")
+            backdrop: general.wallpaper; blurAmount: 10
+        }
+        // The Spotlight-like menu: a wide search field with a magnifier.
+        Rectangle {
+            visible: window.pieceOn("wide-menu")
+            x: parent.width * 0.5; y: 30; width: parent.width * 0.4; height: 30; radius: 9
+            color: Qt.rgba(0.15, 0.15, 0.16, 0.92)
+            border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.1)
+            Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: "#aeaeb2"; font.pixelSize: 15 }
+            Text { x: 30; anchors.verticalCenter: parent.verticalCenter; text: "Search"; color: "#8e8e93"; font.pixelSize: 12 }
+        }
+        // The volume capsule: a speaker and a level.
+        Rectangle {
+            visible: window.pieceOn("osd")
+            width: 120; height: 26; radius: 13
+            x: general.osdTop ? parent.width - width - 14 : (parent.width - width) / 2 + 40
+            y: general.osdTop ? 72 : parent.height - height - 14
+            color: Qt.rgba(0.17, 0.17, 0.18, 0.92)
+            border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.1)
+            // A speaker: its box and cone.
+            Canvas {
+                x: 10; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 10
+                onPaint: { const c = getContext("2d"); c.reset(); c.fillStyle = "white"
+                    c.beginPath(); c.moveTo(0, 3); c.lineTo(3, 3); c.lineTo(7, 0); c.lineTo(7, 10); c.lineTo(3, 7); c.lineTo(0, 7); c.closePath(); c.fill()
+                    c.strokeStyle = "white"; c.lineWidth = 1.2; c.beginPath(); c.arc(7, 5, 3.5, -0.9, 0.9); c.stroke() }
+            }
+            Rectangle { x: 30; anchors.verticalCenter: parent.verticalCenter; width: 78; height: 5; radius: 2.5; color: Qt.rgba(1, 1, 1, 0.25)
+                Rectangle { width: parent.width * 0.62; height: parent.height; radius: 2.5; color: "white" } }
+        }
+        // The dictation pill: a red dot and a few bars.
+        Rectangle {
+            visible: window.pieceOn("dictation-hud")
+            width: 64; height: 22; radius: 11
+            x: general.pillTop ? parent.width - width - 14 : (parent.width - width) / 2 - 70
+            y: general.pillTop ? 106 : parent.height - height - 16
+            color: Qt.rgba(0.08, 0.08, 0.09, 0.92)
+            Row {
+                anchors.centerIn: parent; spacing: 3
+                Rectangle { width: 7; height: 7; radius: 3.5; color: "#ff453a"; anchors.verticalCenter: parent.verticalCenter }
+                Repeater { model: [6, 11, 8, 13, 7]; Rectangle { width: 3; height: modelData; radius: 1.5; color: "white"; anchors.verticalCenter: parent.verticalCenter } }
+            }
+        }
+    }
+
+    // Dock: icons as big as the Size slider says, the ones by the pointer
+    // grown as far as Magnification says.
+    component DockScene: Scene {
+        id: dockScene
+        readonly property real icon: window.settingValue("dock-size", 48) * 0.62
+        readonly property real peak: window.settingValue("magnification", 1.75)
+        readonly property int pointed: 3
+        readonly property var tints: [["#5ac8fa", "#007aff"], ["#ffd60a", "#ff9f0a"], ["#30d158", "#248a3d"], ["#ff6482", "#ff2d55"],
+            ["#bf5af2", "#8944ab"], ["#64d2ff", "#0a84ff"], ["#ff9f0a", "#ff6b00"], ["#d1d1d6", "#8e8e93"]]
+        function scaleAt(i) {
+            const d = Math.abs(i - pointed)
+            return d >= 2.5 ? 1 : 1 + (peak - 1) * Math.cos(d / 2.5 * Math.PI / 2)
+        }
+
+        Rectangle {
+            id: dockBar
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: parent.height - height - 10
+            width: icons.width + 16; height: dockScene.icon + 14; radius: 16
+            color: Qt.rgba(0.2, 0.2, 0.22, 0.55)
+            border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.16)
+        }
+        Row {
+            id: icons
+            anchors.horizontalCenter: dockBar.horizontalCenter
+            anchors.bottom: dockBar.bottom; anchors.bottomMargin: 7
+            spacing: 6
+            Repeater {
+                model: dockScene.tints
+                Item {
+                    required property var modelData
+                    required property int index
+                    width: dockScene.icon * dockScene.scaleAt(index)
+                    height: width
+                    anchors.bottom: parent.bottom
+                    Rectangle {
+                        anchors.fill: parent; radius: width * 0.225
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: modelData[0] }
+                            GradientStop { position: 1; color: modelData[1] }
+                        }
+                    }
+                }
+            }
+        }
+        // The pointer over the magnified icon.
+        Text {
+            text: "➤"; rotation: -120; color: "white"; style: Text.Outline; styleColor: "black"
+            font.pixelSize: 16
+            x: icons.x + icons.children[dockScene.pointed].x + icons.children[dockScene.pointed].width * 0.55
+            y: dockBar.y + dockBar.height - 22
+        }
+    }
+
+    // Lock screen: the date, a large clock, the account picture and the glass
+    // password field, over the wallpaper blurred.
+    component LockScene: Scene {
+        frosted: true
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter; y: 16; spacing: 0
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: Qt.formatDate(window.now, "dddd, MMMM d"); color: Qt.rgba(1, 1, 1, 0.85); font.pixelSize: 12; font.weight: Font.DemiBold }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: Qt.formatTime(window.now, "h:mm"); color: "white"; font.pixelSize: 52; font.weight: Font.Bold }
+        }
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter; y: parent.height - 62; spacing: 6
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 26; height: 26; radius: 13; color: "#8e8e93"
+                Text { anchors.centerIn: parent; text: "●"; color: "#d1d1d6"; font.pixelSize: 11 } }
+            Rectangle { width: 110; height: 20; radius: 10; color: Qt.rgba(1, 1, 1, 0.18)
+                Text { anchors.centerIn: parent; text: "Enter Password"; color: Qt.rgba(1, 1, 1, 0.6); font.pixelSize: 9 } }
+        }
+    }
+
+    // Widgets: the desktop widgets switched on, in a row on the wallpaper.
+    component WidgetsScene: Scene {
+        Row {
+            anchors.left: parent.left; anchors.leftMargin: 16; anchors.verticalCenter: parent.verticalCenter
+            spacing: 12
+            Repeater {
+                model: window.widgetsShown
+                Rectangle {
+                    required property string modelData
+                    width: modelData === "calendar" || modelData === "playing" ? 150 : 110; height: 110; radius: 18
+                    color: Qt.rgba(0.12, 0.12, 0.13, 0.72)
+                    border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.1)
+
+                    // Clock: a face with two hands at the time.
+                    Item {
+                        visible: modelData === "clock"; anchors.centerIn: parent; width: 84; height: 84
+                        Rectangle { anchors.fill: parent; radius: 42; color: "white" }
+                        Repeater { model: 12; Rectangle { required property int index; x: 41; y: 4; width: 2; height: 6; color: "#1c1c1e"; transform: Rotation { origin.x: 1; origin.y: 38; angle: index * 30 } } }
+                        Rectangle { x: 41; y: 22; width: 3; height: 21; radius: 1.5; color: "#1c1c1e"; transform: Rotation { origin.x: 1.5; origin.y: 20; angle: (window.now.getHours() % 12 + window.now.getMinutes() / 60) * 30 } }
+                        Rectangle { x: 41.5; y: 10; width: 2; height: 33; radius: 1; color: "#1c1c1e"; transform: Rotation { origin.x: 1; origin.y: 32; angle: window.now.getMinutes() * 6 } }
+                    }
+                    // Calendar: the month and its days, today ringed.
+                    Column {
+                        visible: modelData === "calendar"; x: 12; y: 10; spacing: 4
+                        Text { text: Qt.formatDate(window.now, "MMMM").toUpperCase(); color: "#ff453a"; font.pixelSize: 9; font.weight: Font.Bold }
+                        Grid {
+                            columns: 7; columnSpacing: 6; rowSpacing: 3
+                            Repeater {
+                                model: 28
+                                Text { required property int index; width: 12; horizontalAlignment: Text.AlignHCenter; text: index + 1; font.pixelSize: 8
+                                    color: index + 1 === window.now.getDate() ? "#ff453a" : "white"; font.weight: index + 1 === window.now.getDate() ? Font.Bold : Font.Normal }
+                            }
+                        }
+                    }
+                    // Weather: a sun and a temperature.
+                    Column {
+                        visible: modelData === "weather"; x: 12; y: 12; spacing: 2
+                        Text { text: "Weather"; color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold }
+                        Text { text: "24°"; color: "white"; font.pixelSize: 30; font.weight: Font.Light }
+                        Text { text: "☀︎  Sunny"; color: "#ffd60a"; font.pixelSize: 10 }
+                    }
+                    // Now playing: artwork, a title and the controls.
+                    Row {
+                        visible: modelData === "playing"; x: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                        Rectangle { width: 44; height: 44; radius: 8
+                            gradient: Gradient { GradientStop { position: 0; color: "#ff375f" } GradientStop { position: 1; color: "#5e5ce6" } } }
+                        Column {
+                            spacing: 3; anchors.verticalCenter: parent.verticalCenter
+                            Text { text: "Now Playing"; color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold }
+                            Text { text: "⏮  ⏵  ⏭"; color: Qt.rgba(1, 1, 1, 0.8); font.pixelSize: 11 }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Menu bar: the bar with the app name in bold and its icons, and Control
+    // Center open from its icon, lit by a rounded pane.
+    component MenuBarScene: Scene {
+        id: barScene
+        readonly property bool mac: window.pieceOn("menubar")
+        Rectangle {
+            width: parent.width; height: 24; color: Qt.rgba(0, 0, 0, 0.45)
+            Row {
+                x: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 14
+                Text { text: "⌘"; color: "white"; font.pixelSize: 12 }
+                Text { text: barScene.mac ? "Files" : ""; color: "white"; font.pixelSize: 11; font.weight: Font.Bold }
+                Text { text: "File   Edit   View   Go"; color: Qt.rgba(1, 1, 1, 0.85); font.pixelSize: 11; visible: barScene.mac }
+            }
+            Row {
+                anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 12
+                Text { text: "EN"; color: "white"; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
+                // Wi-Fi: a wedge and two arcs.
+                Canvas {
+                    width: 14; height: 11; anchors.verticalCenter: parent.verticalCenter
+                    onPaint: { const c = getContext("2d"); c.reset(); c.strokeStyle = "white"; c.fillStyle = "white"; c.lineWidth = 1.6; c.lineCap = "round"
+                        c.beginPath(); c.moveTo(7, 10); c.arc(7, 10, 3, -Math.PI * 0.75, -Math.PI * 0.25); c.closePath(); c.fill()
+                        for (const r of [6, 9]) { c.beginPath(); c.arc(7, 10.5, r, -Math.PI * 0.75, -Math.PI * 0.25); c.stroke() } }
+                }
+                Rectangle {
+                    visible: barScene.mac
+                    width: 30; height: 18; radius: 9; color: Qt.rgba(1, 1, 1, 0.22); anchors.verticalCenter: parent.verticalCenter
+                    Column { anchors.centerIn: parent; spacing: 2
+                        Repeater { model: 2; Rectangle { width: 12; height: 5; radius: 2.5; color: "transparent"; border.width: 1; border.color: "white" } } }
+                }
+                Text { text: Qt.formatDateTime(window.now, "ddd h:mm AP"); color: "white"; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
+            }
+        }
+        // Control Center, open under its icon.
+        Rectangle {
+            visible: barScene.mac
+            anchors.right: parent.right; anchors.rightMargin: 60; y: 30
+            width: 170; height: 126; radius: 14
+            color: Qt.rgba(0.12, 0.12, 0.13, 0.85); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.12)
+            Grid {
+                x: 8; y: 8; columns: 2; spacing: 6
+                Repeater {
+                    model: ["Wi-Fi", "Bluetooth", "AirDrop", "Focus"]
+                    Rectangle {
+                        required property string modelData
+                        width: 74; height: 30; radius: 15; color: Qt.rgba(1, 1, 1, 0.06); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.08)
+                        Rectangle { x: 4; anchors.verticalCenter: parent.verticalCenter; width: 22; height: 22; radius: 11; color: modelData === "Focus" ? Qt.rgba(1, 1, 1, 0.12) : "#0a84ff" }
+                        Text { x: 30; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: "white"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                    }
+                }
+            }
+            Rectangle {
+                x: 8; y: 82; width: 154; height: 36; radius: 12; color: Qt.rgba(1, 1, 1, 0.06)
+                Text { x: 8; y: 4; text: "Sound"; color: "white"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                Rectangle { x: 8; y: 22; width: 138; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.2)
+                    Rectangle { width: parent.width * 0.6; height: 4; radius: 2; color: "white" } }
+            }
+        }
+    }
+
+    // Home: the whole theme at a glance, a desktop with the menu bar, a window
+    // at its glass, the clock widget and the dock at its size.
+    component HomeScene: Scene {
+        id: home
+        height: 200
+        Rectangle {
+            width: parent.width; height: 22; color: Qt.rgba(0, 0, 0, 0.4)
+            Row {
+                x: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 14
+                Text { text: "⌘"; color: "white"; font.pixelSize: 11 }
+                Text { text: "Files"; color: "white"; font.pixelSize: 10; font.weight: Font.Bold }
+                Text { text: "File   Edit   View   Go"; color: Qt.rgba(1, 1, 1, 0.85); font.pixelSize: 10 }
+            }
+            Row {
+                anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 12
+                Canvas {
+                    width: 14; height: 11; anchors.verticalCenter: parent.verticalCenter
+                    onPaint: { const c = getContext("2d"); c.reset(); c.strokeStyle = "white"; c.fillStyle = "white"; c.lineWidth = 1.6; c.lineCap = "round"
+                        c.beginPath(); c.moveTo(7, 10); c.arc(7, 10, 3, -Math.PI * 0.75, -Math.PI * 0.25); c.closePath(); c.fill()
+                        for (const r of [6, 9]) { c.beginPath(); c.arc(7, 10.5, r, -Math.PI * 0.75, -Math.PI * 0.25); c.stroke() } }
+                }
+                Rectangle {
+                    width: 26; height: 16; radius: 8; color: Qt.rgba(1, 1, 1, 0.18); anchors.verticalCenter: parent.verticalCenter
+                    Column { anchors.centerIn: parent; spacing: 2
+                        Repeater { model: 2; Rectangle { width: 11; height: 4; radius: 2; color: "transparent"; border.width: 1; border.color: "white" } } }
+                }
+                Text { text: Qt.formatDateTime(window.now, "ddd h:mm AP"); color: "white"; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
+            }
+        }
+        MockWindow {
+            x: parent.width * 0.08; y: 34; width: parent.width * 0.5; height: 96
+            glass: window.settingValue("glass", 0.7); title: "Files"; rows: window.pieceOn("rows")
+            backdrop: home.wallpaper; blurAmount: window.settingValue("blur", 10)
+        }
+        // The clock widget.
+        Rectangle {
+            x: parent.width - width - 22; y: 36; width: 84; height: 84; radius: 16
+            color: Qt.rgba(0.12, 0.12, 0.13, 0.72); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.1)
+            Item {
+                anchors.centerIn: parent; width: 64; height: 64
+                Rectangle { anchors.fill: parent; radius: 32; color: "white" }
+                Rectangle { x: 31; y: 17; width: 3; height: 16; radius: 1.5; color: "#1c1c1e"; transform: Rotation { origin.x: 1.5; origin.y: 15; angle: (window.now.getHours() % 12 + window.now.getMinutes() / 60) * 30 } }
+                Rectangle { x: 31.5; y: 8; width: 2; height: 25; radius: 1; color: "#1c1c1e"; transform: Rotation { origin.x: 1; origin.y: 24; angle: window.now.getMinutes() * 6 } }
+            }
+        }
+        // The dock.
+        Rectangle {
+            id: homeDock
+            readonly property real icon: window.settingValue("dock-size", 48) * 0.48
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: parent.height - height - 8
+            width: homeIcons.width + 14; height: icon + 12; radius: 13
+            color: Qt.rgba(0.2, 0.2, 0.22, 0.55); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.16)
+            Row {
+                id: homeIcons
+                anchors.centerIn: parent; spacing: 5
+                Repeater {
+                    model: [["#5ac8fa", "#007aff"], ["#ffd60a", "#ff9f0a"], ["#30d158", "#248a3d"], ["#ff6482", "#ff2d55"], ["#bf5af2", "#8944ab"], ["#d1d1d6", "#8e8e93"]]
+                    Rectangle {
+                        required property var modelData
+                        width: homeDock.icon; height: width; radius: width * 0.225
+                        gradient: Gradient { GradientStop { position: 0; color: modelData[0] } GradientStop { position: 1; color: modelData[1] } }
+                    }
+                }
+            }
+        }
+    }
+
+    // Backups: the latest snapshots as cards stacked back to front, each with
+    // its date.
+    component BackupsScene: Scene {
+        Repeater {
+            model: Math.min(3, Math.max(1, window.backups.length))
+            Rectangle {
+                required property int index
+                readonly property var backup: window.backups[index] || null
+                width: 190; height: 104; radius: 12
+                x: parent.width / 2 - width / 2 + (index - 1) * 46
+                y: 34 - index * 6 + 12
+                z: 3 - index
+                scale: 1 - index * 0.06
+                color: Qt.rgba(0.14 - index * 0.02, 0.14 - index * 0.02, 0.15 - index * 0.02, 1); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.12)
+                Row { x: 10; y: 9; spacing: 5
+                    Repeater { model: ["#ff5f57", "#febc2e", "#28c840"]; Rectangle { width: 7; height: 7; radius: 3.5; color: modelData } } }
+                Text { x: 12; y: 26; text: "↺"; color: "#0a84ff"; font.pixelSize: 28 }
+                Column {
+                    x: 50; y: 30; spacing: 3; width: parent.width - 60
+                    Text { width: parent.width; elide: Text.ElideRight; text: backup ? (backup.original ? "Before macOS theme" : backup.note) : "Backups"; color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold }
+                    Text { width: parent.width; elide: Text.ElideRight; text: backup ? window.when(backup.created) : "Taken before every change"; color: Qt.rgba(1, 1, 1, 0.6); font.pixelSize: 9 }
+                }
+            }
         }
     }
 
@@ -1144,6 +1519,8 @@ Window {
         // What shows through it, and how strongly it is blurred (0 to 20).
         property Item backdrop: null
         property real blurAmount: 0
+        // Rows striped as in Files, instead of plain lines.
+        property bool rows: false
         layer.enabled: true
         layer.effect: MultiEffect {
             maskEnabled: true
@@ -1180,10 +1557,25 @@ Window {
             text: mock.title; color: "#e5e5e7"; font.pixelSize: 11; font.weight: Font.DemiBold
         }
         Column {
+            visible: !mock.rows
             x: 14; y: 38; spacing: 9
             Repeater {
                 model: [0.7, 0.5, 0.62, 0.4]
                 Rectangle { width: mock.width * modelData; height: 7; radius: 3.5; color: Qt.rgba(1, 1, 1, 0.22) }
+            }
+        }
+        Column {
+            visible: mock.rows
+            x: 6; y: 30; width: mock.width - 12
+            Repeater {
+                model: 6
+                Rectangle {
+                    required property int index
+                    width: parent.width; height: 16; radius: 4
+                    color: index % 2 ? "transparent" : Qt.rgba(1, 1, 1, 0.06)
+                    Rectangle { x: 8; anchors.verticalCenter: parent.verticalCenter; width: 10; height: 8; radius: 2; color: "#5ac8fa" }
+                    Rectangle { x: 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width * (0.35 + (index % 3) * 0.1); height: 5; radius: 2.5; color: Qt.rgba(1, 1, 1, 0.3) }
+                }
             }
         }
     }
