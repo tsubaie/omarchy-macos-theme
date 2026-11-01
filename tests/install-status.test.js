@@ -36,7 +36,7 @@ try {
   assert.deepStrictEqual(Object.keys(s.features), pieces)
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(s.active, false)
-  assert.deepStrictEqual(s.settings, { glass: 0.7, "web-glass": 1, snapping: 1, blur: 10, magnification: 1.75 })
+  assert.deepStrictEqual(s.settings, { glass: 0.7, "web-glass": 1, snapping: 1, blur: 10, magnification: 1.75, "dock-size": 48 })
 
   // --add installs only what it names.
   assert.strictEqual(run("--add", "rows", "--add", "dock").status, 0)
@@ -81,8 +81,8 @@ try {
   // goes into the dock's section of shell.json, next to what was there.
   const shellJson = path.join(home, ".config/omarchy/shell.json")
   fs.writeFileSync(shellJson, JSON.stringify({ dock: { position: "left" } }))
-  assert.strictEqual(run("--set", "glass=0.85", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "blur=15", "--set", "magnification=1.2").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, blur: 15, magnification: 1.2 })
+  assert.strictEqual(run("--set", "glass=0.85", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "blur=15", "--set", "magnification=1.2", "--set", "dock-size=60").status, 0)
+  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, blur: 15, magnification: 1.2, "dock-size": 60 })
   const look = fs.readFileSync(path.join(themeDir, "look.lua"), "utf8")
   assert.match(look, /o\.window\("\.\*", \{ opacity = "0\.85 0\.85" \}\)/)
   assert.match(look, /brave-browser\|.*", \{ opacity = "0\.9 0\.9" \}\)/)
@@ -90,10 +90,20 @@ try {
   assert.match(look, /^local BLUR = 15$/m)
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).dock.position, "left")
   assert.strictEqual(run("--add", "theme").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, blur: 15, magnification: 1.2 })
-  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "blur=0.5", "blur=21", "blur=-1", "web-glass=0.1"]) {
+  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, blur: 15, magnification: 1.2, "dock-size": 60 })
+  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "blur=0.5", "blur=21", "blur=-1", "web-glass=0.1", "dock-size=31", "dock-size=81", "dock-size=50.5"]) {
     assert.strictEqual(run("--set", bad).status, 1, bad)
   }
+  // A preview writes the settings as --set does, for a slider being dragged;
+  // the same checks apply, and only settings that can be shown at once.
+  // Blur and the dock's settings are shown in place, not written, so the
+  // settings stay until Apply.
+  assert.strictEqual(run("--preview", "--set", "blur=12", "--set", "dock-size=40").status, 0)
+  assert.strictEqual(status().settings.blur, 15)
+  assert.strictEqual(status().settings["dock-size"], 60)
+  assert.strictEqual(run("--preview", "--set", "blur=21").status, 1)
+  assert.strictEqual(run("--preview", "--set", "clock=left").status, 1)
+  assert.strictEqual(run("--set", "blur=15", "--set", "dock-size=60").status, 0)
   const removed = run("--remove", "theme")
   assert.strictEqual(removed.status, 0, removed.stdout + removed.stderr)
   assert.strictEqual(status().features.theme, false)

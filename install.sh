@@ -31,6 +31,11 @@
 #                                 show, hide and order the bar's items (sections: left,
 #                                 centerBegin, center, centerEnd, right, tray)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
+#   ./install.sh --set dock-size=56  how big dock icons are, 32 to 80 points; 48 by default
+#   ./install.sh --preview --set blur=15  show settings at once, for a slider being dragged:
+#                                  no snapshot or theme refresh; blur and the dock's
+#                                  settings change in place until Apply, glass reloads
+#                                  Hyprland
 #   ./install.sh --show-widgets clock,weather  which desktop widgets show (clock, calendar,
 #                                 weather, playing); at least one
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
@@ -88,7 +93,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false legacy=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets=""
+status=false json=false preview=false legacy=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets=""
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -117,11 +122,11 @@ while (( $# )); do
         settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
         shift; shift; continue
       fi
-      [[ ${2:-} =~ ^(glass|web-glass|magnification|snapping|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
+      [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|snapping|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
-          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" ? v == "0" || v == "1" : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "snapping" ? v == "0" || v == "1" : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, snapping=0 or 1, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -146,6 +151,7 @@ while (( $# )); do
       [[ -n $mode_arg ]] || { echo "$1 needs a value (try --help)" >&2; exit 1; }
       shift ;;
     --json) json=true ;;
+    --preview) preview=true ;;
     -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
@@ -241,6 +247,11 @@ shell_set() {
   jq -S --argjson v "$2" "$1 = \$v" "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
 }
 set_magnification() { shell_set '.dock.magnification' "$1"; }
+dock_size() {
+  local m
+  m=$(jq '.dock.iconSize | numbers' "$SHELL_JSON" 2>/dev/null) || true
+  echo "${m:-48}"
+}
 
 # Where a panel shows, volume or dictation: bottom (the middle) or top (right,
 # under the bar); the panels follow shell.json's "hud" themselves.
@@ -384,8 +395,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)"
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -393,6 +404,7 @@ if $status; then
     done
     for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
     printf '%-14s %s\n' magnification "$(magnification)"
+    printf '%-14s %s\n' dock-size "$(dock_size)"
     printf '%-14s %s\n' clock "$(clock_position)"
     printf '%-14s %s\n' volume-hud "$(hud_position volume)"
     printf '%-14s %s\n' dictation-hud "$(hud_position dictation)"
@@ -517,6 +529,31 @@ remove_theme() {
 
 # shellcheck source=backup.sh
 source "$REPO/backup.sh"
+
+# A preview writes the settings and shows them, and that is all.
+if $preview; then
+  reload=false
+  for k in "${!settings[@]}"; do
+    case $k in
+      # Blur changes in place, with nothing written: Apply writes it.
+      blur)
+        v=${settings[blur]}
+        hyprctl eval "hl.config({ decoration = { blur = { enabled = $( ((v > 0)) && echo true || echo false ), size = $(( v > 0 ? v : 1 )) } } })" >/dev/null 2>&1 || true ;;
+      glass|web-glass|snapping)
+        installed theme || { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
+        look_set "$k" "${settings[$k]}"
+        reload=true ;;
+      # The dock shows these itself, with nothing written.
+      magnification|dock-size) omarchy-shell -q omarchy.dock preview "$k" "${settings[$k]}" >/dev/null 2>&1 || true ;;
+      *) echo "$k can't be previewed; set it instead" >&2; exit 1 ;;
+    esac
+  done
+  if $reload && active; then
+    cp "$THEME_DIR/look.lua" "$THEME_DIR/shell.toml" "$HOME/.local/state/omarchy/current/theme/" 2>/dev/null || true
+    hyprctl reload >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
 
 case $mode in
   bar) if $json; then bar_json; else bar_text; fi; exit 0 ;;
@@ -770,6 +807,10 @@ if [[ -n ${settings[magnification]:-} ]]; then
   set_magnification "${settings[magnification]}"
   say "Set the dock's magnification to ${settings[magnification]}"
 fi
+if [[ -n ${settings[dock-size]:-} ]]; then
+  shell_set '.dock.iconSize' "${settings[dock-size]}"
+  say "Set the dock's icons to ${settings[dock-size]} points"
+fi
 # The bar follows shell.json itself, so its items move without a reload.
 [[ -n $bar_layout ]] && apply_bar_layout "$bar_layout"
 if [[ -n ${settings[clock]:-} ]]; then
@@ -788,7 +829,7 @@ if [[ -n $show_widgets ]]; then
 fi
 
 # 5. Apply: refresh the active theme in place, or switch to it when it was asked for.
-# The dock follows shell.json itself, so magnification alone needs no refresh.
+# The dock follows shell.json itself, so its magnification and size need no refresh.
 if active && { (( ${#add[@]} )) || $look_changed; }; then
   refresh
 elif want theme; then

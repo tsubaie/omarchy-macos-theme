@@ -54,7 +54,7 @@ PanelWindow {
   readonly property bool contentShown: shown && !tucked
 
   readonly property int gap: Style.spacing.sm
-  readonly property int iconSize: Math.round(48 * Style.fontScale)
+  readonly property int iconSize: Math.round((dock ? dock.iconSize : 48) * Style.fontScale)
   // Each app has a square slot with its icon in the middle, and the glass
   // platter leaves room around the slots, like the macOS dock.
   readonly property int iconInset: Style.spacing.md
@@ -68,7 +68,13 @@ PanelWindow {
   // The Downloads fan: up to ten files plus "Open in Files".
   // The Downloads fan's 11 rows, raised as far as magnified icons grow, the
   // gap, and the tilt of its top row; short of this, its top row was cut.
-  readonly property int stackRoom: Math.round((iconSize * 1.05 + Style.space(10)) * 11 + iconSize * (magnifyPeak - 1) + gap + Style.space(40))
+  readonly property int stackRoom: Math.round((roomIcon * 1.05 + Style.space(10)) * 11 + roomIcon * (roomPeak - 1) + gap + Style.space(40))
+  // The icon size and magnification the window makes room for: the largest
+  // the settings allow, so the window holds still as they change (a slider
+  // dragged in macOS Theme Studio) and icon images are never reloaded. The
+  // window is see-through and takes no input outside the dock.
+  readonly property int roomIcon: Math.round(80 * Style.fontScale)
+  readonly property real roomPeak: 2
 
   // macOS magnification: icons near the pointer grow toward the screen's
   // middle, peaking under it, and their neighbors move aside. Off while a
@@ -294,8 +300,8 @@ PanelWindow {
     right: window.position !== "left"
   }
 
-  implicitWidth: window.vertical ? window.gap + window.slotSize + window.popupRoom : 0
-  implicitHeight: window.vertical ? 0 : window.gap + window.slotSize + window.popupRoom
+  implicitWidth: window.vertical ? window.gap + window.roomIcon + window.iconInset * 2 + window.popupRoom : 0
+  implicitHeight: window.vertical ? 0 : window.gap + window.roomIcon + window.iconInset * 2 + window.popupRoom
 
   mask: Region {
     item: window.contentShown ? body : null
@@ -572,7 +578,7 @@ PanelWindow {
       y: window.iconInset
       width: window.iconSize
       height: window.iconSize
-      sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+      sourceSize: Qt.size(window.roomIcon * 2, window.roomIcon * 2)
       // Try each candidate until one loads.
       source: placeSlot.iconSources[placeSlot.iconTry] || ""
       onStatusChanged: if (status === Image.Error && placeSlot.iconTry < placeSlot.iconSources.length - 1) placeSlot.iconTry++
@@ -650,7 +656,7 @@ PanelWindow {
       y: window.iconInset
       width: window.iconSize
       height: window.iconSize
-      sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+      sourceSize: Qt.size(window.roomIcon * 2, window.roomIcon * 2)
       source: window.dock ? window.dock.iconFor(unpinnedSlot.modelData) : ""
       fillMode: Image.PreserveAspectFit
       asynchronous: true
@@ -676,13 +682,13 @@ PanelWindow {
     radius: window.iconSize * 0.225
     visible: false
     layer.enabled: true
-    layer.textureSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+    layer.textureSize: Qt.size(window.roomIcon * 2, window.roomIcon * 2)
     layer.smooth: true
   }
 
   component RoundedIcon: Image {
     layer.enabled: true
-    layer.textureSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+    layer.textureSize: Qt.size(window.roomIcon * 2, window.roomIcon * 2)
     layer.smooth: true
     layer.effect: MultiEffect {
       maskEnabled: true
@@ -1073,7 +1079,7 @@ PanelWindow {
       y: window.iconInset
       width: window.iconSize
       height: window.iconSize
-      sourceSize: Qt.size(window.iconSize * 2, window.iconSize * 2)
+      sourceSize: Qt.size(window.roomIcon * 2, window.roomIcon * 2)
       source: window.dock && appSlot.modelData ? window.dock.iconFor(appSlot.modelData) : ""
       fillMode: Image.PreserveAspectFit
       asynchronous: true

@@ -106,7 +106,31 @@ Item {
   readonly property bool autohide: dockConfig.autohide === true
   // How far icons grow under the pointer: 1 is off, 2 twice their size. Set
   // with install.sh --set magnification=<1-2>.
-  readonly property real magnification: typeof dockConfig.magnification === "number" ? Math.max(1, Math.min(2, dockConfig.magnification)) : 1.75
+  readonly property real configuredMagnification: typeof dockConfig.magnification === "number" ? Math.max(1, Math.min(2, dockConfig.magnification)) : 1.75
+  // How big its icons are, in points before the shell's scale: 32 to 80. Set
+  // with install.sh --set dock-size=<32-80>.
+  readonly property int configuredIconSize: typeof dockConfig.iconSize === "number" ? Math.round(Math.max(32, Math.min(80, dockConfig.iconSize))) : 48
+
+  // A slider being dragged in macOS Theme Studio shows its value here first
+  // (install.sh --preview, through preview() below), with nothing written.
+  // Setting the value for real, or going back to it, ends the preview.
+  property int iconSizePreview: 0
+  property real magnificationPreview: 0
+  onConfiguredIconSizeChanged: iconSizePreview = 0
+  onConfiguredMagnificationChanged: magnificationPreview = 0
+  readonly property int iconSize: iconSizePreview > 0 ? iconSizePreview : configuredIconSize
+  readonly property real magnification: magnificationPreview > 0 ? magnificationPreview : configuredMagnification
+  function preview(key, value) {
+    var v = parseFloat(value)
+    if (isNaN(v)) return
+    if (key === "dock-size") {
+      v = Math.round(Math.max(32, Math.min(80, v)))
+      iconSizePreview = v === configuredIconSize ? 0 : v
+    } else if (key === "magnification") {
+      v = Math.max(1, Math.min(2, v))
+      magnificationPreview = Math.abs(v - configuredMagnification) < 0.005 ? 0 : v
+    }
+  }
 
   // The dock's order for the session, as desktop ids, set when the user moves
   // an app: a drag moves it, and keeping it in the dock puts it at the end. An
@@ -512,6 +536,8 @@ Item {
       root.snapShow(monitor, Qt.rect(x, y, width, height))
     }
     function snapHide(): void { root.snapHide() }
+    // A setting shown before it is set: "dock-size" or "magnification".
+    function preview(key: string, value: string): void { root.preview(key, value) }
   }
 
   function screenNamed(name) {
