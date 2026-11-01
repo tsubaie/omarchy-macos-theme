@@ -106,6 +106,9 @@ pub struct Status {
     /// don't report it.
     #[serde(default)]
     pub clock: Option<String>,
+    /// The desktop widgets shown. Older themes don't report them.
+    #[serde(default)]
+    pub widgets: Option<Vec<String>>,
 }
 
 /// The bar's sections, as `install.sh --bar-layout` takes them.
@@ -170,6 +173,9 @@ pub fn bar(dir: &Path) -> Result<String> {
     Ok(json.trim().to_owned())
 }
 
+/// The desktop widgets, as `install.sh --show-widgets` takes them.
+const DESKTOP_WIDGETS: [&str; 4] = ["clock", "calendar", "weather", "playing"];
+
 /// The places the bar's clock can sit, as `install.sh --set clock=` takes them.
 const CLOCK_POSITIONS: [&str; 3] = ["left", "center", "right"];
 
@@ -215,6 +221,7 @@ pub struct Changes {
     set: Vec<Setting>,
     clock: Option<&'static str>,
     bar: Option<BarLayout>,
+    widgets: Option<Vec<&'static str>>,
 }
 
 /// The changes as the window sends them, before they are checked.
@@ -230,6 +237,8 @@ struct RawChanges {
     clock: Option<String>,
     #[serde(default)]
     bar: Option<BarLayout>,
+    #[serde(default)]
+    widgets: Option<Vec<String>>,
 }
 
 impl Changes {
@@ -267,6 +276,7 @@ impl Changes {
                 })
                 .transpose()?,
             bar: raw.bar.map(BarLayout::check).transpose()?,
+            widgets: raw.widgets.map(shown_widgets).transpose()?,
         };
         if let Some(piece) = changes
             .add
@@ -285,6 +295,7 @@ impl Changes {
             && self.set.is_empty()
             && self.clock.is_none()
             && self.bar.is_none()
+            && self.widgets.is_none()
     }
 
     /// The arguments for one `install.sh` call.
@@ -306,8 +317,29 @@ impl Changes {
             let json = serde_json::to_string(bar).expect("a bar layout is plain JSON");
             args.extend(["--bar-layout".to_owned(), json]);
         }
+        if let Some(widgets) = &self.widgets {
+            args.extend(["--show-widgets".to_owned(), widgets.join(",")]);
+        }
         args
     }
+}
+
+/// Checks the widgets to show: known ones, at least one, as the desktop
+/// always keeps one.
+fn shown_widgets(names: Vec<String>) -> Result<Vec<&'static str>> {
+    if names.is_empty() {
+        bail!("at least one desktop widget stays shown");
+    }
+    names
+        .iter()
+        .map(|name| {
+            DESKTOP_WIDGETS
+                .iter()
+                .copied()
+                .find(|known| known == name)
+                .with_context(|| format!("unknown desktop widget {name:?}"))
+        })
+        .collect()
 }
 
 /// Applies the changes in one `install.sh` call.
@@ -665,6 +697,21 @@ mod tests {
         assert_eq!(status.clock.as_deref(), Some("left"));
         let older = parse_status(r#"{"active":true,"features":{},"settings":{}}"#).expect("valid");
         assert_eq!(older.clock, None);
+    }
+
+    #[test]
+    fn the_shown_widgets_are_checked_and_passed_together() {
+        let changes = Changes::from_json(r#"{"widgets":["clock","playing"]}"#).expect("widgets");
+        assert_eq!(changes.args(), ["--show-widgets", "clock,playing"]);
+        assert!(!changes.is_empty());
+        assert!(Changes::from_json(r#"{"widgets":[]}"#).is_err());
+        assert!(Changes::from_json(r#"{"widgets":["clock,dock"]}"#).is_err());
+        let status =
+            parse_status(r#"{"active":true,"features":{},"settings":{},"widgets":["weather"]}"#)
+                .expect("valid");
+        assert_eq!(status.widgets, Some(vec!["weather".to_owned()]));
+        let older = parse_status(r#"{"active":true,"features":{},"settings":{}}"#).expect("valid");
+        assert_eq!(older.widgets, None);
     }
 
     #[test]

@@ -76,8 +76,24 @@ Window {
         pendingBar = JSON.stringify(groups) === JSON.stringify(barNow) ? null : groups
     }
 
+    // The desktop widgets shown, as the installer reports them (an older
+    // theme reports none), and the ones waiting for Apply (null while unchanged).
+    readonly property var desktopWidgets: [
+        { id: "clock", name: "Clock" }, { id: "calendar", name: "Calendar" },
+        { id: "weather", name: "Weather" }, { id: "playing", name: "Now Playing" }
+    ]
+    readonly property var widgetsNow: status.widgets || null
+    property var pendingWidgets: null
+    readonly property var widgetsShown: pendingWidgets || widgetsNow || []
+
+    // Kept in the usual order, so turning one back on takes the change away.
+    function markWidget(id, on) {
+        const next = desktopWidgets.map(w => w.id).filter(w => w === id ? on : widgetsShown.includes(w))
+        pendingWidgets = JSON.stringify(next) === JSON.stringify(widgetsNow) ? null : next
+    }
+
     readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
-        + (pendingBar ? 1 : 0)
+        + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0)
 
 
     property bool applying: false
@@ -107,6 +123,7 @@ Window {
 
     function revert() {
         pendingBar = null
+        pendingWidgets = null
         pendingPieces = {}
         pendingSettings = {}
     }
@@ -114,6 +131,7 @@ Window {
     function apply() {
         const changes = { add: [], remove: [], set: pendingSettings }
         if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
+        if (pendingWidgets) changes.widgets = pendingWidgets
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
         applying = true
         backend.apply(JSON.stringify(changes))
@@ -180,7 +198,7 @@ Window {
         { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
           keywords: "lock screen password clock account picture preview" },
         { id: "widgets", title: "Widgets", icon: "widgets", section: 1,
-          keywords: "desktop widgets clock calendar weather now playing music" },
+          keywords: "desktop widgets clock calendar weather now playing music show hide" },
         { id: "menubar", title: "Menu Bar", icon: "menubar", section: 1,
           keywords: "menu bar inter font app name control center wifi wi-fi ethernet network bluetooth sound volume display monitor symbols clock time date position left center middle right items icons widgets show hide rearrange order drag tray" },
         { id: "backups", title: "Backups", icon: "backups", section: 2,
@@ -603,15 +621,42 @@ Window {
                 }
             }
 
-            // Widgets.
-            Group {
+            // Widgets: the piece, then which of them show.
+            Column {
                 visible: backend.downloaded && window.page === "widgets"
+                width: parent.width
+                spacing: 18
 
-                SettingRow {
-                    label: "Desktop widgets"
-                    note: "Clock, calendar, weather and now playing. Drag to move; right-click to remove or add."
-                    last: true
-                    PieceSwitch { piece: "widgets" }
+                Group {
+                    SettingRow {
+                        label: "Desktop widgets"
+                        note: "Clock, calendar, weather and now playing. Drag to move; right-click to remove or add."
+                        last: true
+                        PieceSwitch { piece: "widgets" }
+                    }
+                }
+
+                // One switch each; the last one shown stays, as on the desktop.
+                Group {
+                    title: "Show on Desktop"
+                    visible: window.widgetsNow !== null
+
+                    Repeater {
+                        model: window.desktopWidgets
+                        SettingRow {
+                            required property var modelData
+                            required property int index
+                            label: modelData.name
+                            last: index === window.desktopWidgets.length - 1
+                            MacSwitch {
+                                readonly property bool shown: window.widgetsShown.includes(modelData.id)
+                                checked: shown
+                                enabled: !backend.busy && window.pieceOn("widgets")
+                                    && !(shown && window.widgetsShown.length === 1)
+                                onToggled: on => window.markWidget(modelData.id, on)
+                            }
+                        }
+                    }
                 }
             }
 
