@@ -9,6 +9,7 @@
 #   ./install.sh --switcher       + app switcher (Alt+Tab) and workspace switcher (Super+Tab)
 #   ./install.sh --wide-menu      + Spotlight-like Omarchy menu: wider, magnifying glass, "Search"
 #   ./install.sh --menubar        + macOS menu bar: Inter, bold app name, Control Center, shade
+#   ./install.sh --lock           + macOS lock screen: date, large clock, account picture, glass field
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above (MacTahoe icons stay)
 #
@@ -21,7 +22,7 @@
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
-#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar
+#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar lock
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
 # have their .lua files and ghostty.conf stripped for safety, and those carry
@@ -59,7 +60,7 @@ SWITCHER_ID="macos-theme.switcher"
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
 # Each piece, by the name --add, --remove and --status use.
-FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar"
+FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar lock"
 declare -A add=() remove=() settings=()
 status=false json=false legacy=false switch_to=""
 (( $# )) || legacy=true
@@ -72,7 +73,8 @@ while (( $# )); do
     --switcher) add[switcher]=1; add[wide-menu]=1; legacy=true ;;
     --wide-menu) add[wide-menu]=1; legacy=true ;;
     --menubar) add[menubar]=1; legacy=true ;;
-    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar; do add[$f]=1; done; legacy=true ;;
+    --lock) add[lock]=1; legacy=true ;;
+    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar lock; do add[$f]=1; done; legacy=true ;;
     --add|--remove)
       [[ " $FEATURES " == *" ${2:-} "* ]] || { echo "Unknown feature: ${2:-} (one of: $FEATURES)" >&2; exit 1; }
       if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
@@ -109,6 +111,21 @@ wide_menus() {
   return 0
 }
 
+# The lock screen is a clone of Omarchy's lock with the macOS LockView.qml.
+LOCK_MARK="The macOS lock screen"
+lock_clones() {
+  local dir
+  for dir in "$PLUGINS_DIR"/*; do
+    grep -qs '"clonedFrom": "omarchy.lock"' "$dir/manifest.json" && echo "$dir"
+  done
+  return 0
+}
+macos_locks() {
+  local dir
+  for dir in $(lock_clones); do grep -qsF "$LOCK_MARK" "$dir/LockView.qml" && echo "$dir"; done
+  return 0
+}
+
 installed() {
   case "$1" in
     theme) [[ -d $THEME_DIR ]] ;;
@@ -120,6 +137,7 @@ installed() {
     osd) [[ -d $PLUGINS_DIR/$OSD_ID ]] ;;
     dictation-hud) [[ -d $PLUGINS_DIR/$HUD_ID ]] ;;
     menubar) [[ -d $PLUGINS_DIR/macos-theme.menubar ]] ;;
+    lock) [[ -n $(macos_locks) ]] ;;
   esac
 }
 
@@ -241,6 +259,17 @@ remove_menubar() {
   done
   say "Removed the menu bar look and put the system widgets back on the bar"
 }
+remove_lock() {
+  local dir
+  for dir in $(macos_locks); do
+    omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
+    omarchy plugin enable omarchy.lock >/dev/null 2>&1 || true
+    rm -rf "${dir:?}"
+  done
+  # Omarchy's lock stays loaded on purpose, so only a restart hands it back the lock command.
+  omarchy restart shell >/dev/null 2>&1 || true
+  say "Removed the macOS lock screen and restored Omarchy's own"
+}
 remove_dictation_hud() {
   omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
   rm -rf "${PLUGINS_DIR:?}/$HUD_ID"
@@ -287,7 +316,7 @@ if (( ${#remove[@]} )); then
     exit 1
   fi
   # Plugins before the theme they sit on.
-  for f in osd dock wide-menu switcher menubar dictation-hud rows icons theme; do
+  for f in lock osd dock wide-menu switcher menubar dictation-hud rows icons theme; do
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
   say "Done. Backups of edited files end in .bak.$STAMP"
@@ -445,6 +474,30 @@ if want wide-menu; then
     grep -q "Style.space(560)), panel.width" "$menu_dir/Menu.qml" && say "Widened the Omarchy menu, with a Spotlight search line" || echo "    Could not patch this Omarchy version's menu; it keeps its own look." >&2
   else
     echo "    Could not clone Omarchy's menu; it keeps its own width." >&2
+  fi
+fi
+if want lock; then
+  # Clone Omarchy's lock (only a clone may unlock), take this Omarchy's own
+  # locking and PAM code into it every time, and draw it with the macOS view.
+  lock_src="$OMARCHY_PATH/shell/plugins/lock"
+  lock_dir=$(lock_clones | head -n1)
+  if [[ -z $lock_dir ]]; then
+    lock_dir=$(omarchy plugin clone omarchy.lock 2>/dev/null | sed -n 's/^Cloned omarchy.lock to \(.*\) and switched.*/\1/p')
+  fi
+  if [[ -n $lock_dir && -d $lock_dir ]]; then
+    for f in "$lock_src"/*; do [[ -e $f && ${f##*/} != manifest.json ]] && cp -r "$f" "$lock_dir/"; done
+    # A look of your own on an existing clone is kept beside it.
+    if [[ -f $lock_dir/LockView.qml ]] && ! grep -qF "$LOCK_MARK" "$lock_dir/LockView.qml" && ! cmp -s "$lock_dir/LockView.qml" "$lock_src/LockView.qml"; then
+      cp "$lock_dir/LockView.qml" "$lock_dir/LockView.qml.bak.$STAMP"
+    fi
+    cp "$REPO/lock/LockView.qml" "$lock_dir/LockView.qml"
+    omarchy plugin enable "$(basename "$lock_dir")" >/dev/null 2>&1 || true
+    # The shell caches loaded QML, and Omarchy's lock keeps the lock command
+    # until a restart; the refresh below restarts it when the theme is current.
+    active || omarchy restart shell >/dev/null 2>&1 || true
+    say "Installed the macOS lock screen (see it without locking: omarchy-shell lock preview)"
+  else
+    echo "    Could not clone Omarchy's lock screen; it keeps its own look." >&2
   fi
 fi
 if want dictation-hud; then

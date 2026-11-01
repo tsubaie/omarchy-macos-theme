@@ -11,14 +11,16 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "macos-theme-test-"))
 const bin = path.join(home, "bin")
 fs.mkdirSync(bin)
 // `omarchy theme current` prints the theme last set (or $THEME), `theme list` knows two themes,
-// `plugin clone` makes an empty menu clone, and every other omarchy call succeeds quietly.
+// `plugin clone` makes an empty clone of the menu or the lock, and every other omarchy call succeeds quietly.
 fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
 [ "$1 $2" = "theme current" ] && { cat "$HOME/current" 2>/dev/null || echo "$THEME"; }
 [ "$1 $2" = "theme list" ] && printf 'Macos\\nTokyo Night\\n'
 [ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
 if [ "$1 $2" = "plugin clone" ]; then
-  mkdir -p "$XDG_CONFIG_HOME/omarchy/plugins/me.menu" && touch "$XDG_CONFIG_HOME/omarchy/plugins/me.menu/Menu.qml"
-  echo "Cloned omarchy.menu to $XDG_CONFIG_HOME/omarchy/plugins/me.menu and switched"
+  dir="$XDG_CONFIG_HOME/omarchy/plugins/me.\${3#omarchy.}"
+  mkdir -p "$dir" && touch "$dir/Menu.qml"
+  printf '{ "omarchy": { "clonedFrom": "%s" } }' "$3" > "$dir/manifest.json"
+  echo "Cloned $3 to $dir and switched"
 fi
 exit 0
 `, { mode: 0o755 })
@@ -26,7 +28,7 @@ exit 0
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
 const status = () => JSON.parse(execFileSync("bash", [script, "--status", "--json"], { env, encoding: "utf8" }))
-const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar"]
+const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "lock"]
 
 try {
   // A fresh home: nothing installed, and every piece is reported.
@@ -48,6 +50,17 @@ try {
   const menu = run("--add", "wide-menu")
   assert.strictEqual(menu.status, 0, menu.stderr)
   assert.match(menu.stderr, /Could not patch/)
+
+  // The lock screen clones Omarchy's lock and draws it with the macOS view; removing it removes the clone.
+  const lockDir = path.join(home, ".config/omarchy/plugins/me.lock")
+  assert.strictEqual(run("--add", "lock").status, 0)
+  assert.strictEqual(status().features.lock, true)
+  assert.match(fs.readFileSync(path.join(lockDir, "LockView.qml"), "utf8"), /The macOS lock screen/)
+  assert.strictEqual(run("--add", "lock").status, 0)
+  assert.strictEqual(fs.readdirSync(path.dirname(lockDir)).filter((d) => d.endsWith(".lock")).length, 1)
+  assert.strictEqual(run("--remove", "lock").status, 0)
+  assert.strictEqual(status().features.lock, false)
+  assert.ok(!fs.existsSync(lockDir))
 
   // --remove takes out only that piece.
   assert.strictEqual(run("--remove", "rows").status, 0)

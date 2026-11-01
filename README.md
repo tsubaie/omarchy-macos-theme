@@ -23,9 +23,10 @@ cd omarchy-macos-theme
 | `--menubar` | The macOS menu bar: Inter, the app name in bold, Control Center |
 | `--osd` | The frosted volume and brightness capsule |
 | `--dictation-hud` | A dictation pill for [Voxtype](https://voxtype.io) |
+| `--lock` | The macOS lock screen |
 | `--all` | All of the above |
 | `--uninstall` | Undo everything (switch to another theme first) |
-| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud` or `menubar` |
+| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar` or `lock` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
 | `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
@@ -140,6 +141,13 @@ Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, 
 
   ![Dictation HUD](docs/screenshots/dictation-hud.png)
 
+### Lock screen (`--lock`)
+- The date and a large clock at the top, in 12- or 24-hour time as your bar's clock shows it, over the sharp wallpaper.
+- Your account picture (`~/.face`, or your initial on a gray disc), your name and a glass password pill at the bottom, with an arrow to submit and the fingerprint icon when one is enrolled.
+- A wrong password shakes the field, as on macOS.
+- Only the look changes: it is a clone of Omarchy's lock (`omarchy plugin clone omarchy.lock`), and the installer copies this Omarchy's own locking, password and fingerprint code into it each time, then adds the macOS `LockView.qml`. Run `./install.sh --add lock` again after an Omarchy update to take in its latest lock code.
+- See it without locking: `omarchy-shell lock preview` (click to close).
+
 ## What gets installed
 
 ### Plugins
@@ -152,6 +160,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | `macos-theme.switcher` | `--switcher` | Nothing; adds the Alt+Tab and Super+Tab switchers |
 | `macos-theme.osd` | `--osd` | Omarchy's on-screen display (`omarchy.osd` is turned off) |
 | `macos-theme.dictation-hud` | `--dictation-hud` | Nothing; adds a pill for Voxtype |
+| A clone of `omarchy.lock`, named after your user | `--lock` | Omarchy's lock screen (`omarchy.lock` is turned off) |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
 | `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets move to the bar's tray drawer |
 
