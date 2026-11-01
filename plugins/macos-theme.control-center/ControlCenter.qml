@@ -171,11 +171,19 @@ BarWidget {
     root.open = false
   }
 
-  // The widgets this stands in for. They stay on the bar, where their panels
-  // live, but out of sight, so their panels open from here alone.
+  // The widgets this stands in for. Left in the tray's drawer they are out of
+  // sight, so their panels open from here alone; put anywhere else on the bar
+  // they show there too.
   readonly property var standsInFor: ["omarchy.network", "omarchy.bluetooth", "omarchy.tailscale",
     "omarchy.audio", "omarchy.monitor", "omarchy.power"]
   property var hidden: []
+  // Whether a widget sits in the tray's drawer: its slot says, or, for one
+  // waiting in its bar's pool, the slot that last held it.
+  function inTray(item) {
+    if (!item) return false
+    var slot = "region" in item ? item : item.owner
+    return !slot || slot.region === "tray" || slot.region === ""
+  }
 
   function hideWidgets(item) {
     if (item !== root && "moduleName" in item && root.standsInFor.indexOf(item.moduleName) >= 0) {
@@ -224,6 +232,7 @@ BarWidget {
     Binding {
       property: "visible"
       value: false
+      when: root.inTray(target)
       restoreMode: Binding.RestoreBindingOrValue
     }
   }
@@ -528,7 +537,7 @@ BarWidget {
       height: Style.space(140)
       radius: Style.cornerRadius
       gradient: Gradient {
-        GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.1) }
+        GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.03) }
         GradientStop { position: 1; color: "transparent" }
       }
     }
@@ -701,9 +710,9 @@ BarWidget {
     signal activated()
 
     radius: Style.space(18)
-    color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, tile.hoverable && tileMouse.containsMouse ? 0.2 : 0.13)
+    color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, tile.hoverable && tileMouse.containsMouse ? 0.09 : 0.05)
     border.width: 1
-    border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.18)
+    border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.07)
 
     MouseArea {
       id: tileMouse
@@ -723,7 +732,7 @@ BarWidget {
     width: Style.space(34)
     height: width
     radius: width / 2
-    color: on ? "#0a84ff" : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.16)
+    color: on ? "#0a84ff" : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.1)
 
     Text {
       anchors.centerIn: parent

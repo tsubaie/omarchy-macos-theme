@@ -65,8 +65,8 @@ try {
   assert.strictEqual(run("--bar-layout", "not json").status, 1)
   assert.deepStrictEqual(calls(), [])
 
-  // With Control Center on the bar, the widgets it stands in for are unseen
-  // there and left out; so is the bar icons helper, always.
+  // With Control Center on the bar, a widget it stands in for shows where it
+  // is put; the bar icons helper is always left out.
   plugins.push({ id: "macos-theme.control-center", name: "Control Center", kinds: ["bar-widget"], enabled: true, clonedFrom: "" },
     { id: "omarchy.network", name: "Network", kinds: ["bar-widget"], enabled: true, clonedFrom: "" },
     { id: "macos-theme.bar-icons", name: "macOS icons", kinds: ["bar-widget"], enabled: true, clonedFrom: "" })
@@ -75,7 +75,25 @@ try {
   fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout } }))
   let listed = JSON.parse(run("--bar", "--json").stdout)
   assert.deepStrictEqual(listed.sections.left, [])
-  assert.deepStrictEqual(listed.sections.right.map((w) => w.id), ["omarchy.clock", "macos-theme.control-center"])
+  assert.deepStrictEqual(listed.sections.right.map((w) => w.id), ["omarchy.network", "omarchy.clock", "macos-theme.control-center"])
+  // In the tray's drawer it is unseen, so it is listed as hidden.
+  layout.right.shift()
+  layout.tray = [{ id: "omarchy.network" }]
+  fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout } }))
+  listed = JSON.parse(run("--bar", "--json").stdout)
+  assert.deepStrictEqual(listed.sections.tray, [])
+  assert.ok(listed.hidden.some((w) => w.id === "omarchy.network"))
+  // Hiding it puts it back in the drawer rather than turning it off.
+  fs.rmSync(path.join(home, "calls"), { force: true })
+  const hid = run("--bar-layout", JSON.stringify({ sections: { right: ["omarchy.clock", "macos-theme.control-center"] }, hidden: ["omarchy.network"] }))
+  assert.strictEqual(hid.status, 0, hid.stderr)
+  assert.deepStrictEqual(calls(), [
+    "bar move omarchy.clock --section right --index 0",
+    "bar move macos-theme.control-center --section right --index 1",
+    "bar move omarchy.network --section tray",
+  ])
+  layout.tray = []
+  layout.right.unshift({ id: "omarchy.network" })
   // Without it, they are listed again.
   layout.right.pop()
   fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout } }))

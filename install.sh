@@ -312,15 +312,20 @@ bar_json() {
   local widgets layout
   widgets=$(bar_widgets)
   layout=$(jq -c '.bar.layout // {}' "$SHELL_JSON" 2>/dev/null || echo "{}")
-  # With Control Center on the bar, the widgets it stands in for are on it
-  # unseen, and open from it alone, so they aren't listed.
+  # With Control Center on the bar, the widgets it stands in for that sit in
+  # the tray's drawer are unseen there and open from it alone, so they are
+  # listed as hidden; showing one puts it on the bar, hiding it puts it back.
   jq -n --argjson w "$widgets" --argjson l "$layout" --arg order "$BAR_SECTIONS" --arg hide "$BAR_ICONS_ID" \
     --arg cc "macos-theme.control-center" --arg ccw "$CONTROL_CENTER_WIDGETS" '
     ($order | split(" ")) as $sections
     | ([$sections[] as $s | ($l[$s] // [])[] | .id? // empty]) as $placed
-    | ([$hide] + (if ($placed | index($cc)) and $w[$cc].enabled then $ccw | split(" ") else [] end)) as $unlisted
+    | ([($l.tray // [])[] | .id? // empty]) as $inTray
+    | ([(if ($placed | index($cc)) and $w[$cc].enabled then $ccw | split(" ") else [] end)[]
+        | select(. as $id | $inTray | index($id)) | select($w[.].enabled)]) as $tucked
+    | ([$hide] + $tucked) as $unlisted
     | {sections: ($sections | map({key: ., value: [($l[.] // [])[] | .id? // empty | select(. as $id | $unlisted | index($id) | not) | {id: ., name: ($w[.].name // .)} + (if $w[.].drawer then {drawer: true} else {} end)]}) | from_entries),
-       hidden: [$w | to_entries[] | select((.value.enabled | not) and (.key as $id | $placed | index($id) | not)) | {id: .key, name: .value.name}] | sort_by(.name)}'
+       hidden: ([$w | to_entries[] | select((.value.enabled | not) and (.key as $id | $placed | index($id) | not)) | {id: .key, name: .value.name}]
+         + [$tucked[] | {id: ., name: $w[.].name}]) | sort_by(.name)}'
 }
 
 bar_text() {
@@ -329,9 +334,11 @@ bar_text() {
 
 # Shows, hides and orders the bar's items as $1 lays them out: hidden ones
 # are turned off, then each section is filled in order, turning on what was
-# off. Only known widgets and sections are taken.
+# off. Only known widgets and sections are taken. With Control Center on the
+# bar, a hidden widget it stands in for goes to the tray's drawer instead of
+# off, so its controls stay in Control Center.
 apply_bar_layout() {
-  local desired="$1" widgets id section i
+  local desired="$1" widgets id section i tuck=""
   widgets=$(bar_widgets)
   jq -e --arg order "$BAR_SECTIONS" --argjson w "$widgets" '
     (.sections // {}) as $s | (.hidden // []) as $h
@@ -339,8 +346,11 @@ apply_bar_layout() {
     and ([$s | keys[]] - ($order | split(" ")) | length) == 0
     and ([$s[][], $h[]] | all(type == "string" and test("^[A-Za-z0-9._-]+$") and ($w[.] != null)))' \
     <<<"$desired" >/dev/null 2>&1 || { echo "Not a bar layout this bar can take" >&2; exit 1; }
+  if jq -e '[.sections[][]?] | index("macos-theme.control-center")' <<<"$desired" >/dev/null; then
+    tuck=" $CONTROL_CENTER_WIDGETS "
+  fi
   while read -r id; do
-    [[ -n $id ]] && [[ $(jq -r --arg id "$id" '.[$id].enabled' <<<"$widgets") == true ]] &&
+    [[ -n $id ]] && [[ $tuck != *" $id "* ]] && [[ $(jq -r --arg id "$id" '.[$id].enabled' <<<"$widgets") == true ]] &&
       omarchy plugin disable "$id" >/dev/null
   done < <(jq -r '.hidden[]?' <<<"$desired")
   for section in $BAR_SECTIONS; do
@@ -355,6 +365,14 @@ apply_bar_layout() {
       i=$((i + 1))
     done < <(jq -r --arg s "$section" '.sections[$s][]?' <<<"$desired")
   done
+  while read -r id; do
+    [[ -n $id ]] && [[ $tuck == *" $id "* ]] || continue
+    if [[ $(jq -r --arg id "$id" '.[$id].enabled' <<<"$widgets") == true ]]; then
+      omarchy bar move "$id" --section tray >/dev/null
+    else
+      omarchy plugin enable "$id" --section tray >/dev/null
+    fi
+  done < <(jq -r '.hidden[]?' <<<"$desired")
   say "Arranged the bar"
 }
 
@@ -644,18 +662,24 @@ fi
 if want menubar; then
   # A re-run keeps the clock where the user put it (--set clock).
   keep_clock=; installed menubar && keep_clock=$(clock_position)
+  # A re-run keeps the widgets Control Center stands in for where they are, as
+  # the Menu Bar page may have put some of them on the bar.
+  fresh=true; installed menubar && fresh=false
   for id in $MENUBAR_IDS; do install_plugin "$id"; done
   # The bold app name follows the menu button, as on macOS, and Control Center
-  # sits by the clock; the widgets it stands in for go to the tray drawer.
+  # sits by the clock; the widgets it stands in for go to the tray drawer the
+  # first time.
   omarchy bar put macos-theme.app-name --section left >/dev/null 2>&1 || true
   omarchy bar move macos-theme.app-name --before omarchy.workspaces >/dev/null 2>&1 || true
   omarchy bar move omarchy.clock --section right >/dev/null 2>&1 || true
   omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
   omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
   [[ -n $keep_clock ]] && { set_clock "$keep_clock" 2>/dev/null || true; }
-  for id in $CONTROL_CENTER_WIDGETS; do
-    omarchy bar move "$id" --section tray >/dev/null 2>&1 || true
-  done
+  if $fresh; then
+    for id in $CONTROL_CENTER_WIDGETS; do
+      omarchy bar move "$id" --section tray >/dev/null 2>&1 || true
+    done
+  fi
   # Omarchy's other widgets as macOS keeps their like: status in the middle,
   # the input menu by Control Center, the bell past the clock. Widgets from
   # other plugins stay where their owner put them.
