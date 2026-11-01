@@ -1,8 +1,8 @@
 import QtQuick
 
 // The window controls, drawn in the sidebar as macOS does: close, minimize and
-// zoom, 12 px with 8 px between them. Pointing at any of them shows ×, − and +
-// in all three, and they are gray while the window isn't the active one.
+// zoom, 12 px with 8 px between them: plain colors, no symbols, and gray while
+// the window isn't the active one (pointing at them brings the colors back).
 Item {
     id: root
 
@@ -21,9 +21,9 @@ Item {
 
         Repeater {
             model: [
-                { color: "#ff5f57", ink: "#4d0000", glyph: "×", action: "close", name: "Close" },
-                { color: "#febc2e", ink: "#7a4500", glyph: "−", action: "minimize", name: "Minimize" },
-                { color: "#28c840", ink: "#004d00", glyph: "+", action: "zoom", name: "Zoom" }
+                { color: "#ff5f57", action: "close", name: "Close" },
+                { color: "#febc2e", action: "minimize", name: "Minimize" },
+                { color: "#28c840", action: "zoom", name: "Zoom" }
             ]
 
             delegate: Rectangle {
@@ -39,16 +39,6 @@ Item {
                 Accessible.name: modelData.name
                 Accessible.onPressAction: root[modelData.action]()
 
-                Text {
-                    anchors.centerIn: parent
-                    anchors.verticalCenterOffset: -0.5
-                    visible: root.hovered
-                    text: modelData.glyph
-                    color: modelData.ink
-                    font.pixelSize: 11
-                    font.weight: Font.Bold
-                }
-
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -3
@@ -58,8 +48,8 @@ Item {
         }
     }
 
-    // One hover area over all three, which takes no clicks, so pointing at
-    // any light shows the symbols in all of them.
+    // One hover area over all three, which takes no clicks: pointing at an
+    // inactive window's lights colors them.
     MouseArea {
         id: hoverArea
         anchors.fill: lights

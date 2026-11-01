@@ -99,9 +99,16 @@ pub struct Status {
     pub active: bool,
     /// Each piece and whether it is installed.
     pub features: BTreeMap<String, bool>,
-    /// Glass, web glass, snapping and the dock's magnification.
+    /// Glass, web glass, snapping, blur and the dock's magnification.
     pub settings: BTreeMap<String, f64>,
+    /// Where the bar's clock sits: "left", "center" or "right". Older themes
+    /// don't report it.
+    #[serde(default)]
+    pub clock: Option<String>,
 }
+
+/// The places the bar's clock can sit, as `install.sh --set clock=` takes them.
+const CLOCK_POSITIONS: [&str; 3] = ["left", "center", "right"];
 
 /// The theme's folder: `$OMARCHY_MACOS_THEME_DIR` when set (for working on a
 /// checkout), else `omarchy-macos-theme` in the user's data folder, where
@@ -143,6 +150,7 @@ pub struct Changes {
     add: Vec<Piece>,
     remove: Vec<Piece>,
     set: Vec<Setting>,
+    clock: Option<&'static str>,
 }
 
 /// The changes as the window sends them, before they are checked.
@@ -154,6 +162,8 @@ struct RawChanges {
     remove: Vec<String>,
     #[serde(default)]
     set: BTreeMap<String, f64>,
+    #[serde(default)]
+    clock: Option<String>,
 }
 
 impl Changes {
@@ -180,6 +190,16 @@ impl Changes {
                 .iter()
                 .map(|(key, value)| Setting::try_new(key, *value))
                 .collect::<Result<_>>()?,
+            clock: raw
+                .clock
+                .map(|place| {
+                    CLOCK_POSITIONS
+                        .iter()
+                        .copied()
+                        .find(|known| *known == place)
+                        .with_context(|| format!("the clock can't go {place:?}"))
+                })
+                .transpose()?,
         };
         if let Some(piece) = changes
             .add
@@ -193,7 +213,7 @@ impl Changes {
 
     /// Whether there is nothing to apply.
     pub fn is_empty(&self) -> bool {
-        self.add.is_empty() && self.remove.is_empty() && self.set.is_empty()
+        self.add.is_empty() && self.remove.is_empty() && self.set.is_empty() && self.clock.is_none()
     }
 
     /// The arguments for one `install.sh` call.
@@ -207,6 +227,9 @@ impl Changes {
         }
         for setting in &self.set {
             args.extend(["--set".to_owned(), setting.arg()]);
+        }
+        if let Some(place) = self.clock {
+            args.extend(["--set".to_owned(), format!("clock={place}")]);
         }
         args
     }
@@ -534,6 +557,19 @@ mod tests {
             ]
         );
         assert!(Changes::from_json("{}").expect("nothing to do").is_empty());
+    }
+
+    #[test]
+    fn the_clock_goes_to_one_of_three_places() {
+        let changes = Changes::from_json(r#"{"clock":"center"}"#).expect("a place");
+        assert_eq!(changes.args(), ["--set", "clock=center"]);
+        assert!(!changes.is_empty());
+        assert!(Changes::from_json(r#"{"clock":"top; rm -rf ~"}"#).is_err());
+        let status = parse_status(r#"{"active":true,"features":{},"settings":{},"clock":"left"}"#)
+            .expect("valid");
+        assert_eq!(status.clock.as_deref(), Some("left"));
+        let older = parse_status(r#"{"active":true,"features":{},"settings":{}}"#).expect("valid");
+        assert_eq!(older.clock, None);
     }
 
     #[test]
