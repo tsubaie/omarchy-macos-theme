@@ -21,6 +21,7 @@
 #   ./install.sh --set web-glass=0.9  the same for browsers, web apps and Electron apps
 #   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
 #   ./install.sh --set blur=15     how strong the frosted blur is, 0 (off) to 20; the theme's is 10
+#   ./install.sh --set clock=center  where the bar's clock sits: left, center or right
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
@@ -92,11 +93,15 @@ while (( $# )); do
       shift ;;
     # MacTahoe stays, as it always has: it may serve other themes too.
     --set)
+      if [[ ${2:-} =~ ^clock=(left|center|right)$ ]]; then
+        settings[clock]=${BASH_REMATCH[1]}
+        shift; shift; continue
+      fi
       [[ ${2:-} =~ ^(glass|web-glass|magnification|snapping|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
           exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" ? v == "0" || v == "1" : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1, blur=0 to 20)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1, blur=0 to 20, clock=left, center or right)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -199,6 +204,29 @@ set_magnification() {
   jq -S --argjson m "$1" '.dock.magnification = $m' "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
 }
 
+# Where the bar's clock sits: left, center (any of the middle sections) or
+# right, as shell.json lays the bar out; right when it can't be told.
+clock_position() {
+  local section
+  section=$(jq -r '.bar.layout // {} | to_entries[] | select((.value | type) == "array") | select(any(.value[]; .id? == "omarchy.clock")) | .key' "$SHELL_JSON" 2>/dev/null | head -n1)
+  case $section in
+    left) echo left ;;
+    center*) echo center ;;
+    *) echo right ;;
+  esac
+}
+# Moves it: on the left after the workspaces, in the middle, or on the right
+# after Control Center as macOS has it (or at the end of the right side).
+set_clock() {
+  case $1 in
+    left) omarchy bar move omarchy.clock --section left >/dev/null ;;
+    center) omarchy bar move omarchy.clock --section center >/dev/null ;;
+    right)
+      omarchy bar move omarchy.clock --after macos-theme.control-center >/dev/null 2>&1 ||
+        omarchy bar move omarchy.clock --section right >/dev/null ;;
+  esac
+}
+
 if $status; then
   if $json; then
     out=""
@@ -207,8 +235,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s}}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)"
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s},"clock":"%s"}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(clock_position)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -216,6 +244,7 @@ if $status; then
     done
     for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
     printf '%-14s %s\n' magnification "$(magnification)"
+    printf '%-14s %s\n' clock "$(clock_position)"
   fi
   exit 0
 fi
@@ -568,6 +597,11 @@ done
 if [[ -n ${settings[magnification]:-} ]]; then
   set_magnification "${settings[magnification]}"
   say "Set the dock's magnification to ${settings[magnification]}"
+fi
+# The bar follows shell.json itself, so the clock moves without a reload.
+if [[ -n ${settings[clock]:-} ]]; then
+  set_clock "${settings[clock]}"
+  say "Moved the clock to the ${settings[clock]} of the bar"
 fi
 
 # 5. Apply: refresh the active theme in place, or switch to it when it was asked for.

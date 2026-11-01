@@ -122,6 +122,15 @@ try {
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(fs.readFileSync(path.join(home, "current"), "utf8").trim(), "Tokyo Night")
 
+  // The clock: where shell.json has it, right by default; only three places are taken.
+  assert.strictEqual(status().clock, "right")
+  fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout: { left: [{ id: "omarchy.workspaces" }], centerEnd: [{ id: "omarchy.clock" }], right: [] } } }))
+  assert.strictEqual(status().clock, "center")
+  fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({ bar: { layout: { left: [{ id: "omarchy.clock" }] } } }))
+  assert.strictEqual(status().clock, "left")
+  assert.strictEqual(run("--set", "clock=center").status, 0)
+  for (const bad of ["clock=top", "clock=", "clock=Left"]) assert.strictEqual(run("--set", bad).status, 1, bad)
+
   // Unknown pieces are refused.
   assert.strictEqual(run("--remove", "everything").status, 1)
   assert.strictEqual(run("--add").status, 1)
