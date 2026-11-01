@@ -725,7 +725,7 @@ Window {
         property int size: 40
         width: size
         height: size
-        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon-256.png"
+        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon.svg"
         sourceSize: Qt.size(size * 2, size * 2)
         smooth: true
         mipmap: true
