@@ -514,19 +514,21 @@ Window {
 
                 // The theme on a desktop, from the theme's own folder, so it
                 // shows the version installed; hidden until it is downloaded.
+                // Always a 16:10 frame filled from the middle of the shot, so a
+                // wide screenshot is cropped, never squeezed.
                 Item {
                     id: preview
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.min(parent.width, 620)
-                    height: shot.status === Image.Ready ? width * shot.implicitHeight / shot.implicitWidth : 0
+                    width: Math.min(parent.width, 560)
+                    height: shot.status === Image.Ready ? Math.round(width * 10 / 16) : 0
                     visible: height > 0
 
                     Image {
                         id: shot
                         anchors.fill: parent
                         source: backend.downloaded ? "file://" + backend.themeDir + "/docs/screenshots/desktop.jpg" : ""
-                        sourceSize.width: 1240
-                        fillMode: Image.PreserveAspectFit
+                        sourceSize.height: 700
+                        fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         visible: false
                     }
