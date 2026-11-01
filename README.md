@@ -32,7 +32,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash) and how far its icons grow |
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |
 | **Widgets** | The desktop widgets: clock, calendar, weather and now playing |
-| **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; where the clock sits; and every item on the bar, grouped by where it sits, to show or hide with a switch and drag to rearrange |
+| **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; and every item on the bar, in Left, Center and Right, to show or hide with a switch and drag to rearrange (the clock too) |
 | **Backups** | Back up now, restore any backup, and export or import your setup |
 
 - **Changes wait for Apply.** Flipping switches and moving sliders changes nothing until you press **Apply** in the toolbar at the top. Then every change goes to the installer in one call, so the theme reloads once. **Revert** throws the changes away.
@@ -205,7 +205,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-The tests cover what can go wrong between the window and the installer: piece names, settings and their ranges, how changes combine into one installer call, refusing bad changes before anything runs, reading the installer's status and backups, backup ids, which pieces an update reinstalls, and recoloring Omarchy's logo.
+`node tests/bar-model.test.js` tests the menu bar's Left, Center and Right groups, and `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml` drives real presses, drags and releases on its rows: moving within and between groups, hiding and showing, dropping into an empty group, letting go over nothing, the page holding still under a drag and scrolling at its edges, and several drags in a row.
+
+The Rust tests cover what can go wrong between the window and the installer: piece names, settings and their ranges, how changes combine into one installer call, refusing bad changes before anything runs, reading the installer's status and backups, backup ids, which pieces an update reinstalls, and recoloring Omarchy's logo.
 
 ### The app icon
 

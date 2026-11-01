@@ -1,61 +1,116 @@
 import QtQuick
+import "BarModel.js" as BarModel
 
-// The menu bar's items, grouped by where they sit, as rows to show or hide
-// with a switch and to drag by their handle within a group or into another.
-// Hidden items wait in "Not in the menu bar" at the bottom; dragging one into
-// a group, or switching it on, puts it back on the bar. Nothing changes until
-// Apply: every change hands the whole arrangement to `changed`.
+// The menu bar's items in three groups, Left, Center and Right, plus those not
+// in the menu bar: rows to show or hide with a switch, and to drag by their
+// handle within a group or into another. Nothing changes until Apply: every
+// change hands the new groups to `changed`.
 Column {
     id: root
 
-    // {sections: {left: [ids], …}, hidden: [ids]}
-    property var layout: ({ sections: {}, hidden: [] })
+    // {left, center, right, hidden} as lists of ids (BarModel.groups).
+    property var groups: ({ left: [], center: [], right: [], hidden: [] })
     // {id: name}
     property var names: ({})
     property bool enabled: true
-    signal changed(var layout)
+    // The page this sits in, scrolled while a row is dragged near its edges,
+    // and kept from scrolling under a drag.
+    property Flickable flickable: null
+    signal changed(var groups)
 
-    readonly property var groups: [
+    readonly property var sections: [
         { id: "left", title: "Left" },
-        { id: "centerBegin", title: "Center, start" },
         { id: "center", title: "Center" },
-        { id: "centerEnd", title: "Center, end" },
         { id: "right", title: "Right" },
-        { id: "tray", title: "Tray drawer" },
         { id: "hidden", title: "Not in the menu bar" }
     ]
 
-    // Where a dragged row would land: { group, index }, or null.
-    property var dropTarget: null
+    // While a row is dragged: its id, the row it moves with, and where it
+    // would land ({ group, index }), or null over nothing.
     property string dragging: ""
+    property Item draggedBody: null
+    property var dropTarget: null
+    property bool holding: false
 
-    function items(group) {
-        return group === "hidden" ? (layout.hidden || []) : ((layout.sections || {})[group] || [])
+    function name(id) {
+        return names[id] || id
     }
 
-    // Moves an item to a group at an index, taking it out of where it was.
     function moveTo(id, group, index) {
-        const next = { sections: {}, hidden: (layout.hidden || []).filter(x => x !== id) }
-        for (const g in layout.sections || {}) next.sections[g] = layout.sections[g].filter(x => x !== id)
-        const was = items(group).indexOf(id)
-        if (was >= 0 && was < index) index -= 1
-        const list = group === "hidden" ? next.hidden : (next.sections[group] = next.sections[group] || [])
-        list.splice(Math.max(0, Math.min(index, list.length)), 0, id)
-        changed(next)
+        changed(BarModel.move(groups, id, group, index))
+    }
+
+    // Every row and empty group, so a drag can tell what it is over from where
+    // they are now; drop areas kept stale state once the rows were rebuilt.
+    property var slots: []
+    function addSlot(slot) { slots = slots.concat([slot]) }
+    function removeSlot(item) { slots = slots.filter(s => s.item !== item) }
+
+    // Over a row's upper half, before it; over its lower half, after it; over
+    // an empty group, into it; elsewhere, nowhere.
+    function aim() {
+        if (!draggedBody) return
+        const p = draggedBody.mapToItem(root, draggedBody.width / 2, draggedBody.height / 2)
+        for (const s of slots) {
+            if (s.id === dragging) continue
+            const top = s.item.mapToItem(root, 0, 0)
+            if (p.x < top.x || p.x > top.x + s.item.width || p.y < top.y || p.y >= top.y + s.item.height) continue
+            dropTarget = { group: s.group, index: s.index + (s.empty || p.y < top.y + s.item.height / 2 ? 0 : 1) }
+            return
+        }
+        // Over the dragged row's own place: it stays.
+        const own = slots.find(s => s.id === dragging)
+        if (own) {
+            const top = own.item.mapToItem(root, 0, 0)
+            if (p.y >= top.y && p.y < top.y + own.item.height) { dropTarget = { group: own.group, index: own.index }; return }
+        }
+        dropTarget = null
+    }
+
+    // Hold the page still from the moment a handle is pressed.
+    Binding {
+        when: root.flickable !== null && (root.holding || root.dragging !== "")
+        target: root.flickable
+        property: "interactive"
+        value: false
+    }
+
+    // Near the top or bottom of the page, scroll it, keeping the dragged row
+    // under the pointer.
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.flickable !== null && root.draggedBody !== null
+        onTriggered: {
+            const f = root.flickable
+            const y = root.draggedBody.mapToItem(f, 0, root.draggedBody.height / 2).y
+            const edge = 48
+            let step = 0
+            if (y < edge) step = -Math.ceil((edge - y) / 4)
+            else if (y > f.height - edge) step = Math.ceil((y - (f.height - edge)) / 4)
+            const top = 0
+            const bottom = Math.max(0, f.contentHeight - f.height)
+            const next = Math.max(top, Math.min(bottom, f.contentY + step))
+            root.draggedBody.y += next - f.contentY
+            f.contentY = next
+        }
     }
 
     spacing: 18
     width: parent ? parent.width : 0
 
     Repeater {
-        model: root.groups
+        model: root.sections
 
         delegate: Column {
             id: group
             required property var modelData
-            readonly property var ids: root.items(modelData.id)
+            readonly property var ids: root.groups[modelData.id] || []
+            // The group a row is dragged out of draws above the others.
+            z: root.dragging !== "" && ids.indexOf(root.dragging) >= 0 ? 10 : 0
             width: root.width
             spacing: 6
+            objectName: "group-" + modelData.id
 
             Text {
                 text: group.modelData.title
@@ -73,26 +128,38 @@ Column {
                 border.width: 1
                 border.color: Qt.rgba(1, 1, 1, 0.08)
 
-                // Dropping below the last row, or into an empty group, adds at the end.
-                DropArea {
-                    anchors.fill: parent
-                    keys: ["bar-item"]
-                    onEntered: root.dropTarget = { group: group.modelData.id, index: group.ids.length }
-                }
-
                 Column {
                     id: rows
                     width: parent.width
 
-                    Text {
+                    // An empty group takes a drop as its first item.
+                    Item {
                         visible: group.ids.length === 0
                         width: parent.width
-                        height: 40
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: 14
-                        text: group.modelData.id === "hidden" ? "Every item is in the menu bar" : "Drag items here"
-                        color: Qt.rgba(1, 1, 1, 0.45)
-                        font.pixelSize: 12
+                        height: visible ? 40 : 0
+
+                        id: emptySlot
+                        Component.onCompleted: root.addSlot({ item: emptySlot, group: group.modelData.id, index: 0, empty: true, id: "" })
+                        Component.onDestruction: root.removeSlot(emptySlot)
+
+                        Rectangle {
+                            visible: !!root.dropTarget && root.dropTarget.group === group.modelData.id
+                            x: 10
+                            width: parent.width - 20
+                            height: 2
+                            radius: 1
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: "#0a84ff"
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            leftPadding: 14
+                            visible: !root.dropTarget || root.dropTarget.group !== group.modelData.id
+                            text: group.modelData.id === "hidden" ? "Every item is in the menu bar" : "Drag items here"
+                            color: Qt.rgba(1, 1, 1, 0.45)
+                            font.pixelSize: 12
+                        }
                     }
 
                     Repeater {
@@ -102,26 +169,27 @@ Column {
                             id: row
                             required property string modelData
                             required property int index
-                            readonly property bool targeted: !!root.dropTarget && root.dropTarget.group === group.modelData.id && root.dropTarget.index === index
                             width: rows.width
                             height: 40
-                            z: body.Drag.active ? 10 : 0
+                            z: handle.active ? 10 : 0
+                            objectName: "row-" + modelData
 
-                            // Hovering over a row puts the item before it.
-                            DropArea {
-                                anchors.fill: parent
-                                keys: ["bar-item"]
-                                onEntered: root.dropTarget = { group: group.modelData.id, index: row.index }
-                            }
+                            Component.onCompleted: root.addSlot({ item: row, group: group.modelData.id, index: row.index, empty: false, id: row.modelData })
+                            Component.onDestruction: root.removeSlot(row)
 
-                            // Where the dragged item would go.
+                            // Where the dragged item would go: a line at this
+                            // row's top, or at its bottom for the last row.
                             Rectangle {
-                                visible: row.targeted && root.dragging !== row.modelData
-                                width: parent.width - 20
+                                readonly property var t: root.dropTarget
+                                visible: !!t && t.group === group.modelData.id
+                                    && (t.index === row.index || (t.index === row.index + 1 && row.index === group.ids.length - 1))
                                 x: 10
+                                y: t && t.index === row.index + 1 ? row.height - 1 : -1
+                                width: parent.width - 20
                                 height: 2
                                 radius: 1
                                 color: "#0a84ff"
+                                z: 5
                             }
 
                             Rectangle {
@@ -129,71 +197,82 @@ Column {
                                 width: row.width
                                 height: row.height
                                 radius: 8
-                                color: Drag.active ? "#3a3a3e" : "transparent"
-                                border.width: Drag.active ? 1 : 0
+                                color: handle.active ? "#3a3a3e" : "transparent"
+                                border.width: handle.active ? 1 : 0
                                 border.color: Qt.rgba(1, 1, 1, 0.15)
-
-                                Drag.active: handle.active
-                                Drag.keys: ["bar-item"]
-                                Drag.hotSpot.x: width / 2
-                                Drag.hotSpot.y: height / 2
+                                onYChanged: if (handle.active) root.aim()
 
                                 Text {
                                     x: 14
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - 120
+                                    width: parent.width - 130
                                     elide: Text.ElideRight
-                                    text: root.names[row.modelData] || row.modelData
+                                    text: root.name(row.modelData)
                                     color: group.modelData.id === "hidden" ? Qt.rgba(1, 1, 1, 0.6) : "white"
                                     font.pixelSize: 13
                                 }
 
                                 MacSwitch {
+                                    objectName: "switch-" + row.modelData
                                     anchors.right: grip.left
-                                    anchors.rightMargin: 14
+                                    anchors.rightMargin: 8
                                     anchors.verticalCenter: parent.verticalCenter
                                     checked: group.modelData.id !== "hidden"
                                     enabled: root.enabled
-                                    accessibleName: "Show " + (root.names[row.modelData] || row.modelData)
-                                    // Off goes to "Not in the menu bar"; on puts it at the end of the right side.
-                                    onToggled: on => on ? root.moveTo(row.modelData, "right", root.items("right").length)
-                                                        : root.moveTo(row.modelData, "hidden", root.items("hidden").length)
+                                    accessibleName: "Show " + root.name(row.modelData)
+                                    // Off goes to "Not in the menu bar"; on to the end of the right side.
+                                    onToggled: on => on ? root.moveTo(row.modelData, "right", (root.groups.right || []).length)
+                                                        : root.moveTo(row.modelData, "hidden", (root.groups.hidden || []).length)
                                 }
 
                                 // The handle a row is dragged by.
-                                Text {
+                                Item {
                                     id: grip
+                                    objectName: "grip-" + row.modelData
                                     anchors.right: parent.right
-                                    anchors.rightMargin: 14
+                                    anchors.rightMargin: 6
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "≡"
-                                    color: Qt.rgba(1, 1, 1, root.enabled ? 0.5 : 0.2)
-                                    font.pixelSize: 18
+                                    width: 28
+                                    height: 28
 
                                     Accessible.role: Accessible.Grip
-                                    Accessible.name: "Move " + (root.names[row.modelData] || row.modelData)
+                                    Accessible.name: "Move " + root.name(row.modelData)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "≡"
+                                        color: Qt.rgba(1, 1, 1, root.enabled ? 0.5 : 0.2)
+                                        font.pixelSize: 18
+                                    }
+
+                                    HoverHandler { cursorShape: Qt.OpenHandCursor }
+                                    PointHandler {
+                                        enabled: root.enabled
+                                        onActiveChanged: root.holding = active
+                                    }
 
                                     DragHandler {
                                         id: handle
                                         target: body
                                         enabled: root.enabled
                                         xAxis.enabled: false
+                                        grabPermissions: PointerHandler.CanTakeOverFromAnything
                                         onActiveChanged: {
                                             if (active) {
                                                 root.dragging = row.modelData
+                                                root.draggedBody = body
                                                 root.dropTarget = null
                                                 return
                                             }
                                             const target = root.dropTarget
                                             const id = root.dragging
+                                            root.draggedBody = null
                                             root.dragging = ""
                                             root.dropTarget = null
                                             body.y = 0
                                             if (target) root.moveTo(id, target.group, target.index)
                                         }
                                     }
-
-                                    HoverHandler { cursorShape: Qt.OpenHandCursor }
                                 }
                             }
 

@@ -4,6 +4,7 @@ import QtQuick.Dialogs
 import QtQuick.Effects
 import QtQuick.Window
 import org.omarchy.macosstudio
+import "BarModel.js" as BarModel
 
 // macOS Theme Studio, shaped like macOS System Settings: a sidebar of
 // sections with colored icons, and grouped rows of switches and sliders.
@@ -55,9 +56,6 @@ Window {
     // the theme reloads once however many there are.
     property var pendingPieces: ({})
     property var pendingSettings: ({})
-    // Where the bar's clock goes, waiting for Apply; "" while unchanged.
-    property string pendingClock: ""
-
     // The menu bar's items as the installer lists them, and the arrangement
     // waiting for Apply (null while unchanged).
     readonly property var bar: {
@@ -69,29 +67,19 @@ Window {
         for (const item of bar.hidden || []) names[item.id] = item.name
         return names
     }
-    readonly property var barNow: {
-        const sections = {}
-        for (const s in bar.sections || {}) sections[s] = bar.sections[s].map(item => item.id)
-        return { sections: sections, hidden: (bar.hidden || []).map(item => item.id) }
-    }
+    // Left, Center and Right, and the hidden ones (BarModel.groups).
+    readonly property var barNow: BarModel.groups(bar)
     property var pendingBar: null
 
-    // Taking an arrangement back to the one on the bar takes the change away.
-    function markBar(layout) {
-        pendingBar = JSON.stringify(layout) === JSON.stringify(barNow) ? null : layout
+    // Taking the groups back to the bar as it is takes the change away.
+    function markBar(groups) {
+        pendingBar = JSON.stringify(groups) === JSON.stringify(barNow) ? null : groups
     }
 
     readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
-        + (pendingClock ? 1 : 0) + (pendingBar ? 1 : 0)
+        + (pendingBar ? 1 : 0)
 
-    function clockPosition() {
-        return pendingClock || status.clock || "right"
-    }
 
-    // Choosing where it already is takes the change away again.
-    function markClock(place) {
-        pendingClock = place === (status.clock || "right") ? "" : place
-    }
     property bool applying: false
 
     function pieceOn(piece) {
@@ -118,7 +106,6 @@ Window {
     }
 
     function revert() {
-        pendingClock = ""
         pendingBar = null
         pendingPieces = {}
         pendingSettings = {}
@@ -126,8 +113,7 @@ Window {
 
     function apply() {
         const changes = { add: [], remove: [], set: pendingSettings }
-        if (pendingClock) changes.clock = pendingClock
-        if (pendingBar) changes.bar = pendingBar
+        if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
         applying = true
         backend.apply(JSON.stringify(changes))
@@ -636,18 +622,8 @@ Window {
                 SettingRow {
                     label: "macOS menu bar"
                     note: "Inter, the app name in bold, and Control Center"
-                    PieceSwitch { piece: "menubar" }
-                }
-                SettingRow {
-                    label: "Clock"
-                    note: "Where the date and time sit on the bar"
                     last: true
-                    SegmentedControl {
-                        options: [{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]
-                        current: window.clockPosition()
-                        enabled: !backend.busy && window.status.clock !== undefined
-                        onPicked: value => window.markClock(value)
-                    }
+                    PieceSwitch { piece: "menubar" }
                 }
             }
 
@@ -668,10 +644,11 @@ Window {
 
                 BarItems {
                     width: parent.width
-                    layout: window.pendingBar || window.barNow
+                    groups: window.pendingBar || window.barNow
                     names: window.barNames
                     enabled: !backend.busy
-                    onChanged: layout => window.markBar(layout)
+                    flickable: content
+                    onChanged: groups => window.markBar(groups)
                 }
             }
 
@@ -1005,62 +982,6 @@ Window {
         checked: window.pieceOn(piece)
         enabled: !backend.busy
         onToggled: on => window.markPiece(piece, on)
-    }
-
-    // The macOS segmented control: a row of choices in one rounded track,
-    // the chosen one raised on a lighter segment.
-    component SegmentedControl: Rectangle {
-        id: segmented
-        property var options: []
-        property string current: ""
-        property bool enabled: true
-        signal picked(string value)
-
-        width: segments.implicitWidth + 4
-        height: 24
-        radius: 6
-        color: Qt.rgba(1, 1, 1, 0.08)
-        opacity: enabled ? 1 : 0.4
-
-        Accessible.role: Accessible.PageTabList
-
-        Row {
-            id: segments
-            x: 2
-            anchors.verticalCenter: parent.verticalCenter
-
-            Repeater {
-                model: segmented.options
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool chosen: segmented.current === modelData.value
-                    width: Math.max(64, label.implicitWidth + 20)
-                    height: 20
-                    radius: 5
-                    color: chosen ? "#5a5a5e" : "transparent"
-
-                    Accessible.role: Accessible.PageTab
-                    Accessible.name: modelData.label
-                    Accessible.selected: chosen
-                    Accessible.onPressAction: if (segmented.enabled) segmented.picked(modelData.value)
-
-                    Text {
-                        id: label
-                        anchors.centerIn: parent
-                        text: modelData.label
-                        color: "white"
-                        font.pixelSize: 12
-                        font.weight: parent.chosen ? Font.DemiBold : Font.Normal
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: segmented.enabled
-                        onClicked: segmented.picked(modelData.value)
-                    }
-                }
-            }
-        }
     }
 
     // A switch for an on/off install.sh setting (1 on, 0 off; on by default).

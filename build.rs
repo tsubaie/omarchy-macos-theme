@@ -12,6 +12,8 @@ fn main() {
             .qml_file("qml/TrafficLights.qml")
             .qml_file("qml/BarItems.qml"),
     )
+    // Logic the QML imports, next to it, so node can test it too.
+    .qrc_resources(["qml/BarModel.js"])
     .qrc_resources([
         "assets/icon-omarchy.svg",
         "assets/icons/general.svg",
