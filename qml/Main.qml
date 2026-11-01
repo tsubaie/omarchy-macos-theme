@@ -127,6 +127,10 @@ Window {
         const text = (p.title + " " + p.keywords).toLowerCase()
         return words.every(w => text.indexOf(w) >= 0)
     })
+    // What the sidebar lists: every page but the overview, which the theme
+    // card at the top opens, as the account card does in System Settings;
+    // while searching, the results, the overview among them.
+    readonly property var listed: query === "" ? pages.filter(p => p.id !== "overview") : results
     // The result ↑ and ↓ move to while searching; Return opens it.
     property int resultIndex: 0
     onQueryChanged: resultIndex = 0
@@ -139,7 +143,7 @@ Window {
     // Sections group the sidebar as System Settings does; keywords are the
     // words on each page's rows, which search also finds.
     readonly property var pages: [
-        { id: "overview", title: "Overview", icon: 0xF02FC, tint: "#0a84ff", section: 0,
+        { id: "overview", title: "About", icon: 0xF02FC, tint: "#0a84ff", section: 0,
           keywords: "about version license open source github omarchy" },
         { id: "general", title: "General", icon: 0xF0493, tint: "#8e8e93", section: 1,
           keywords: "theme colors glass window browser apps electron snap snapping halves corners mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
@@ -172,7 +176,30 @@ Window {
         Column {
             anchors.fill: parent
             anchors.margins: 10
+            anchors.topMargin: 4
             spacing: 2
+
+            // The window controls, where macOS puts them, on a strip people
+            // can drag the window by, as the title bar was.
+            Item {
+                width: parent.width
+                height: 34
+
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: window.startSystemMove()
+                    onDoubleClicked: backend.zoomWindow()
+                }
+
+                TrafficLights {
+                    x: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    active: window.active
+                    onClose: window.close()
+                    onMinimize: if (!backend.minimizeWindow()) window.showMinimized()
+                    onZoom: backend.zoomWindow()
+                }
+            }
 
             SearchField {
                 id: searchField
@@ -187,11 +214,26 @@ Window {
 
             Item { width: 1; height: 8 }
 
-            // The theme, as macOS puts the account at the top.
-            Item {
+            // The theme, as macOS puts the account at the top; it opens the
+            // overview, as the account card opens its pane.
+            Rectangle {
                 width: parent.width
                 height: 52
                 visible: window.query === ""
+                radius: 8
+                color: window.page === "overview" ? "#0a84ff" : cardHover.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
+
+                Accessible.role: Accessible.PageTab
+                Accessible.name: "About macOS Theme"
+                Accessible.selected: window.page === "overview"
+                Accessible.onPressAction: window.open("overview")
+
+                HoverHandler { id: cardHover }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: window.open("overview")
+                }
 
                 AppIcon {
                     id: badge
@@ -215,7 +257,7 @@ Window {
                     Text {
                         text: !backend.downloaded ? "Not downloaded"
                             : window.status.active ? "Current theme" : "Installed, not current"
-                        color: Qt.rgba(1, 1, 1, 0.55)
+                        color: Qt.rgba(1, 1, 1, window.page === "overview" ? 0.8 : 0.55)
                         font.pixelSize: 11
                     }
                 }
@@ -224,7 +266,7 @@ Window {
             Item { width: 1; height: window.query === "" ? 6 : 0 }
 
             Repeater {
-                model: window.results
+                model: window.listed
 
                 delegate: Column {
                     id: entry
@@ -232,7 +274,7 @@ Window {
                     required property int index
                     readonly property bool selected: window.query === "" ? window.page === modelData.id : index === window.resultIndex
                     // A little room where a new section starts, as in System Settings.
-                    readonly property bool newSection: window.query === "" && index > 0 && window.results[index - 1].section !== modelData.section
+                    readonly property bool newSection: window.query === "" && index > 0 && window.listed[index - 1].section !== modelData.section
                     width: parent.width
 
                     Item { width: 1; height: entry.newSection ? 10 : 0 }
@@ -257,7 +299,12 @@ Window {
                             width: 20
                             height: 20
                             radius: 5
-                            color: entry.modelData.tint
+                            gradient: Gradient {
+                                GradientStop { position: 0; color: Qt.lighter(entry.modelData.tint, 1.18) }
+                                GradientStop { position: 1; color: entry.modelData.tint }
+                            }
+                            border.width: 0.5
+                            border.color: Qt.rgba(1, 1, 1, 0.18)
 
                             Text {
                                 anchors.centerIn: parent
@@ -304,13 +351,51 @@ Window {
         searchField.clear()
     }
 
+    // The top bar over the content: the pane's title, level with the traffic
+    // lights, and the window's drag area, as the macOS formula has it.
+    Item {
+        id: topBar
+        anchors.left: sidebar.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: 52
+
+        MouseArea {
+            anchors.fill: parent
+            onPressed: window.startSystemMove()
+            onDoubleClicked: backend.zoomWindow()
+        }
+
+        Text {
+            id: pageTitle
+            x: 32
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: 4
+            text: window.pages.find(p => p.id === window.page).title
+            color: "white"
+            // Title 3, emphasized: what macOS uses for a pane's title.
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 28
+            anchors.verticalCenter: pageTitle.verticalCenter
+            visible: backend.busy
+            text: "Working…"
+            color: Qt.rgba(1, 1, 1, 0.55)
+            font.pixelSize: 12
+        }
+    }
+
     // Content.
     Flickable {
         id: content
         anchors.left: sidebar.right
         anchors.leftMargin: 4
         anchors.right: parent.right
-        anchors.top: parent.top
+        anchors.top: topBar.bottom
         anchors.bottom: parent.bottom
         contentHeight: column.height + 48 + (applyBar.visible ? applyBar.height : 0)
         clip: true
@@ -318,32 +403,9 @@ Window {
         Column {
             id: column
             x: 28
-            y: 20
+            y: 4
             width: content.width - 56
             spacing: 18
-
-            Item {
-                width: parent.width
-                height: pageTitle.height
-
-                Text {
-                    id: pageTitle
-                    text: window.pages.find(p => p.id === window.page).title
-                    color: "white"
-                    // Title 3, emphasized: what macOS uses for a pane's title.
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                }
-
-                Text {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: backend.busy
-                    text: "Working…"
-                    color: Qt.rgba(1, 1, 1, 0.55)
-                    font.pixelSize: 12
-                }
-            }
 
             // Why the last action failed, in install.sh's own words.
             Rectangle {
