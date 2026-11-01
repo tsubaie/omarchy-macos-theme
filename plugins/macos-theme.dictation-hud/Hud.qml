@@ -136,36 +136,48 @@ Item {
         mipmap: true
       }
 
-      // Recording: level bars where the volume HUD has its steps. Voxtype
-      // doesn't publish input levels, so the motion shows "listening", not
-      // the actual loudness.
-      Row {
+      // Recording: a waveform where the volume HUD has its steps, drawn as
+      // Apple draws one: hairline rounded bars close together, one smooth
+      // wave moving through them, tapered toward both ends. Voxtype doesn't
+      // publish input levels, so the motion shows "listening", not the
+      // actual loudness.
+      Item {
         id: levels
         visible: root.recording
         anchors.left: mic.right
         anchors.leftMargin: Style.space(14)
         anchors.right: parent.right
-        anchors.rightMargin: Style.space(18)
+        anchors.rightMargin: Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
-        height: Style.space(26)
-        spacing: Style.space(3)
+        height: Style.space(24)
+
+        readonly property real barWidth: Math.max(2, Math.round(Style.space(2)))
+        readonly property real pitch: barWidth * 2
+        readonly property int count: Math.max(1, Math.floor((width + barWidth) / pitch))
+        readonly property real minHeight: barWidth
+        property real phase: 0
+        NumberAnimation on phase {
+          running: root.recording && Style.duration(1) > 0
+          from: 0; to: 2 * Math.PI
+          duration: 1400
+          loops: Animation.Infinite
+        }
+
         Repeater {
-          model: [0.35, 0.6, 0.45, 0.8, 0.55, 1.0, 0.7, 0.4, 0.85, 0.6, 0.95, 0.5, 0.75, 0.45, 0.9, 0.6, 0.4, 0.7, 0.5, 0.3]
+          model: levels.count
           Rectangle {
-            required property real modelData
             required property int index
-            width: (levels.width - 19 * levels.spacing) / 20
-            radius: width / 2
+            readonly property real along: levels.count > 1 ? index / (levels.count - 1) : 0.5
+            // Tall in the middle, low at the ends; two waves of different
+            // length make the motion look less mechanical.
+            readonly property real swing: 0.5 + 0.3 * Math.sin(levels.phase + along * 9) + 0.2 * Math.sin(levels.phase * 2 - along * 5)
+            x: index * levels.pitch
             anchors.verticalCenter: parent.verticalCenter
+            width: levels.barWidth
+            height: levels.minHeight + (levels.height - levels.minHeight) * Math.sin(Math.PI * along) * swing
+            radius: width / 2
             color: Commons.Color.popups.text
-            property real peak: levels.height * modelData
-            height: Style.space(4)
-            SequentialAnimation on height {
-              running: root.recording && Style.duration(1) > 0
-              loops: Animation.Infinite
-              NumberAnimation { to: peak; duration: 240 + (index % 7) * 41; easing.type: Easing.InOutSine }
-              NumberAnimation { to: Style.space(4); duration: 240 + (index % 7) * 41; easing.type: Easing.InOutSine }
-            }
+            opacity: 0.9
           }
         }
       }

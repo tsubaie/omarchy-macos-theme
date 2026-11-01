@@ -1,11 +1,11 @@
 {
-  "source": "Icons8 (https://icons8.com), pack ios (outline, as Apple's SF Symbols draw them)",
+  "source": "Icons8 (https://icons8.com), pack ios (outline, as Apple's SF Symbols draw them); the microphone from ios-filled, its grille notches left out, as Apple's mic.fill",
   "icons": {
     "volume-high": 2795,
     "volume-medium": 2902,
     "volume-low": 2929,
     "volume-muted": 644,
-    "microphone": 12653,
+    "microphone": 9622,
     "brightness": 648,
     "keyboard": 519
   }
