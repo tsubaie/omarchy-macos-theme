@@ -35,6 +35,7 @@ cd omarchy-macos-theme
 | `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
+| `--set drop-follow=<0\|1>` | Whether dropping a window onto another workspace takes you there too (1, the theme's) or sends it alone (0) |
 | `--bar [--json]` | The bar's items by section, and the hidden ones |
 | `--bar-layout '<json>'` | Show, hide and order the bar's items at once: `{"sections":{"right":["omarchy.clock",…],…},"hidden":[…]}`, with sections `left`, `centerBegin`, `center`, `centerEnd`, `right` and `tray`. Only widgets Omarchy knows are taken |
 | `--set clock=<left\|center\|right>` | Where the bar's clock sits; the theme puts it on the right, after Control Center |
@@ -84,7 +85,8 @@ On floating workspaces, windows behave like a Mac's:
 - **Snapping**, as on macOS and Windows. Drag a window by its title bar:
   - to the left or right edge for half the screen;
   - to a corner for a quarter. An edge is split in thirds: its upper and lower thirds give corners and the middle third the half, so you don't need to reach the very corner;
-  - to the middle of the top edge to fill the screen. The top and bottom edges' outer thirds give their corners too.
+  - to the top edge, either side of its middle, to fill the screen. The top edge's outer quarters give its corners, and the bottom edge's outer thirds give its corners too;
+  - to the very middle of the top edge (with `--switcher`) to move it to another workspace: see below.
 
   The left and right edges count when the window's own edge reaches them, not only the pointer, so it doesn't matter where you hold the title bar. A frosted outline shows the spot while you drag (with `--dock`), and the window snaps when you let go.
 - **Snapped windows make room for each other**: a window snapped beside a full-screen one takes its half and the other gives way, and a half gives way to a quarter.
@@ -121,7 +123,7 @@ Omarchy's dock, which appears on floating workspaces, reworked to behave like th
 
 Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from its GitHub repository (default color, into your home folder, no password) and switches to it. App icons, Files, and the dock's Trash and Downloads then look like macOS. As in Finder, Files lists show small blue folders and paper document icons (PDF, images, zip and so on), and the sidebar uses gray outlines. MacTahoe draws small icons as outlines and flat glyphs, so the script swaps in its large icons at those sizes.
 
-### App and workspace switchers (`--switcher`)
+### App and workspace switchers, and Mission Control (`--switcher`)
 
 - **Alt+Tab** works like Cmd+Tab: every running app across all workspaces, most recent first, as large icons on frosted glass.
   - Hold Alt and press Tab to move; let go to switch to the app, on whatever workspace it's on.
@@ -131,6 +133,11 @@ Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon
   ![App switcher](docs/screenshots/app-switcher.png)
 
 - **Super+Tab** does the same for workspaces, showing each one as a live miniature of its windows. A quick Super+Tab flips between your last two workspaces.
+- **Ctrl+Up** opens Mission Control, as on macOS: the workspace's windows fly into a spread over the dimmed wallpaper, live, with the screen's workspaces in a strip along the top.
+  - Hover a window to see its title; click it (or press Return) to bring it forward.
+  - Click a workspace in the strip to go there, or "+" at its end to go to a new, empty one.
+  - Ctrl+Up again, Esc or a click on the wallpaper closes it.
+- **Drag a window to the middle of the top edge** to move it to another workspace, as on macOS: the workspaces slide down in a strip, with a "+" for a new one (it goes away again once its last window leaves; workspaces your config pins, such as Omarchy's 1–5, stay). Slide along it and let go on one, and you go there with it (`--set drop-follow=0`, or the app's Windows page, sends it alone). Pull the window back down to carry on the drag. On a tiled workspace the whole top edge opens the strip. A faint outline shows the spot as a drag nears the top.
 
 ### macOS menu bar (`--menubar`)
 

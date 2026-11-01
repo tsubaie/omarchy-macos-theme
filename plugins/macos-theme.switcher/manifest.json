@@ -3,7 +3,7 @@
   "id": "macos-theme.switcher",
   "name": "macOS app and workspace switcher",
   "version": "1.0.0",
-  "description": "Alt+Tab app switcher and Super+Tab workspace switcher with live previews, in the macOS style.",
+  "description": "Alt+Tab app switcher, Super+Tab workspace switcher and Ctrl+Up Mission Control with live previews, in the macOS style.",
   "license": "MIT",
   "kinds": [
     "panel"

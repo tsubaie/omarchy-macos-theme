@@ -14,6 +14,9 @@ import qs.Ui
 Item {
   id: root
 
+  // The shell's API, which the shell gives a panel plugin: the bar's size.
+  property var shell: null
+
   property bool opened: false
   property var apps: []
   property int index: 0
@@ -31,6 +34,10 @@ Item {
 
   // Super+Tab: the workspace switcher with live previews.
   Spaces {}
+  // Ctrl+Up: Mission Control.
+  MissionControl {}
+  // The workspaces a window dragged against the top of the screen drops onto.
+  DropSpaces { shell: root.shell }
 
   ShellIpc {
     target: "macos-switcher"

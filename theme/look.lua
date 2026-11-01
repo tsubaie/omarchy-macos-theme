@@ -63,6 +63,10 @@ hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-pa
 hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud)$" }, blur = true, ignore_alpha = 0.01 })
 -- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
+-- Mission Control flies the windows out itself; Hyprland must not pop it in.
+hl.layer_rule({ match = { namespace = "^omarchy-mission-control$" }, no_anim = true })
+-- The strip a dragged window drops onto slides down itself, on frosted glass.
+hl.layer_rule({ match = { namespace = "^omarchy-drop-spaces$" }, no_anim = true, blur = true, ignore_alpha = 0.3 })
 -- The shade behind the menu bar is just there, never animated in.
 hl.layer_rule({ match = { namespace = "^omarchy-menubar-shade$" }, no_anim = true })
 -- The snap outline is frosted glass and animates itself.
@@ -237,6 +241,11 @@ local SNAP_EDGE = 12
 -- the screen: thirds, so each corner is as easy to reach as the half between
 -- them (KDE's default is a quarter, which proved hard to hit).
 local SNAP_CORNER = 1 / 3
+-- Along the top edge: the corners a quarter each, and its middle fifth (10% of
+-- the screen either side of the centre) the strip of workspaces a window drops
+-- onto; between them, fill.
+local SNAP_TOP_CORNER = 1 / 4
+local SPACES_BAND = 0.1
 -- How often the active window and the pointer are checked, in milliseconds.
 local SNAP_TICK = 40
 local snap_shown = nil
@@ -260,8 +269,9 @@ local function snap_zone(cursor, monitor, window)
     return side
   end
   if top then
-    if cursor.x <= x + width * SNAP_CORNER then return "top-left" end
-    if cursor.x >= x + width * (1 - SNAP_CORNER) then return "top-right" end
+    if math.abs(cursor.x - (x + width / 2)) <= width * SPACES_BAND then return "spaces" end
+    if cursor.x <= x + width * SNAP_TOP_CORNER then return "top-left" end
+    if cursor.x >= x + width * (1 - SNAP_TOP_CORNER) then return "top-right" end
     return "fill"
   end
   -- The bottom edge, the dock's, gives only its corners, reached from below
@@ -365,10 +375,75 @@ end
 local snap_seen = nil
 local snap_drag = nil
 
--- Let go: into the spot the drag was over, or, for a window unsnapped on the
--- way, under the pointer.
-local function drop(window, drag, cursor)
+-- The strip of workspaces a dragged window drops onto, as on macOS (drawn by
+-- the switcher plugin, when installed): it opens as the drag reaches the
+-- "spaces" spot, the top edge's middle (the whole top edge on a tiled
+-- workspace, or with snapping off), stays open while the drag slides along
+-- the top, and closes when it is pulled below STRIP_REACH of the screen.
+-- Nearing the top within HINT_REACH, a faint outline shows where the spot is.
+local STRIP_REACH = 0.2
+local HINT_REACH = 0.15
+-- Dropped onto a workspace, a window takes you along (1) or goes alone (0)
+-- (install.sh --set drop-follow=<0|1>).
+local DROP_FOLLOW = 1
+local strip_file = io.open((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/omarchy/plugins/macos-theme.switcher/manifest.json", "r")
+local STRIP = strip_file ~= nil
+if strip_file then strip_file:close() end
+local function drop_spaces(args)
+  hl.dispatch(hl.dsp.exec_cmd("omarchy-shell -q macos-drop-spaces " .. args))
+end
+
+-- A drag over: no outline, no hint, no strip.
+local function end_drag(drag)
   show_snap(nil, nil)
+  if drag and (drag.strip or drag.hint) then drop_spaces("close") end
+end
+
+-- The drag in the strip's part of the screen: open it, keep it, or close it,
+-- and say which workspace the pointer is over. True while the strip is open.
+local function follow_strip(window, drag, cursor, zone)
+  if not STRIP then return false end
+  local monitor = window.monitor
+  local height = math.floor(monitor.height / monitor.scale)
+  local down = cursor.y - monitor.y
+  if drag.strip and down > height * STRIP_REACH then
+    -- Pulled back down: the strip closes and the drag goes on.
+    drag.strip = false
+    drag.hint = false
+    drop_spaces("close")
+  elseif not drag.strip and zone == "spaces" then
+    drag.strip = true
+    drop_spaces("open " .. monitor.name)
+  end
+  if drag.strip then
+    drop_spaces(string.format("hover %d", math.floor(cursor.x - monitor.x)))
+    return true
+  end
+  local hint = down <= height * HINT_REACH
+  if hint ~= (drag.hint or false) then
+    drag.hint = hint
+    drop_spaces(hint and ("hint " .. monitor.name) or "close")
+  end
+  return false
+end
+
+-- Let go: into the spot the drag was over, onto a workspace in the strip, or,
+-- for a window unsnapped on the way, under the pointer.
+local function drop(window, drag, cursor)
+  if drag.strip then
+    -- The drop closes the strip itself: closing it first would empty it
+    -- before the drop asks which workspace the pointer was over.
+    show_snap(nil, nil)
+    -- Back where the drag began, then onto the workspace it was dropped on
+    -- (or left there, dropped on none). A tiled window goes back into its
+    -- layout by itself.
+    if drag.floating then
+      hl.dispatch(hl.dsp.window.move({ x = drag.from.x, y = drag.from.y, window = window }))
+    end
+    drop_spaces(string.format("drop %s %d %s", window.address, math.floor(cursor.x - window.monitor.x), DROP_FOLLOW == 1 and "true" or "false"))
+    return
+  end
+  end_drag(drag)
   if drag.zone then
     snap(window, drag.zone)
   elseif drag.unsnapped then
@@ -385,17 +460,30 @@ local function snap_tick()
   local cursor = hl.get_cursor_pos()
   local seen = snap_seen
   snap_seen = nil
-  if window and window.floating and (window.fullscreen or 0) == 0 and window.monitor and on_floating_workspace(window) then
-    snap_seen = { address = window.address, x = window.at.x, y = window.at.y, w = window.size.x, h = window.size.y, cx = cursor.x, cy = cursor.y }
+  -- Floating windows on a floating workspace snap; any other window can
+  -- only be dropped onto another workspace.
+  if window and (window.fullscreen or 0) == 0 and window.monitor then
+    local floating = window.floating and on_floating_workspace(window) and SNAPPING == 1
+    if floating or STRIP then
+      snap_seen = { address = window.address, x = window.at.x, y = window.at.y, w = window.size.x, h = window.size.y,
+                    cx = cursor.x, cy = cursor.y, floating = floating }
+    end
   end
   local now = snap_seen
   if seen and now and seen.address == now.address and snap_drag and snap_drag.unsnapped and not snap_drag.resized then
     -- The unsnap's own resize: the drag goes on.
     snap_drag.resized = true
   elseif not (seen and now and seen.address == now.address and seen.w == now.w and seen.h == now.h) then
-    -- Another window, a resize, or none: no drag to follow.
-    if snap_drag then show_snap(nil, nil) end
+    -- Another window, a resize, or none: no drag to follow. A tiled window
+    -- let go over the strip is resized back into its layout: that is the drop.
+    local drag = snap_drag
     snap_drag = nil
+    local dragged = drag and drag.strip and seen and hl.get_window("address:" .. seen.address)
+    if dragged then
+      drop(dragged, drag, cursor)
+    elseif drag then
+      end_drag(drag)
+    end
   else
     local wx, wy = now.x - seen.x, now.y - seen.y
     local cx, cy = now.cx - seen.cx, now.cy - seen.cy
@@ -403,11 +491,27 @@ local function snap_tick()
     if moved and math.abs(wx - cx) <= 2 and math.abs(wy - cy) <= 2 then
       -- Moving with the pointer: dragged. Show the spot it is over.
       if not snap_drag then
-        snap_drag = { unsnapped = unsnap(window) }
+        snap_drag = { floating = now.floating, from = { x = seen.x, y = seen.y } }
+        if now.floating then snap_drag.unsnapped = unsnap(window) end
       end
-      snap_drag.zone = snap_zone(cursor, window.monitor, window)
       snap_drag.alone = 0
-      show_snap(window, snap_drag.zone)
+      local zone
+      if snap_drag.floating then
+        zone = snap_zone(cursor, window.monitor, window)
+      else
+        -- Not snapping: the whole top edge is the strip's.
+        local _, top = usable_area(window.monitor)
+        zone = cursor.y <= top + SNAP_EDGE and "spaces" or nil
+      end
+      if follow_strip(window, snap_drag, cursor, zone) then
+        snap_drag.zone = nil
+        show_snap(nil, nil)
+      else
+        -- Without the strip, the top edge's middle is just more of fill.
+        if zone == "spaces" then zone = snap_drag.floating and "fill" or nil end
+        snap_drag.zone = snap_drag.floating and zone or nil
+        show_snap(window, snap_drag.zone)
+      end
     elseif snap_drag and not moved and (cx ~= 0 or cy ~= 0) and (snap_drag.alone or 0) < 1 then
       -- The pointer moved alone once; a second time means it was let go.
       snap_drag.alone = (snap_drag.alone or 0) + 1
@@ -418,14 +522,14 @@ local function snap_tick()
       drop(window, drag, cursor)
     elseif snap_drag and moved then
       -- Moved some other way, by a key or a script.
+      end_drag(snap_drag)
       snap_drag = nil
-      show_snap(nil, nil)
     end
   end
   hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK })
 end
 
-if SNAPPING == 1 then hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK }) end
+if SNAPPING == 1 or STRIP then hl.timer(snap_tick, { type = "oneshot", timeout = SNAP_TICK }) end
 
 -- Letting go of a drag refocuses the window, which Hyprland reports even
 -- though it already had focus: that is the release, so snap right away.
@@ -455,8 +559,8 @@ o.window = function(match, rules)
   return add_window_rule(match, rules)
 end
 
--- Alt+Tab opens the macOS app switcher and Super+Tab the workspace switcher
--- when the plugin is installed: Tab and Shift+Tab move while the modifier is
+-- Alt+Tab opens the macOS app switcher, Super+Tab the workspace switcher and
+-- Ctrl+Up Mission Control when the plugin is installed: Tab and Shift+Tab move while the modifier is
 -- held, letting go of it switches.
 local switcher = io.open((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/omarchy/plugins/macos-theme.switcher/manifest.json", "r")
 if switcher then
@@ -465,4 +569,6 @@ if switcher then
   o.rebind("ALT + SHIFT + TAB", "App switcher (previous)", "omarchy-shell -q macos-switcher prev")
   o.rebind("SUPER + TAB", "Workspace switcher", "omarchy-shell -q macos-spaces next")
   o.rebind("SUPER + SHIFT + TAB", "Workspace switcher (previous)", "omarchy-shell -q macos-spaces prev")
+  -- Ctrl+Up opens Mission Control, as on macOS.
+  o.rebind("CTRL + UP", "Mission Control", "omarchy-shell -q macos-mission-control toggle")
 end
