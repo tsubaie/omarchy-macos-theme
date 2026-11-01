@@ -32,6 +32,8 @@
 #                                 centerBegin, center, centerEnd, right, tray)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --set dock-size=56  how big dock icons are, 32 to 80 points; 48 by default
+#   ./install.sh --set title-bars=0  turn off the title bars with traffic lights (1: on)
+#   ./install.sh --set traffic-lights=16  how big the traffic lights are, 10 to 20; 14 by default
 #   ./install.sh --preview --set blur=15  show settings at once, for a slider being dragged:
 #                                  no snapshot or theme refresh; blur and the dock's
 #                                  settings change in place until Apply, glass reloads
@@ -122,11 +124,11 @@ while (( $# )); do
         settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
         shift; shift; continue
       fi
-      [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|snapping|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
+      [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|snapping|title-bars|traffic-lights|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
-          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "snapping" ? v == "0" || v == "1" : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "snapping" || k == "title-bars" ? v == "0" || v == "1" : k == "traffic-lights" ? v ~ /^[0-9]+$/ && v >= 10 && v <= 20 : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, snapping=0 or 1, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, snapping or title-bars=0 or 1, traffic-lights=10 to 20, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -211,14 +213,16 @@ active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
 # line of look.lua, whose value is the second group of its pattern. The theme's
 # own values are the defaults. Magnification is a key of the dock's section of
 # shell.json, which the dock follows live.
-LOOK_SETTINGS="glass web-glass snapping blur"
+LOOK_SETTINGS="glass web-glass snapping blur title-bars traffic-lights"
 declare -A LOOK_RULE=(
   [glass]='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
   [web-glass]='^(o\.window\("\^\(brave-browser\|[^"]*", \{ opacity = ")([0-9.]+) [0-9.]+'
   [snapping]='^(local SNAPPING = )([01])'
   [blur]='^(local BLUR = )([0-9]+)'
+  [title-bars]='^(local TITLE_BARS = )([01])'
+  [traffic-lights]='^(local LIGHTS = )([0-9]+)'
 )
-declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [blur]=10 [magnification]=1.75)
+declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [blur]=10 [title-bars]=1 [traffic-lights]=14 [magnification]=1.75)
 look_get() {
   local v
   v=$(sed -nE "s/${LOOK_RULE[$1]}.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null) || true
@@ -226,7 +230,7 @@ look_get() {
 }
 look_set() {
   local value="$2 $2"
-  [[ $1 == snapping || $1 == blur ]] && value=$2
+  [[ $1 == glass || $1 == web-glass ]] || value=$2
   sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$THEME_DIR/look.lua"
   # The menu bar's panels and popups take the windows' glass too.
   [[ $1 == glass ]] && sed -i -E "/^\[popups\]/,/^\[/ s/^(background-alpha *= *).*/\1$2/" "$THEME_DIR/shell.toml"
@@ -539,7 +543,7 @@ if $preview; then
       blur)
         v=${settings[blur]}
         hyprctl eval "hl.config({ decoration = { blur = { enabled = $( ((v > 0)) && echo true || echo false ), size = $(( v > 0 ? v : 1 )) } } })" >/dev/null 2>&1 || true ;;
-      glass|web-glass|snapping)
+      glass|web-glass|snapping|title-bars|traffic-lights)
         installed theme || { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
         look_set "$k" "${settings[$k]}"
         reload=true ;;

@@ -7,6 +7,14 @@
 -- (install.sh --set blur=<0-20>).
 local BLUR = 10
 
+-- Title bars with traffic lights on every window: 1 on, 0 off, on floating
+-- workspaces too (install.sh --set title-bars=<0|1>).
+local TITLE_BARS = 1
+-- How big the traffic lights are, in points: 10 to 20; the bar grows to fit
+-- the larger ones (install.sh --set traffic-lights=<10-20>).
+local LIGHTS = 14
+local BAR_HEIGHT = TITLE_BARS == 1 and math.max(32, LIGHTS + 14) or 0
+
 hl.config({
   general = {
     gaps_in = 6,
@@ -95,9 +103,9 @@ if hl.plugin.hyprbars then
   hl.config({
     plugin = {
       hyprbars = {
-        enabled = true,
+        enabled = TITLE_BARS == 1,
         workspace_tag = "",
-        bar_height = 32,
+        bar_height = BAR_HEIGHT,
         bar_title_enabled = true,
         bar_blur = true,
         bar_color_inactive = "rgb(2a2a2a)",
@@ -125,7 +133,7 @@ if hl.plugin.hyprbars then
     { color = "rgb(febc2e)", fg = "rgb(7a4500)", icon = "", action = 'bash "$HOME/.local/state/omarchy/current/theme/minimize.sh" %WINDOW%' },
     { color = "rgb(28c840)", fg = "rgb(004d00)", icon = "", action = "hyprctl dispatch 'hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"toggle\", " .. window .. " })'" },
   }) do
-    hl.plugin.hyprbars.add_button({ bg_color = b.color, fg_color = b.fg, size = 14, icon = b.icon, action = b.action })
+    hl.plugin.hyprbars.add_button({ bg_color = b.color, fg_color = b.fg, size = LIGHTS, icon = b.icon, action = b.action })
   end
 
   -- macOS Theme Studio draws its traffic lights in its sidebar, as macOS apps
@@ -289,7 +297,7 @@ end
 -- Snapped windows by address: the size each had before, and the size it
 -- snapped to, so dragging it back out gives its own size back, as on macOS.
 local snapped = {}
-local SNAP_BAR = hl.plugin.hyprbars and 32 or 0
+local SNAP_BAR = hl.plugin.hyprbars and BAR_HEIGHT or 0
 
 -- Where a snapped window goes to make room when another snaps over part of
 -- its spot, as in macOS and Windows: full screen gives way to the other half,
