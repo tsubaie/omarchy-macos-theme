@@ -1,4 +1,4 @@
-# macOS Theme Settings
+# macOS Theme Studio
 
 An app to install, remove and customize the [macOS theme for Omarchy](https://github.com/tsubaie/omarchy-macos-theme), shaped like macOS System Settings.
 

@@ -1,11 +1,11 @@
 [package]
-name = "omarchy-macos-settings"
+name = "omarchy-macos-studio"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Install, remove and customize the macOS theme for Omarchy"
 license = "MIT"
-repository = "https://github.com/tsubaie/omarchy-macos-settings"
+repository = "https://github.com/tsubaie/omarchy-macos-studio"
 
 [dependencies]
 anyhow = "1"

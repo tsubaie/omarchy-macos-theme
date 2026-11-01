@@ -328,7 +328,7 @@ pub const OMARCHY_GREEN: &str = "#9ECE6A";
 pub fn green_omarchy_logo() -> Option<String> {
     let logo = std::fs::read_to_string(omarchy_dir().join("logo.svg")).ok()?;
     let green = recolor_logo(&logo);
-    let file = env::temp_dir().join("omarchy-macos-settings-logo.svg");
+    let file = env::temp_dir().join("omarchy-macos-studio-logo.svg");
     std::fs::write(&file, green).ok()?;
     Some(format!("file://{}", file.display()))
 }

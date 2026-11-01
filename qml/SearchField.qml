@@ -38,7 +38,7 @@ Rectangle {
         width: 17
         height: 17
         opacity: 0.6
-        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icons/search.svg"
+        source: "qrc:/qt/qml/org/omarchy/macosstudio/assets/icons/search.svg"
         sourceSize: Qt.size(17 * Screen.devicePixelRatio * 2, 17 * Screen.devicePixelRatio * 2)
         smooth: true
         mipmap: true
@@ -82,7 +82,7 @@ Rectangle {
         width: 18
         height: 18
         opacity: 0.6
-        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icons/clear.svg"
+        source: "qrc:/qt/qml/org/omarchy/macosstudio/assets/icons/clear.svg"
         sourceSize: Qt.size(18 * Screen.devicePixelRatio * 2, 18 * Screen.devicePixelRatio * 2)
         smooth: true
         mipmap: true

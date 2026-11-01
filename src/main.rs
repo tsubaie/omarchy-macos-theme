@@ -1,4 +1,4 @@
-//! macOS Theme Settings: install, remove and customize the macOS theme for
+//! macOS Theme Studio: install, remove and customize the macOS theme for
 //! Omarchy, in a window shaped like macOS System Settings.
 
 mod install;
@@ -7,13 +7,13 @@ mod theme;
 use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 
 /// The window, compiled into the binary by `build.rs`.
-const MAIN_QML: &str = "qrc:/qt/qml/org/omarchy/macossettings/qml/Main.qml";
+const MAIN_QML: &str = "qrc:/qt/qml/org/omarchy/macosstudio/qml/Main.qml";
 
 fn main() {
     let mut app = QGuiApplication::new();
     if let Some(mut app) = app.as_mut() {
         app.as_mut()
-            .set_application_name(&QString::from("macOS Theme"));
+            .set_application_name(&QString::from("macOS Theme Studio"));
         // Where the app keeps its own small state, such as the last pane.
         app.as_mut()
             .set_organization_name(&QString::from("omarchy"));

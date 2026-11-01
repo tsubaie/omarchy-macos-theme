@@ -675,7 +675,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "omarchy-macos-settings"
+name = "omarchy-macos-studio"
 version = "0.1.0"
 dependencies = [
  "anyhow",

@@ -3,9 +3,9 @@ import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Effects
 import QtQuick.Window
-import org.omarchy.macossettings
+import org.omarchy.macosstudio
 
-// macOS Theme Settings, shaped like macOS System Settings: a sidebar of
+// macOS Theme Studio, shaped like macOS System Settings: a sidebar of
 // sections with colored icons, and grouped rows of switches and sliders.
 Window {
     id: window
@@ -699,7 +699,7 @@ Window {
                     spacing: 10
 
                     MacButton { text: "Theme on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme") }
-                    MacButton { text: "App on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-settings") }
+                    MacButton { text: "App on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-studio") }
                 }
 
                 Item { width: 1; height: 28 }
@@ -848,7 +848,7 @@ Window {
         property int size: 40
         width: size
         height: size
-        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon-omarchy.svg"
+        source: "qrc:/qt/qml/org/omarchy/macosstudio/assets/icon-omarchy.svg"
         sourceSize: Qt.size(size * 2, size * 2)
         smooth: true
         mipmap: true
@@ -861,7 +861,7 @@ Window {
         property int size: 14
         width: size
         height: size
-        source: name ? "qrc:/qt/qml/org/omarchy/macossettings/assets/icons/" + name + ".svg" : ""
+        source: name ? "qrc:/qt/qml/org/omarchy/macosstudio/assets/icons/" + name + ".svg" : ""
         sourceSize: Qt.size(size * Screen.devicePixelRatio * 2, size * Screen.devicePixelRatio * 2)
         smooth: true
         mipmap: true
