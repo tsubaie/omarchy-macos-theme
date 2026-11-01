@@ -1,12 +1,12 @@
 {
-  "source": "Icons8 (https://icons8.com), pack ios_filled",
+  "source": "Icons8 (https://icons8.com), pack ios (outline, as Apple's SF Symbols draw them)",
   "icons": {
-    "volume-high": 9982,
-    "volume-medium": 9983,
-    "volume-low": 9980,
-    "volume-muted": 9976,
-    "microphone": 9622,
-    "brightness": 9313,
-    "keyboard": 10333
+    "volume-high": 2795,
+    "volume-medium": 2902,
+    "volume-low": 2929,
+    "volume-muted": 644,
+    "microphone": 12653,
+    "brightness": 648,
+    "keyboard": 519
   }
 }

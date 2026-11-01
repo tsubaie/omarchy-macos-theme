@@ -131,6 +131,15 @@ try {
   assert.strictEqual(run("--set", "clock=center").status, 0)
   for (const bad of ["clock=top", "clock=", "clock=Left"]) assert.strictEqual(run("--set", bad).status, 1, bad)
 
+  // The panels: bottom unless shell.json says top, each on its own, the rest of shell.json kept.
+  assert.strictEqual(status()["volume-hud"], "bottom")
+  assert.strictEqual(run("--set", "volume-hud=top").status, 0)
+  s = status()
+  assert.strictEqual(s["volume-hud"], "top")
+  assert.strictEqual(s["dictation-hud"], "bottom")
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, ".config/omarchy/shell.json"), "utf8")).bar.layout.left[0], { id: "omarchy.clock" })
+  for (const bad of ["volume-hud=middle", "dictation-hud=", "hud=top"]) assert.strictEqual(run("--set", bad).status, 1, bad)
+
   // Desktop widgets: all of them while shell.json lays none out; --show-widgets
   // keeps the named ones where they sit, adds the rest without a cell, and
   // leaves the rest of shell.json alone.

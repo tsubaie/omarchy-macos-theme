@@ -30,11 +30,56 @@ Item {
   // blur (look.lua blurs this layer), without an edge, as Apple's HUDs have
   // none.
   readonly property color ink: Commons.Color.popups.text
-  readonly property color glass: Util.alpha(Commons.Color.background, root.windowGlass)
+  // Apple's HUD glass is far clearer than its windows: the content behind
+  // shows through, lightened. Squared so the Glass setting still runs from
+  // nearly clear (0.5) to a solid-looking 1.
+  readonly property color glass: Util.alpha(Commons.Color.background, root.windowGlass * root.windowGlass * 0.5)
+
+  // Liquid Glass's edge: a faint light along the top that fades out before
+  // the middle (drawn in bands, each fainter), over a faint white sheen that
+  // lifts the glass off dark content. No line along the sides or bottom.
+  component GlassRim: Item {
+    id: rimRoot
+    property real radius: 0
+    anchors.fill: parent
+    Rectangle { anchors.fill: parent; radius: rimRoot.radius; color: Qt.rgba(1, 1, 1, 0.05) }
+    Repeater {
+      model: 7
+      Item {
+        required property int index
+        y: index * parent.height * 0.06
+        width: parent.width
+        height: parent.height * 0.06
+        clip: true
+        Rectangle { y: -parent.y; width: parent.width; height: parent.parent.height; radius: rimRoot.radius; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.2 * (1 - parent.index / 7)) }
+      }
+    }
+  }
 
   // How see-through windows are, the theme's Glass setting (the app's
   // Windows page, install.sh --set glass): the opacity look.lua gives every
   // window, read from the look Hyprland has loaded and followed as it changes.
+  property var shell: null
+  // Where the HUD sits: the bottom middle (the default), or top right under
+  // the bar as macOS 27.2 opens it under its menu bar icon. "hud":
+  // { "volume": "top" } in shell.json, from install.sh --set volume-hud=<bottom|top>.
+  property bool atTop: false
+  // Read again at every open too: install.sh and Omarchy replace shell.json
+  // rather than write into it, and the watch doesn't follow a replaced file.
+  FileView {
+    id: placeFile
+    path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/shell.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var parsed = JSON.parse(text())
+        root.atTop = !!(parsed && parsed.hud && parsed.hud.volume === "top")
+      } catch (e) { root.atTop = false }
+    }
+  }
+
   property real windowGlass: 0.7
   FileView {
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
@@ -137,6 +182,7 @@ Item {
     message = next.message
     icon = next.icon
     duration = next.duration
+    if (!opened) placeFile.reload()
     opened = true
     if (duration > 0) hideTimer.restart()
     else hideTimer.stop()
@@ -203,28 +249,35 @@ Item {
     // Visual-only surface: keep the layer-shell input region empty so the OSD
     // never blocks clicks to the desktop below it.
     mask: Region {}
+    // How far a top bar reaches down on this screen, for the top position.
+    readonly property int barClear: root.shell && root.shell.bar && !root.shell.bar.barHidden && root.shell.bar.position === "top"
+      ? root.shell.bar.barSizeFor(screen ? screen.name : "") : 0
 
     // Volume, brightness and other levels, as macOS 27.2 (Golden Gate) shows
-    // them: a rounded panel of glass, at the bottom middle, with one larger
-    // icon on the left and a bar of sixteen steps, each key press filling or
-    // clearing one.
+    // them: a rounded panel of glass, at the bottom middle or top right, with
+    // one larger icon on the left and a bar of sixteen steps, each key press
+    // filling or clearing one. It slides in from the nearer edge.
     BorderSurface {
       id: hud
       visible: root.hasProgress
       width: Style.space(300)
       height: Style.space(60)
-      anchors.horizontalCenter: parent.horizontalCenter
-      anchors.bottom: parent.bottom
-      anchors.bottomMargin: Style.space(96)
+      x: root.atTop ? parent.width - width - Style.space(10) : Math.round((parent.width - width) / 2)
+      y: root.atTop ? panel.barClear + Style.space(6) : parent.height - height - Style.space(96)
       color: root.glass
-      radius: Style.space(20)
-      opacity: root.opened ? 1 : 0
+      radius: height / 2
+      GlassRim { radius: hud.radius }
+      // From the frame the fresh surface is revealed; it closes at once with it.
+      readonly property bool live: root.opened && panel.contentRevealed
+      opacity: live ? 1 : 0
+      transform: Translate { y: hud.live ? 0 : (root.atTop ? -1 : 1) * Style.space(10); Behavior on y { NumberAnimation { duration: Style.duration(220); easing.type: Easing.OutBack; easing.overshoot: 1.2 } } }
+      Behavior on opacity { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
 
       Item {
         id: art
-        x: Style.space(16)
+        x: Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(30)
+        width: Style.space(32)
         height: width
 
         // Icons8's icon for the volume, brightness, microphone or keyboard;
@@ -259,9 +312,9 @@ Item {
         anchors.left: art.right
         anchors.leftMargin: Style.space(14)
         anchors.right: parent.right
-        anchors.rightMargin: Style.space(18)
+        anchors.rightMargin: Style.space(26)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(2)
+        spacing: Style.space(3)
 
         Repeater {
           model: 16
@@ -269,9 +322,9 @@ Item {
           delegate: Rectangle {
             required property int index
             width: (steps.width - 15 * steps.spacing) / 16
-            height: Style.space(6)
-            radius: Style.space(2)
-            color: Util.alpha(root.ink, 0.22)
+            height: Style.space(5)
+            radius: Style.space(1.5)
+            color: Util.alpha(root.ink, 0.2)
 
             Rectangle {
               anchors.left: parent.left
@@ -300,6 +353,7 @@ Item {
       anchors.centerIn: parent
       color: root.glass
       radius: Style.space(26)
+      GlassRim { radius: languageHud.radius }
       opacity: root.layoutOpen ? 1 : 0
 
       Column {
@@ -339,11 +393,11 @@ Item {
       visible: !root.hasProgress
       width: card.borderLeft + root.pad + root.contentWidth + root.pad + card.borderRight
       height: card.borderTop + root.pad + Style.font.displayLarge + root.pad + card.borderBottom
-      anchors.horizontalCenter: parent.horizontalCenter
-      anchors.bottom: parent.bottom
-      anchors.bottomMargin: Style.space(96)
+      x: root.atTop ? parent.width - width - Style.space(10) : Math.round((parent.width - width) / 2)
+      y: root.atTop ? panel.barClear + Style.space(6) : parent.height - height - Style.space(96)
       color: root.glass
       radius: height / 2
+      GlassRim { radius: card.radius }
       opacity: root.opened ? 1 : 0
 
       Row {

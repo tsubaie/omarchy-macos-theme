@@ -23,6 +23,9 @@
 #   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
 #   ./install.sh --set blur=15     how strong the frosted blur is, 0 (off) to 20; the theme's is 10
 #   ./install.sh --set clock=center  where the bar's clock sits: left, center or right
+#   ./install.sh --set volume-hud=top  where the volume panel shows: bottom (middle,
+#                                 the theme's) or top (right, under the bar)
+#   ./install.sh --set dictation-hud=top  the same for the dictation panel
 #   ./install.sh --bar [--json]   the bar's items by section, and the hidden ones
 #   ./install.sh --bar-layout '{"sections":{"right":["omarchy.clock",…],…},"hidden":["omarchy.weather"]}'
 #                                 show, hide and order the bar's items (sections: left,
@@ -110,11 +113,15 @@ while (( $# )); do
         settings[clock]=${BASH_REMATCH[1]}
         shift; shift; continue
       fi
+      if [[ ${2:-} =~ ^(volume-hud|dictation-hud)=(bottom|top)$ ]]; then
+        settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+        shift; shift; continue
+      fi
       [[ ${2:-} =~ ^(glass|web-glass|magnification|snapping|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
           exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" ? v == "0" || v == "1" : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1, blur=0 to 20, clock=left, center or right)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -215,19 +222,30 @@ look_set() {
   local value="$2 $2"
   [[ $1 == snapping || $1 == blur ]] && value=$2
   sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$THEME_DIR/look.lua"
+  # The menu bar's panels and popups take the windows' glass too.
+  [[ $1 == glass ]] && sed -i -E "/^\[popups\]/,/^\[/ s/^(background-alpha *= *).*/\1$2/" "$THEME_DIR/shell.toml"
+  return 0
 }
 magnification() {
   local m
   m=$(jq '.dock.magnification | numbers' "$SHELL_JSON" 2>/dev/null) || true
   echo "${m:-1.75}"
 }
-set_magnification() {
+# Sets one value in shell.json: shell_set '.dock.magnification' 1.5.
+shell_set() {
   # A missing shell.json means Omarchy's defaults, as `omarchy dock` treats it.
   local src=$SHELL_JSON tmp
   [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
   mkdir -p "$(dirname "$SHELL_JSON")"
   tmp=$(mktemp)
-  jq -S --argjson m "$1" '.dock.magnification = $m' "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
+  jq -S --argjson v "$2" "$1 = \$v" "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
+}
+set_magnification() { shell_set '.dock.magnification' "$1"; }
+
+# Where a panel shows, volume or dictation: bottom (the middle) or top (right,
+# under the bar); the panels follow shell.json's "hud" themselves.
+hud_position() {
+  [[ $(jq -r --arg k "$1" '.hud[$k] // empty' "$SHELL_JSON" 2>/dev/null) == top ]] && echo top || echo bottom
 }
 
 # Where the bar's clock sits: left, center (any of the middle sections) or
@@ -348,8 +366,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s},"clock":"%s","widgets":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(clock_position)" "$(shown_widgets)"
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -358,6 +376,8 @@ if $status; then
     for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
     printf '%-14s %s\n' magnification "$(magnification)"
     printf '%-14s %s\n' clock "$(clock_position)"
+    printf '%-14s %s\n' volume-hud "$(hud_position volume)"
+    printf '%-14s %s\n' dictation-hud "$(hud_position dictation)"
     printf '%-14s %s\n' widgets "$(shown_widgets | jq -r 'join(", ")')"
   fi
   exit 0
@@ -732,6 +752,11 @@ if [[ -n ${settings[clock]:-} ]]; then
   set_clock "${settings[clock]}"
   say "Moved the clock to the ${settings[clock]} of the bar"
 fi
+for k in volume dictation; do
+  [[ -n ${settings[$k-hud]:-} ]] || continue
+  shell_set ".hud.$k" "\"${settings[$k-hud]}\""
+  say "The $k panel now shows at the ${settings[$k-hud]}"
+done
 # The widgets follow shell.json themselves too.
 if [[ -n $show_widgets ]]; then
   set_shown_widgets "$show_widgets"

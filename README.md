@@ -38,6 +38,8 @@ cd omarchy-macos-theme
 | `--bar [--json]` | The bar's items by section, and the hidden ones |
 | `--bar-layout '<json>'` | Show, hide and order the bar's items at once: `{"sections":{"right":["omarchy.clock",…],…},"hidden":[…]}`, with sections `left`, `centerBegin`, `center`, `centerEnd`, `right` and `tray`. Only widgets Omarchy knows are taken |
 | `--set clock=<left\|center\|right>` | Where the bar's clock sits; the theme puts it on the right, after Control Center |
+| `--set volume-hud=<bottom\|top>` | Where the volume and brightness panel shows: the bottom middle (the theme's) or the top right, under the bar, as macOS 27.2 has it |
+| `--set dictation-hud=<bottom\|top>` | The same for the dictation panel |
 | `--set blur=<0-20>` | How strong the frosted blur is behind see-through windows, menus, the bar and the dock; 0 turns it off (they stay see-through), the theme's own is 10 |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
 | `--backups [--json]` | The backups, newest first. One is taken by itself before every change; the last 10 are kept, and the first one for good |
@@ -153,10 +155,10 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 
 ### Volume panel (`--osd`) and dictation HUD (`--dictation-hud`)
 
-- Volume and brightness as macOS 27.2 shows them: a rounded glass panel at the bottom middle with the speaker or sun on the left and a bar of sixteen steps. Icons from [Icons8](https://icons8.com) (`plugins/macos-theme.osd/icons8.json`).
+- Volume and brightness as macOS 27.2 shows them: a clear glass capsule with a light rim, at the bottom middle, with an outlined speaker or sun on the left and a bar of sixteen steps. Icons from [Icons8](https://icons8.com) (`plugins/macos-theme.osd/icons8.json`).
 - The keyboard language, in the middle of the screen when it changes: its short name large and its full name under it.
 - For [Voxtype](https://voxtype.io) dictation: the same panel, the microphone and moving bars while recording, and "Transcribing" after.
-- All of them on the glass of your windows: the Glass setting's tint over the theme's blur.
+- All of them on clearer glass than your windows, as Apple's are; the Glass setting still sets how see-through, over the theme's blur.
 
   ![Dictation HUD](docs/screenshots/dictation-hud.png)
 

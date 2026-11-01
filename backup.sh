@@ -148,7 +148,9 @@ export_profile() {
   if installed theme; then
     for f in $LOOK_SETTINGS; do set_json=$(jq --arg k "$f" --argjson v "$(look_get "$f")" '.[$k] = $v' <<<"$set_json"); done
   fi
-  set_json=$(jq --argjson v "$(magnification)" --arg c "$(clock_position)" '.magnification = $v | .clock = $c' <<<"$set_json")
+  set_json=$(jq --argjson v "$(magnification)" --arg c "$(clock_position)" \
+    --arg vh "$(hud_position volume)" --arg dh "$(hud_position dictation)" \
+    '.magnification = $v | .clock = $c | .["volume-hud"] = $vh | .["dictation-hud"] = $dh' <<<"$set_json")
 
   jq -n --argjson format "$EXPORT_FORMAT" --arg created "$(date -Iseconds)" \
     --arg version "$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)" \
@@ -206,6 +208,11 @@ import_profile() {
   local clock
   clock=$(jq -r '.settings.clock | strings' "$profile")
   [[ $clock =~ ^(left|center|right)$ ]] && args+=(--set "clock=$clock")
+  local hud
+  for f in volume-hud dictation-hud; do
+    hud=$(jq -r --arg k "$f" '.settings[$k] | strings' "$profile")
+    [[ $hud =~ ^(bottom|top)$ ]] && args+=(--set "$f=$hud")
+  done
   if (( ${#args[@]} )); then
     MACOS_THEME_NO_SNAPSHOT=1 bash "$REPO/install.sh" "${args[@]}"
   fi

@@ -123,11 +123,15 @@ base-size = 12
 # widths accept one CSS-style scalar/list: N, "Y X", "T X B", or "T R B L";
 # individual border-width-top/right/bottom/left keys override the list.
 background       = "#1c1c1e"
-background-alpha = 0.72
+# How see-through: the Glass setting writes it, as it does for windows.
+background-alpha = 0.7
 text             = "#f5f5f7"
-border           = "hyprland.active-border"
+# The volume capsule's edge: a faint light along the top that fades out by
+# the middle, no line along the sides or bottom. 2px: the gradient renderer
+# steps a 1px line at fractional display scales.
+border           = "rgba(ffffff26) rgba(ffffff00) rgba(ffffff00) 90deg"
 border-alpha     = 1.0
-# border-width     = 2
+border-width     = 2
 
 [tooltip]
 # Hover tooltips across the bar, panels, and buttons. background-alpha of
