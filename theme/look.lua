@@ -119,10 +119,6 @@ if hl.plugin.hyprbars then
     hl.plugin.hyprbars.add_button({ bg_color = b.color, fg_color = b.fg, size = 14, icon = b.icon, action = b.action })
   end
 
-  -- The macOS Theme app draws its traffic lights in its sidebar, as macOS
-  -- apps do, so it gets no bar above it.
-  hl.window_rule({ name = "omarchy-macos-settings-no-bar", match = { class = "^omarchy-macos-settings$" }, ["hyprbars:no_bar"] = true })
-
   -- Omarchy sets up its own title bars for floating workspaces after this file
   -- loads, and again when a workspace turns floating. Keep ours: ignore any
   -- later title-bar options and buttons. Each config reload starts Lua fresh.
