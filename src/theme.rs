@@ -22,6 +22,8 @@ pub mod qobject {
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
         #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
         #[qproperty(QString, app_version, cxx_name = "appVersion")]
+        #[qproperty(QString, omarchy_version, cxx_name = "omarchyVersion")]
+        #[qproperty(QString, omarchy_logo, cxx_name = "omarchyLogo")]
         type ThemeBackend = super::ThemeBackendRust;
 
         /// Reads what is installed again.
@@ -87,6 +89,8 @@ pub struct ThemeBackendRust {
     theme_dir: QString,
     theme_version: QString,
     app_version: QString,
+    omarchy_version: QString,
+    omarchy_logo: QString,
     dir: PathBuf,
 }
 
@@ -102,6 +106,15 @@ impl Default for ThemeBackendRust {
             theme_dir: QString::from(dir.display().to_string().as_str()),
             theme_version: QString::default(),
             app_version: QString::from(env!("CARGO_PKG_VERSION")),
+            omarchy_version: QString::from(install::omarchy_version().unwrap_or_default().as_str()),
+            // Omarchy's own logo, read where Omarchy keeps it rather than copied in.
+            omarchy_logo: QString::from(
+                format!(
+                    "file://{}",
+                    install::omarchy_dir().join("logo.svg").display()
+                )
+                .as_str(),
+            ),
             dir,
         }
     }

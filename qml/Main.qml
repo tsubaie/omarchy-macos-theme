@@ -1,6 +1,7 @@
 import QtCore
 import QtQuick
 import QtQuick.Dialogs
+import QtQuick.Effects
 import QtQuick.Window
 import org.omarchy.macossettings
 
@@ -33,12 +34,6 @@ Window {
     // "1 Nov 2026, 14:07" from an ISO date.
     function when(iso) {
         return Qt.formatDateTime(new Date(iso), "d MMM yyyy, hh:mm")
-    }
-
-    // A path under the home folder, written from ~ as people know it.
-    readonly property string home: StandardPaths.writableLocation(StandardPaths.HomeLocation).toString().replace(/^file:\/\//, "")
-    function tilde(path) {
-        return path.indexOf(home + "/") === 0 ? "~" + path.slice(home.length) : path
     }
 
     function localPath(url) {
@@ -499,124 +494,127 @@ Window {
                 }
             }
 
-            // Overview: what the app does, what it reads, what a change touches.
+            // Overview, as About This Mac: who made it, for what, and that it is
+            // safe to use.
             Column {
                 visible: window.page === "overview"
                 width: parent.width
-                spacing: 18
+                spacing: 6
+                topPadding: 16
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 96
+                    height: 96
+                    radius: 22
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: "#5aa9ff" }
+                        GradientStop { position: 1; color: "#0a5bd8" }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: String.fromCodePoint(0xF0035)
+                        color: "white"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 54
+                    }
+                }
+
+                Item { width: 1; height: 8 }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "macOS Theme"
+                    color: "white"
+                    font.pixelSize: 26
+                    font.weight: Font.Bold
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Version " + backend.appVersion
+                    color: Qt.rgba(1, 1, 1, 0.55)
+                    font.pixelSize: 13
+                }
+
+                Item { width: 1; height: 18 }
+
+                // The facts, labels right-aligned against their values, as macOS lists them.
+                Grid {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    columns: 2
+                    columnSpacing: 12
+                    rowSpacing: 8
+
+                    Fact { text: "Made for" }
+                    Row {
+                        spacing: 8
+                        height: 18
+
+                        Image {
+                            id: omarchyLogo
+                            visible: false
+                            source: backend.omarchyLogo
+                            sourceSize.height: 36
+                            height: 14
+                            fillMode: Image.PreserveAspectFit
+                        }
+                        // Omarchy draws its logo black; white here, on the dark window.
+                        MultiEffect {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: omarchyLogo.paintedWidth
+                            height: omarchyLogo.height
+                            source: omarchyLogo
+                            visible: omarchyLogo.status === Image.Ready
+                            brightness: 1
+                        }
+                        Value {
+                            text: omarchyLogo.status === Image.Ready ? backend.omarchyVersion : "Omarchy " + backend.omarchyVersion
+                        }
+                    }
+
+                    Fact { text: "Theme" }
+                    Value {
+                        text: !backend.downloaded ? "Not downloaded yet"
+                            : (window.status.active ? "In use" : "Installed, not in use")
+                              + (backend.themeVersion ? "  ·  " + backend.themeVersion : "")
+                    }
+
+                    Fact { text: "License" }
+                    Value { text: "Open source, MIT" }
+                }
+
+                Item { width: 1; height: 22 }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width, 440)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    text: "Every change is made by the theme's own installer, after a backup you can restore."
+                    color: Qt.rgba(1, 1, 1, 0.7)
+                    font.pixelSize: 13
+                    lineHeight: 1.2
+                }
+
+                Item { width: 1; height: 14 }
 
                 Row {
-                    spacing: 16
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 10
 
-                    Rectangle {
-                        width: 64
-                        height: 64
-                        radius: 15
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: "#5aa9ff" }
-                            GradientStop { position: 1; color: "#0a5bd8" }
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: String.fromCodePoint(0xF0035)
-                            color: "white"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 36
-                        }
-                    }
-
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        // Wraps beside the icon however narrow the window is.
-                        width: column.width - 80
-                        spacing: 4
-
-                        Text {
-                            width: parent.width
-                            wrapMode: Text.WordWrap
-                            text: "Install, remove and customize the macOS theme for Omarchy."
-                            color: "white"
-                            font.pixelSize: 15
-                            font.weight: Font.DemiBold
-                        }
-                        Text {
-                            width: parent.width
-                            wrapMode: Text.WordWrap
-                            text: "App " + backend.appVersion
-                                + (backend.themeVersion ? "  ·  Theme " + backend.themeVersion : "")
-                                + "  ·  " + (!backend.downloaded ? "Theme not downloaded"
-                                    : window.status.active ? "The current theme" : "Installed, not the current theme")
-                            color: Qt.rgba(1, 1, 1, 0.55)
-                            font.pixelSize: 12
-                        }
-                    }
+                    MacButton { text: "Theme on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme") }
+                    MacButton { text: "App on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-settings") }
                 }
 
-                Group {
-                    title: "What It Does"
+                Item { width: 1; height: 28 }
 
-                    SettingRow {
-                        label: "Turns each part of the theme on or off"
-                        note: "The look itself, the dock, the lock screen, desktop widgets, the menu bar and more. Each is a piece you can add or remove, and some have settings, such as how see-through windows are."
-                    }
-                    SettingRow {
-                        label: "Changes wait for Apply"
-                        note: "Nothing on your computer changes while you flip switches. Apply makes all of them in one step, so the theme reloads once."
-                    }
-                    SettingRow {
-                        label: "Backs up before every change"
-                        note: "Any change can be undone from Backups, and your setup can be exported to another computer or a new install."
-                        last: true
-                    }
-                }
-
-                Group {
-                    title: "Where It Reads From"
-
-                    SettingRow {
-                        label: "The theme folder"
-                        note: window.tilde(backend.themeDir) + " holds the theme and its installer, install.sh. This app asks the installer what is installed and has it make every change; it never edits your files itself, so the app and the installer always agree."
-                    }
-                    SettingRow {
-                        label: "From the terminal too"
-                        note: "Everything here can also be done with the installer: ./install.sh --help in the theme folder lists how."
-                        last: true
-                    }
-                }
-
-                Group {
-                    title: "What a Change Affects"
-
-                    SettingRow {
-                        label: "These files"
-                        note: "~/.config/omarchy/shell.json (Omarchy's bar, dock and plugin settings), ~/.config/hypr/looknfeel.lua (one line that loads the theme's look), ~/.config/gtk-4.0/gtk.css (blur and the Files rows), the theme in ~/.config/omarchy/themes/macos, and the theme's own plugins in ~/.config/omarchy/plugins."
-                    }
-                    SettingRow {
-                        label: "A short reload"
-                        note: "Applying reloads Hyprland and restarts Omarchy's shell, so the bar and dock blink once. Your windows and apps stay open."
-                    }
-                    SettingRow {
-                        label: "Never touched"
-                        note: "Other plugins, your keybindings, your apps and their settings, and your terminal font."
-                        last: true
-                    }
-                }
-
-                Group {
-                    title: "Open Source"
-
-                    SettingRow {
-                        label: "macOS theme for Omarchy"
-                        note: "github.com/tsubaie/omarchy-macos-theme  ·  MIT license"
-                        MacButton { text: "View on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme") }
-                    }
-                    SettingRow {
-                        label: "This app"
-                        note: "github.com/tsubaie/omarchy-macos-settings  ·  MIT license  ·  Rust and Qt"
-                        last: true
-                        MacButton { text: "View on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-settings") }
-                    }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Not affiliated with Apple or Omarchy. macOS is a trademark of Apple Inc."
+                    color: Qt.rgba(1, 1, 1, 0.35)
+                    font.pixelSize: 11
                 }
             }
         }
@@ -748,6 +746,19 @@ Window {
                 onClicked: window.apply()
             }
         }
+    }
+
+    // A label in the Overview's facts, right-aligned.
+    component Fact: Text {
+        width: 90
+        horizontalAlignment: Text.AlignRight
+        color: Qt.rgba(1, 1, 1, 0.55)
+        font.pixelSize: 13
+    }
+
+    component Value: Text {
+        color: "white"
+        font.pixelSize: 13
     }
 
     // A switch that marks one piece of the theme to install or remove.

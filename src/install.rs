@@ -248,6 +248,18 @@ pub fn download(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Where Omarchy is installed: `$OMARCHY_PATH`, else `/usr/share/omarchy`.
+pub fn omarchy_dir() -> PathBuf {
+    env::var_os("OMARCHY_PATH").map_or_else(|| PathBuf::from("/usr/share/omarchy"), PathBuf::from)
+}
+
+/// Omarchy's version, such as "4.0.0.alpha", when it can be read.
+pub fn omarchy_version() -> Option<String> {
+    let version = std::fs::read_to_string(omarchy_dir().join("version")).ok()?;
+    let version = version.trim();
+    (!version.is_empty()).then(|| version.to_owned())
+}
+
 /// The theme's version: its last commit and that commit's date, such as
 /// "43e4764, 2026-11-01". None when the folder isn't a git checkout.
 pub fn version(dir: &Path) -> Option<String> {
