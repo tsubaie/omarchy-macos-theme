@@ -23,6 +23,13 @@
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
+#
+#   Every change takes a snapshot first, so it can be undone (the first one is kept for good):
+#   ./install.sh --backups [--json]   the snapshots, newest first
+#   ./install.sh --backup             take one now
+#   ./install.sh --restore <id>       put one back (taking a snapshot of now first)
+#   ./install.sh --export <file|dir>  your choices in one file, for another computer or a new install
+#   ./install.sh --import <file>      apply an export here
 #   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
@@ -64,7 +71,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false legacy=false switch_to=""
+status=false json=false legacy=false switch_to="" mode="" mode_arg=""
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -94,8 +101,14 @@ while (( $# )); do
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
     --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
     --status) status=true ;;
+    --backups) mode=backups ;;
+    --backup) mode=backup ;;
+    --restore|--export|--import)
+      mode=${1#--}; mode_arg=${2:-}
+      [[ -n $mode_arg ]] || { echo "$1 needs a value (try --help)" >&2; exit 1; }
+      shift ;;
     --json) json=true ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
   shift
@@ -312,6 +325,22 @@ remove_theme() {
   keep_theme
   say "Removed the theme (kept in $kept)"
 }
+
+# shellcheck source=backup.sh
+source "$REPO/backup.sh"
+
+case $mode in
+  backups) if $json; then snapshot_list_json; else snapshot_list_text; fi; exit 0 ;;
+  backup) say "Backed up as $(snapshot_take "Backed up by hand")"; exit 0 ;;
+  restore) snapshot_restore "$mode_arg"; exit 0 ;;
+  export) export_profile "$mode_arg"; exit 0 ;;
+  import) import_profile "$mode_arg"; exit 0 ;;
+esac
+
+# Every change can be undone: a snapshot of how things are, first.
+if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) && [[ -z ${MACOS_THEME_NO_SNAPSHOT:-} ]]; then
+  snapshot_take "$(describe_changes)" >/dev/null
+fi
 
 if [[ -n $switch_to ]] && active; then
   omarchy theme list | grep -qxF "$switch_to" || { echo "No theme called $switch_to (see: omarchy theme list)" >&2; exit 1; }

@@ -35,6 +35,11 @@ cd omarchy-macos-theme
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
+| `--backups [--json]` | The backups, newest first. One is taken by itself before every change; the last 10 are kept, and the first one for good |
+| `--backup` | Take a backup now |
+| `--restore <id>` | Put a backup back (your setup now is backed up first, so it can be undone) |
+| `--export <file or folder>` | Your choices in one file: the pieces you use, your settings, your dock and widgets, and wallpapers you added |
+| `--import <file>` | Set this computer up from an export, with this version of the theme, so it fits a new install or a newer Omarchy |
 
 ### App
 
@@ -158,6 +163,12 @@ Omarchy's menu and launcher (Super+Space) at about 560px wide instead of 300px, 
 - A wrong password shakes the field, as on macOS.
 - Only the look changes: it is a clone of Omarchy's lock (`omarchy plugin clone omarchy.lock`), and the installer copies this Omarchy's own locking, password and fingerprint code into it each time, then adds the macOS `LockView.qml`. Run `./install.sh --add lock` again after an Omarchy update to take in its latest lock code.
 - See it without locking: `omarchy-shell lock preview` (click to close).
+
+## Backups
+
+Every change the installer makes is backed up first, to `~/.config/omarchy/macos-theme-backups/snapshots`: your Omarchy shell settings (`shell.json`), `looknfeel.lua`, `gtk.css`, the theme folder and the plugins the theme manages. Plugins of your own are left out, so restoring never rolls back something the theme didn't touch. The theme's own wallpapers come back from the repository, so a backup is a few hundred KB. The first backup, from before the theme changed anything, is kept for good.
+
+An export is different: it holds your choices rather than files, and an import applies them with the installer it runs in. So an export from one computer fits another, a new install, or a newer version of Omarchy and the theme. Pieces a newer version no longer has are skipped with a note.
 
 ## What gets installed
 
