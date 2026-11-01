@@ -92,8 +92,20 @@ Window {
         pendingWidgets = JSON.stringify(next) === JSON.stringify(widgetsNow) ? null : next
     }
 
+    // Where the volume and dictation panels show ("bottom" or "top"), and
+    // the places waiting for Apply. An older theme reports none: bottom.
+    property var pendingPlaces: ({})
+    function placeNow(panel) { return status[panel] === "top" ? "top" : "bottom" }
+    function placeValue(panel) { return panel in pendingPlaces ? pendingPlaces[panel] : placeNow(panel) }
+    function markPlace(panel, place) {
+        const next = Object.assign({}, pendingPlaces)
+        if (place === placeNow(panel)) delete next[panel]
+        else next[panel] = place
+        pendingPlaces = next
+    }
+
     readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
-        + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0)
+        + Object.keys(pendingPlaces).length + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0)
 
 
     property bool applying: false
@@ -126,10 +138,11 @@ Window {
         pendingWidgets = null
         pendingPieces = {}
         pendingSettings = {}
+        pendingPlaces = {}
     }
 
     function apply() {
-        const changes = { add: [], remove: [], set: pendingSettings }
+        const changes = { add: [], remove: [], set: pendingSettings, places: pendingPlaces }
         if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
         if (pendingWidgets) changes.widgets = pendingWidgets
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
@@ -190,7 +203,7 @@ Window {
         { id: "overview", title: "About", icon: "about", section: 0,
           keywords: "about version license open source github omarchy" },
         { id: "general", title: "General", icon: "general", section: 1,
-          keywords: "theme colors title bars gaps motion wallpapers mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype" },
+          keywords: "theme colors title bars gaps motion wallpapers mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype position place top bottom" },
         { id: "windows", title: "Windows", icon: "windows", section: 1,
           keywords: "window glass translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners" },
         { id: "dock", title: "Dock", icon: "dock", section: 1,
@@ -541,6 +554,15 @@ Window {
                     SettingRow { label: "Spotlight-like menu"; PieceSwitch { piece: "wide-menu" } }
                     SettingRow { label: "Volume and brightness capsule"; PieceSwitch { piece: "osd" } }
                     SettingRow { label: "Dictation pill"; note: "For Voxtype"; last: true; PieceSwitch { piece: "dictation-hud" } }
+                }
+
+                // Where each shows: the bottom middle, or the top right under
+                // the menu bar, as macOS 27.2 has it.
+                Group {
+                    title: "Position"
+
+                    SettingRow { label: "Volume and brightness capsule"; note: "Top shows it at the right, under the menu bar"; PlaceChoice { panel: "volume-hud"; needs: "osd" } }
+                    SettingRow { label: "Dictation pill"; note: "Top shows it at the right, under the menu bar"; last: true; PlaceChoice { panel: "dictation-hud"; needs: "dictation-hud" } }
                 }
             }
 
@@ -1032,6 +1054,16 @@ Window {
         checked: window.pieceOn(piece)
         enabled: !backend.busy
         onToggled: on => window.markPiece(piece, on)
+    }
+
+    // Where a panel shows: at the bottom middle or at the top right.
+    component PlaceChoice: MacSegmented {
+        property string panel: ""
+        property string needs: ""
+        options: [{ value: "bottom", label: "Bottom" }, { value: "top", label: "Top" }]
+        value: window.placeValue(panel)
+        enabled: !backend.busy && window.pieceOn(needs)
+        onPicked: place => window.markPlace(panel, place)
     }
 
     // A switch for an on/off install.sh setting (1 on, 0 off; on by default).

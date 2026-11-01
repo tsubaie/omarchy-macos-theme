@@ -109,6 +109,13 @@ pub struct Status {
     /// The desktop widgets shown. Older themes don't report them.
     #[serde(default)]
     pub widgets: Option<Vec<String>>,
+    /// Where the volume panel shows: "bottom" or "top". Older themes don't
+    /// report it.
+    #[serde(default, rename = "volume-hud")]
+    pub volume_hud: Option<String>,
+    /// The same for the dictation panel.
+    #[serde(default, rename = "dictation-hud")]
+    pub dictation_hud: Option<String>,
 }
 
 /// The bar's sections, as `install.sh --bar-layout` takes them.
@@ -179,6 +186,11 @@ const DESKTOP_WIDGETS: [&str; 4] = ["clock", "calendar", "weather", "playing"];
 /// The places the bar's clock can sit, as `install.sh --set clock=` takes them.
 const CLOCK_POSITIONS: [&str; 3] = ["left", "center", "right"];
 
+/// The panels that can show at the bottom or the top, as `install.sh --set
+/// <panel>=<place>` takes them.
+const PANELS: [&str; 2] = ["volume-hud", "dictation-hud"];
+const PANEL_PLACES: [&str; 2] = ["bottom", "top"];
+
 /// The theme's folder: `$OMARCHY_MACOS_THEME_DIR` when set (for working on a
 /// checkout), else `omarchy-macos-theme` in the user's data folder, where
 /// Omarchy Sync keeps it too.
@@ -220,6 +232,7 @@ pub struct Changes {
     remove: Vec<Piece>,
     set: Vec<Setting>,
     clock: Option<&'static str>,
+    places: Vec<(&'static str, &'static str)>,
     bar: Option<BarLayout>,
     widgets: Option<Vec<&'static str>>,
 }
@@ -235,6 +248,8 @@ struct RawChanges {
     set: BTreeMap<String, f64>,
     #[serde(default)]
     clock: Option<String>,
+    #[serde(default)]
+    places: BTreeMap<String, String>,
     #[serde(default)]
     bar: Option<BarLayout>,
     #[serde(default)]
@@ -275,6 +290,20 @@ impl Changes {
                         .with_context(|| format!("the clock can't go {place:?}"))
                 })
                 .transpose()?,
+            places: raw
+                .places
+                .iter()
+                .map(|(panel, place)| {
+                    let known = |list: &[&'static str], name: &str| {
+                        list.iter().copied().find(|k| *k == name)
+                    };
+                    Ok((
+                        known(&PANELS, panel).with_context(|| format!("no panel {panel:?}"))?,
+                        known(&PANEL_PLACES, place)
+                            .with_context(|| format!("the {panel} can't go {place:?}"))?,
+                    ))
+                })
+                .collect::<Result<_>>()?,
             bar: raw.bar.map(BarLayout::check).transpose()?,
             widgets: raw.widgets.map(shown_widgets).transpose()?,
         };
@@ -294,6 +323,7 @@ impl Changes {
             && self.remove.is_empty()
             && self.set.is_empty()
             && self.clock.is_none()
+            && self.places.is_empty()
             && self.bar.is_none()
             && self.widgets.is_none()
     }
@@ -312,6 +342,9 @@ impl Changes {
         }
         if let Some(place) = self.clock {
             args.extend(["--set".to_owned(), format!("clock={place}")]);
+        }
+        for (panel, place) in &self.places {
+            args.extend(["--set".to_owned(), format!("{panel}={place}")]);
         }
         if let Some(bar) = &self.bar {
             let json = serde_json::to_string(bar).expect("a bar layout is plain JSON");
@@ -684,6 +717,26 @@ mod tests {
         );
         assert!(Changes::from_json(r#"{"bar":{"sections":{"right":["a b"]}}}"#).is_err());
         assert!(Changes::from_json(r#"{"bar":{"hidden":["--uninstall;x"]}}"#).is_err());
+    }
+
+    #[test]
+    fn each_panel_goes_to_the_bottom_or_the_top() {
+        let changes =
+            Changes::from_json(r#"{"places":{"volume-hud":"top","dictation-hud":"bottom"}}"#)
+                .expect("places");
+        assert_eq!(
+            changes.args(),
+            ["--set", "dictation-hud=bottom", "--set", "volume-hud=top"]
+        );
+        assert!(Changes::from_json(r#"{"places":{"volume-hud":"middle"}}"#).is_err());
+        assert!(Changes::from_json(r#"{"places":{"dock":"top"}}"#).is_err());
+        assert!(Changes::from_json(r#"{"places":{"volume-hud":"top; rm -rf ~"}}"#).is_err());
+        let status = parse_status(
+            r#"{"active":true,"features":{},"settings":{},"volume-hud":"top","dictation-hud":"bottom"}"#,
+        )
+        .expect("a status");
+        assert_eq!(status.volume_hud.as_deref(), Some("top"));
+        assert_eq!(status.dictation_hud.as_deref(), Some("bottom"));
     }
 
     #[test]
