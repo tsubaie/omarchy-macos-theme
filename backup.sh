@@ -36,6 +36,7 @@ describe_changes() {
   (( ${#add[@]} )) && parts+=("Added ${!add[*]}")
   (( ${#remove[@]} )) && parts+=("Removed ${!remove[*]}")
   for k in "${!settings[@]}"; do parts+=("$k ${settings[$k]}"); done
+  [[ -n ${bar_layout:-} ]] && parts+=("Arranged the bar")
   local IFS=';'
   echo "${parts[*]}" | sed 's/;/; /g'
 }

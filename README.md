@@ -34,6 +34,8 @@ cd omarchy-macos-theme
 | `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
+| `--bar [--json]` | The bar's items by section, and the hidden ones |
+| `--bar-layout '<json>'` | Show, hide and order the bar's items at once: `{"sections":{"right":["omarchy.clock",…],…},"hidden":[…]}`, with sections `left`, `centerBegin`, `center`, `centerEnd`, `right` and `tray`. Only widgets Omarchy knows are taken |
 | `--set clock=<left\|center\|right>` | Where the bar's clock sits; the theme puts it on the right, after Control Center |
 | `--set blur=<0-20>` | How strong the frosted blur is behind see-through windows, menus, the bar and the dock; 0 turns it off (they stay see-through), the theme's own is 10 |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |

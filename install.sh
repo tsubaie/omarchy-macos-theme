@@ -22,6 +22,10 @@
 #   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
 #   ./install.sh --set blur=15     how strong the frosted blur is, 0 (off) to 20; the theme's is 10
 #   ./install.sh --set clock=center  where the bar's clock sits: left, center or right
+#   ./install.sh --bar [--json]   the bar's items by section, and the hidden ones
+#   ./install.sh --bar-layout '{"sections":{"right":["omarchy.clock",…],…},"hidden":["omarchy.weather"]}'
+#                                 show, hide and order the bar's items (sections: left,
+#                                 centerBegin, center, centerEnd, right, tray)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
@@ -73,7 +77,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false legacy=false switch_to="" mode="" mode_arg=""
+status=false json=false legacy=false switch_to="" mode="" mode_arg="" bar_layout=""
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -108,6 +112,11 @@ while (( $# )); do
     --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
     --status) status=true ;;
     --backups) mode=backups ;;
+    --bar) mode=bar ;;
+    --bar-layout)
+      bar_layout=${2:-}
+      [[ -n $bar_layout ]] || { echo "--bar-layout needs a layout (try --help)" >&2; exit 1; }
+      shift ;;
     --backup) mode=backup ;;
     --restore|--export|--import)
       mode=${1#--}; mode_arg=${2:-}
@@ -225,6 +234,66 @@ set_clock() {
       omarchy bar move omarchy.clock --after macos-theme.control-center >/dev/null 2>&1 ||
         omarchy bar move omarchy.clock --section right >/dev/null ;;
   esac
+}
+
+# The bar's sections, in the order they sit on it.
+BAR_SECTIONS="left centerBegin center centerEnd right tray"
+
+# Every bar widget Omarchy knows, as {id: {name, enabled}}, without those an
+# enabled copy stands in for (such as your own copy of the menu or the tray).
+bar_widgets() {
+  omarchy plugin list --json 2>/dev/null | jq -c '
+    [.[] | select((.kinds // []) | index("bar-widget"))] as $all
+    | ([$all[] | select(.enabled and .clonedFrom != "") | .clonedFrom]) as $replaced
+    | [$all[] | select((.id as $id | $replaced | index($id)) | not)]
+    | map({key: .id, value: {name: .name, enabled: .enabled}}) | from_entries' 2>/dev/null || echo "{}"
+}
+
+# The bar as {sections: {left: [{id, name}], …}, hidden: [{id, name}]}.
+bar_json() {
+  local widgets layout
+  widgets=$(bar_widgets)
+  layout=$(jq -c '.bar.layout // {}' "$SHELL_JSON" 2>/dev/null || echo "{}")
+  jq -n --argjson w "$widgets" --argjson l "$layout" --arg order "$BAR_SECTIONS" '
+    ($order | split(" ")) as $sections
+    | ([$sections[] as $s | ($l[$s] // [])[] | .id? // empty]) as $placed
+    | {sections: ($sections | map({key: ., value: [($l[.] // [])[] | .id? // empty | {id: ., name: ($w[.].name // .)}]}) | from_entries),
+       hidden: [$w | to_entries[] | select((.value.enabled | not) and (.key as $id | $placed | index($id) | not)) | {id: .key, name: .value.name}] | sort_by(.name)}'
+}
+
+bar_text() {
+  bar_json | jq -r '(.sections | to_entries[] | select(.value | length > 0) | "\(.key): \(.value | map(.name) | join(", "))"), (if (.hidden | length) > 0 then "hidden: \(.hidden | map(.name) | join(", "))" else empty end)'
+}
+
+# Shows, hides and orders the bar's items as $1 lays them out: hidden ones
+# are turned off, then each section is filled in order, turning on what was
+# off. Only known widgets and sections are taken.
+apply_bar_layout() {
+  local desired="$1" widgets id section i
+  widgets=$(bar_widgets)
+  jq -e --arg order "$BAR_SECTIONS" --argjson w "$widgets" '
+    (.sections // {}) as $s | (.hidden // []) as $h
+    | ($s | type) == "object" and ($h | type) == "array"
+    and ([$s | keys[]] - ($order | split(" ")) | length) == 0
+    and ([$s[][], $h[]] | all(type == "string" and test("^[A-Za-z0-9._-]+$") and ($w[.] != null)))' \
+    <<<"$desired" >/dev/null 2>&1 || { echo "Not a bar layout this bar can take" >&2; exit 1; }
+  while read -r id; do
+    [[ -n $id ]] && [[ $(jq -r --arg id "$id" '.[$id].enabled' <<<"$widgets") == true ]] &&
+      omarchy plugin disable "$id" >/dev/null
+  done < <(jq -r '.hidden[]?' <<<"$desired")
+  for section in $BAR_SECTIONS; do
+    i=0
+    while read -r id; do
+      [[ -n $id ]] || continue
+      if [[ $(jq -r --arg id "$id" '.[$id].enabled' <<<"$widgets") == true ]]; then
+        omarchy bar move "$id" --section "$section" --index "$i" >/dev/null
+      else
+        omarchy plugin enable "$id" --section "$section" --index "$i" >/dev/null
+      fi
+      i=$((i + 1))
+    done < <(jq -r --arg s "$section" '.sections[$s][]?' <<<"$desired")
+  done
+  say "Arranged the bar"
 }
 
 if $status; then
@@ -362,6 +431,7 @@ remove_theme() {
 source "$REPO/backup.sh"
 
 case $mode in
+  bar) if $json; then bar_json; else bar_text; fi; exit 0 ;;
   backups) if $json; then snapshot_list_json; else snapshot_list_text; fi; exit 0 ;;
   backup) say "Backed up as $(snapshot_take "Backed up by hand")"; exit 0 ;;
   restore) snapshot_restore "$mode_arg"; exit 0 ;;
@@ -370,8 +440,8 @@ case $mode in
 esac
 
 # Every change can be undone: a snapshot of how things are, first.
-if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) && [[ -z ${MACOS_THEME_NO_SNAPSHOT:-} ]]; then
-  snapshot_take "$(describe_changes)" >/dev/null
+if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout ]]; then
+  [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snapshot_take "$(describe_changes)" >/dev/null
 fi
 
 if [[ -n $switch_to ]] && active; then
@@ -393,7 +463,7 @@ if (( ${#remove[@]} )); then
   if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
     echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons"
   fi
-  (( ${#add[@]} + ${#settings[@]} )) || exit 0
+  (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout ]] || exit 0
 fi
 
 want() { [[ -n ${add[$1]:-} ]]; }
@@ -598,7 +668,8 @@ if [[ -n ${settings[magnification]:-} ]]; then
   set_magnification "${settings[magnification]}"
   say "Set the dock's magnification to ${settings[magnification]}"
 fi
-# The bar follows shell.json itself, so the clock moves without a reload.
+# The bar follows shell.json itself, so its items move without a reload.
+[[ -n $bar_layout ]] && apply_bar_layout "$bar_layout"
 if [[ -n ${settings[clock]:-} ]]; then
   set_clock "${settings[clock]}"
   say "Moved the clock to the ${settings[clock]} of the bar"
