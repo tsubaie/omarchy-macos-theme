@@ -28,6 +28,8 @@
 #                                 show, hide and order the bar's items (sections: left,
 #                                 centerBegin, center, centerEnd, right, tray)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
+#   ./install.sh --show-widgets clock,weather  which desktop widgets show (clock, calendar,
+#                                 weather, playing); at least one
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
 #
@@ -72,6 +74,8 @@ MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center
 CONTROL_CENTER_WIDGETS="omarchy.network omarchy.bluetooth omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power"
 SWITCHER_ID="macos-theme.switcher"
 WIDGETS_ID="macos-theme.widgets"
+# The desktop widgets, as the widgets' WidgetsModel.js names them.
+DESKTOP_WIDGETS="clock calendar weather playing"
 # It gives Omarchy's own widgets macOS icons from the bar, unseen there, so
 # the arrangement leaves it out.
 BAR_ICONS_ID="macos-theme.bar-icons"
@@ -81,7 +85,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false legacy=false switch_to="" mode="" mode_arg="" bar_layout=""
+status=false json=false legacy=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets=""
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -121,6 +125,13 @@ while (( $# )); do
     --bar-layout)
       bar_layout=${2:-}
       [[ -n $bar_layout ]] || { echo "--bar-layout needs a layout (try --help)" >&2; exit 1; }
+      shift ;;
+    --show-widgets)
+      show_widgets=${2:-}
+      [[ -n ${show_widgets//,/} ]] || { echo "--show-widgets needs at least one of: ${DESKTOP_WIDGETS// /, }" >&2; exit 1; }
+      for w in ${show_widgets//,/ }; do
+        [[ " $DESKTOP_WIDGETS " == *" $w "* ]] || { echo "Unknown widget: $w (one of: ${DESKTOP_WIDGETS// /, })" >&2; exit 1; }
+      done
       shift ;;
     --backup) mode=backup ;;
     --restore|--export|--import)
@@ -242,6 +253,29 @@ set_clock() {
   esac
 }
 
+# The desktop widgets shown, as a JSON array: the known ids in shell.json's
+# widgets.layout, or all of them when it has none, as the widgets do.
+shown_widgets() {
+  { cat "$SHELL_JSON" 2>/dev/null || true; } | jq -cs --arg all "$DESKTOP_WIDGETS" '($all | split(" ")) as $all
+    | [(.[0].widgets.layout? // []) | arrays | .[] | .id? | strings | select(. as $id | $all | index($id))]
+    | if length == 0 then $all else [$all[] as $id | select(index($id)) | $id] end' 2>/dev/null ||
+    jq -cn --arg all "$DESKTOP_WIDGETS" '$all | split(" ")'
+}
+# Shows only the widgets named in $1 (comma-separated): the others leave
+# shell.json, the ones kept stay where they are, and a new one gets no cell,
+# so the widgets put it in the first free one.
+set_shown_widgets() {
+  local src=$SHELL_JSON tmp
+  [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
+  [[ -s $src ]] || src=/dev/null
+  mkdir -p "$(dirname "$SHELL_JSON")"
+  tmp=$(mktemp)
+  jq -S --arg show "$1" '($show | split(",")) as $show
+    | ([(.widgets.layout // []) | arrays | .[] | objects | select(.id as $id | $show | index($id))]) as $kept
+    | .widgets.layout = $kept + [$show[] as $id | select([$kept[].id] | index($id) | not) | {id: $id}]' \
+    <(jq -s '.[0] // {}' "$src") >"$tmp" && mv "$tmp" "$SHELL_JSON"
+}
+
 # The bar's sections, in the order they sit on it.
 BAR_SECTIONS="left centerBegin center centerEnd right tray"
 
@@ -314,8 +348,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s},"clock":"%s"}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(clock_position)"
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s},"clock":"%s","widgets":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(clock_position)" "$(shown_widgets)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -324,6 +358,7 @@ if $status; then
     for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
     printf '%-14s %s\n' magnification "$(magnification)"
     printf '%-14s %s\n' clock "$(clock_position)"
+    printf '%-14s %s\n' widgets "$(shown_widgets | jq -r 'join(", ")')"
   fi
   exit 0
 fi
@@ -455,7 +490,7 @@ case $mode in
 esac
 
 # Every change can be undone: a snapshot of how things are, first.
-if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout ]]; then
+if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]]; then
   [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snapshot_take "$(describe_changes)" >/dev/null
 fi
 
@@ -587,6 +622,8 @@ if want switcher; then
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
 fi
 if want menubar; then
+  # A re-run keeps the clock where the user put it (--set clock).
+  keep_clock=; installed menubar && keep_clock=$(clock_position)
   for id in $MENUBAR_IDS; do install_plugin "$id"; done
   # The bold app name follows the menu button, as on macOS, and Control Center
   # sits by the clock; the widgets it stands in for go to the tray drawer.
@@ -595,6 +632,7 @@ if want menubar; then
   omarchy bar move omarchy.clock --section right >/dev/null 2>&1 || true
   omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
   omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
+  [[ -n $keep_clock ]] && { set_clock "$keep_clock" 2>/dev/null || true; }
   for id in $CONTROL_CENTER_WIDGETS; do
     omarchy bar move "$id" --section tray >/dev/null 2>&1 || true
   done
@@ -693,6 +731,11 @@ fi
 if [[ -n ${settings[clock]:-} ]]; then
   set_clock "${settings[clock]}"
   say "Moved the clock to the ${settings[clock]} of the bar"
+fi
+# The widgets follow shell.json themselves too.
+if [[ -n $show_widgets ]]; then
+  set_shown_widgets "$show_widgets"
+  say "Showing the desktop widgets: ${show_widgets//,/, }"
 fi
 
 # 5. Apply: refresh the active theme in place, or switch to it when it was asked for.

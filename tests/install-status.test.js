@@ -131,6 +131,23 @@ try {
   assert.strictEqual(run("--set", "clock=center").status, 0)
   for (const bad of ["clock=top", "clock=", "clock=Left"]) assert.strictEqual(run("--set", bad).status, 1, bad)
 
+  // Desktop widgets: all of them while shell.json lays none out; --show-widgets
+  // keeps the named ones where they sit, adds the rest without a cell, and
+  // leaves the rest of shell.json alone.
+  assert.deepStrictEqual(status().widgets, ["clock", "calendar", "weather", "playing"])
+  fs.writeFileSync(shellJson, JSON.stringify({ dock: { magnification: 1.5 }, widgets: { screen: "DP-1", layout: [{ id: "weather", col: 2, row: 1 }, { id: "nope", col: 0, row: 0 }] } }))
+  assert.deepStrictEqual(status().widgets, ["weather"])
+  const shown = run("--show-widgets", "playing,weather")
+  assert.strictEqual(shown.status, 0, shown.stderr)
+  const saved = JSON.parse(fs.readFileSync(shellJson, "utf8"))
+  assert.deepStrictEqual(saved.widgets, { screen: "DP-1", layout: [{ id: "weather", col: 2, row: 1 }, { id: "playing" }] })
+  assert.strictEqual(saved.dock.magnification, 1.5)
+  assert.deepStrictEqual(status().widgets, ["weather", "playing"])
+  for (const bad of ["", ",", "clock,dock", "clock;rm"]) assert.strictEqual(run("--show-widgets", bad).status, 1, bad)
+  fs.rmSync(shellJson)
+  assert.strictEqual(run("--show-widgets", "calendar").status, 0)
+  assert.deepStrictEqual(status().widgets, ["calendar"])
+
   // Unknown pieces are refused.
   assert.strictEqual(run("--remove", "everything").status, 1)
   assert.strictEqual(run("--add").status, 1)
