@@ -9,6 +9,7 @@ fn main() {
             .qml_file("qml/Group.qml")
             .qml_file("qml/SettingRow.qml"),
     )
+    .qrc_resources(["assets/icon-256.png"])
     .qt_module("Network")
     .files(["src/theme.rs"])
     .build();

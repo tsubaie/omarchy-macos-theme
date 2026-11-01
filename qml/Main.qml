@@ -139,25 +139,11 @@ Window {
                 width: parent.width
                 height: 58
 
-                Rectangle {
+                AppIcon {
                     id: badge
                     x: 6
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 40
-                    height: 40
-                    radius: 10
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: "#5aa9ff" }
-                        GradientStop { position: 1; color: "#0a5bd8" }
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: String.fromCodePoint(0xF0035)
-                        color: "white"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 22
-                    }
+                    size: 40
                 }
 
                 Column {
@@ -502,23 +488,9 @@ Window {
                 spacing: 6
                 topPadding: 16
 
-                Rectangle {
+                AppIcon {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: 96
-                    height: 96
-                    radius: 22
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: "#5aa9ff" }
-                        GradientStop { position: 1; color: "#0a5bd8" }
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: String.fromCodePoint(0xF0035)
-                        color: "white"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 54
-                    }
+                    size: 96
                 }
 
                 Item { width: 1; height: 8 }
@@ -746,6 +718,17 @@ Window {
                 onClicked: window.apply()
             }
         }
+    }
+
+    // The app's icon: Omarchy's square frame, redrawn as a macOS app icon.
+    component AppIcon: Image {
+        property int size: 40
+        width: size
+        height: size
+        source: "qrc:/qt/qml/org/omarchy/macossettings/assets/icon-256.png"
+        sourceSize: Qt.size(size * 2, size * 2)
+        smooth: true
+        mipmap: true
     }
 
     // A label in the Overview's facts, right-aligned.
