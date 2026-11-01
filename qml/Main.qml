@@ -220,7 +220,7 @@ Window {
         { id: "general", title: "General", icon: "general", section: 1,
           keywords: "theme colors title bars gaps motion wallpapers mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype position place top bottom" },
         { id: "windows", title: "Windows", icon: "windows", section: 1,
-          keywords: "window glass translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners" },
+          keywords: "window glass translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners title bar titlebar traffic lights buttons close minimize zoom" },
         { id: "dock", title: "Dock", icon: "dock", section: 1,
           keywords: "dock magnification size icon size bigger smaller resize window previews downloads trash" },
         { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
@@ -609,6 +609,22 @@ Window {
                         note: "How strongly what is behind see-through windows, menus, the bar and the dock is blurred. 0 turns it off; they stay see-through."
                         last: true
                         SettingSlider { key: "blur"; from: 0; to: 20; fallback: 10; decimals: 0 }
+                    }
+                }
+
+                Group {
+                    title: "Title Bars"
+
+                    SettingRow {
+                        label: "Title bars"
+                        note: "The bar above each window with its name and traffic lights; off, windows show their content to the top, on floating workspaces too"
+                        SettingSwitch { key: "title-bars" }
+                    }
+                    SettingRow {
+                        label: "Traffic light size"
+                        note: "How big the close, minimize and zoom buttons are, in points; the bar grows to fit larger ones"
+                        last: true
+                        SettingSlider { key: "traffic-lights"; from: 10; to: 20; fallback: 14; decimals: 0; available: window.settingValue("title-bars", 1) === 1 }
                     }
                 }
 
@@ -1109,7 +1125,6 @@ Window {
         onToggled: on => window.markSetting(key, on ? 1 : 0, 1)
     }
 
-    // A slider for one install.sh setting, set when let go.
     // The picture at the top of each page: a macOS-like wallpaper in a card,
     // with what the page sets drawn over it, following its switches and
     // sliders as they move. Its content goes over the wallpaper.
@@ -1521,6 +1536,10 @@ Window {
         property real blurAmount: 0
         // Rows striped as in Files, instead of plain lines.
         property bool rows: false
+        // Its title bar and traffic lights, as the settings have them.
+        readonly property bool titleBar: window.settingValue("title-bars", 1) === 1
+        readonly property real light: window.settingValue("traffic-lights", 14) * 0.65
+        readonly property real barHeight: titleBar ? Math.max(24, light + 13) : 0
         layer.enabled: true
         layer.effect: MultiEffect {
             maskEnabled: true
@@ -1542,23 +1561,28 @@ Window {
         }
         Rectangle { anchors.fill: parent; color: "#262628"; opacity: mock.glass }
         Rectangle {
-            width: parent.width; height: 24
+            visible: mock.titleBar
+            width: parent.width; height: mock.barHeight
             color: "#323232"; opacity: mock.glass
         }
         Row {
-            x: 10; y: 8; spacing: 6
+            visible: mock.titleBar
+            x: 10; anchors.verticalCenter: parent.top; anchors.verticalCenterOffset: mock.barHeight / 2
+            spacing: mock.light * 0.6
             Repeater {
                 model: ["#ff5f57", "#febc2e", "#28c840"]
-                Rectangle { width: 9; height: 9; radius: 4.5; color: modelData }
+                Rectangle { width: mock.light; height: width; radius: width / 2; color: modelData }
             }
         }
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter; y: 5
+            visible: mock.titleBar
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: parent.top; anchors.verticalCenterOffset: mock.barHeight / 2
             text: mock.title; color: "#e5e5e7"; font.pixelSize: 11; font.weight: Font.DemiBold
         }
         Column {
             visible: !mock.rows
-            x: 14; y: 38; spacing: 9
+            x: 14; y: mock.barHeight + 14; spacing: 9
             Repeater {
                 model: [0.7, 0.5, 0.62, 0.4]
                 Rectangle { width: mock.width * modelData; height: 7; radius: 3.5; color: Qt.rgba(1, 1, 1, 0.22) }
@@ -1566,7 +1590,7 @@ Window {
         }
         Column {
             visible: mock.rows
-            x: 6; y: 30; width: mock.width - 12
+            x: 6; y: mock.barHeight + 6; width: mock.width - 12
             Repeater {
                 model: 6
                 Rectangle {
@@ -1580,6 +1604,7 @@ Window {
         }
     }
 
+    // A slider for one install.sh setting, set when let go.
     component SettingSlider: MacSlider {
         id: settingSlider
         // The value is drawn to the left of the slider; the row keeps room for it.
@@ -1589,9 +1614,11 @@ Window {
         // 0 for whole-number settings such as blur.
         property int decimals: 2
         property string needs: "theme"
+        // False while another setting makes this one moot.
+        property bool available: true
         width: 180
         value: window.settingValue(key, fallback)
-        enabled: !backend.busy && window.pieceOn(needs)
+        enabled: !backend.busy && window.pieceOn(needs) && available
         function take(v) {
             window.markSetting(key, decimals === 0 ? Math.round(v) : v, fallback)
             if (window.previewable.includes(key) && !previewSoon.running) previewSoon.start()

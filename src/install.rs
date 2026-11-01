@@ -71,12 +71,14 @@ impl Setting {
             "magnification" => ("magnification", (1.0, 2.0)),
             "dock-size" => ("dock-size", (32.0, 80.0)),
             "snapping" => ("snapping", (0.0, 1.0)),
+            "title-bars" => ("title-bars", (0.0, 1.0)),
+            "traffic-lights" => ("traffic-lights", (10.0, 20.0)),
             "blur" => ("blur", (0.0, 20.0)),
             _ => bail!("unknown setting {key:?}"),
         };
         // Two decimals are all the sliders show; snapping is a switch, 0 or 1,
         // blur a whole-number strength and the dock's size whole points.
-        let value = if matches!(key, "snapping" | "blur" | "dock-size") {
+        let value = if matches!(key, "snapping" | "title-bars" | "traffic-lights" | "blur" | "dock-size") {
             value.round()
         } else {
             (value * 100.0).round() / 100.0
@@ -675,6 +677,9 @@ mod tests {
         assert_eq!(arg("blur", 0.0).expect("off"), "blur=0");
         assert!(arg("blur", 21.0).is_err());
         assert_eq!(arg("dock-size", 55.6).expect("in range"), "dock-size=56");
+        assert_eq!(arg("title-bars", 0.0).expect("off"), "title-bars=0");
+        assert_eq!(arg("traffic-lights", 16.4).expect("in range"), "traffic-lights=16");
+        assert!(arg("traffic-lights", 21.0).is_err());
         assert!(arg("dock-size", 31.0).is_err());
         assert!(arg("dock-size", 81.0).is_err());
         assert!(arg("glass", 0.2).is_err());
