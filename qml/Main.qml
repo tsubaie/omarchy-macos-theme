@@ -181,7 +181,30 @@ Window {
         Column {
             anchors.fill: parent
             anchors.margins: 10
+            anchors.topMargin: 0
             spacing: 2
+
+            // The window controls, where macOS puts them, on a strip people
+            // drag the window by, as they would a title bar.
+            Item {
+                width: parent.width
+                height: 52
+
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: window.startSystemMove()
+                    onDoubleClicked: backend.zoomWindow()
+                }
+
+                TrafficLights {
+                    x: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    active: window.active
+                    onClose: window.close()
+                    onMinimize: if (!backend.minimizeWindow()) window.showMinimized()
+                    onZoom: backend.zoomWindow()
+                }
+            }
 
             SearchField {
                 id: searchField
@@ -333,23 +356,62 @@ Window {
         searchField.clear()
     }
 
-    // The pane's name is in the window's title bar, as on every window; only
-    // "Working…" shows here, while the theme's installer runs.
+    // The toolbar, as macOS draws it: the page's title level with the traffic
+    // lights, and on the right what is waiting with Revert and Apply. It is
+    // also where the window is dragged; a double click zooms.
     Item {
         id: topBar
         anchors.left: sidebar.right
         anchors.right: parent.right
         anchors.top: parent.top
-        height: 20
+        height: 52
+
+        MouseArea {
+            anchors.fill: parent
+            onPressed: window.startSystemMove()
+            onDoubleClicked: backend.zoomWindow()
+        }
 
         Text {
+            x: 28
+            anchors.verticalCenter: parent.verticalCenter
+            text: window.pages.find(p => p.id === window.page).title
+            color: "white"
+            // Title 3, emphasized: what macOS uses for a pane's title.
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+        }
+
+        Row {
             anchors.right: parent.right
-            anchors.rightMargin: 28
-            anchors.bottom: parent.bottom
-            visible: backend.busy
-            text: "Working…"
-            color: Qt.rgba(1, 1, 1, 0.55)
-            font.pixelSize: 12
+            anchors.rightMargin: 20
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: backend.busy || window.pendingCount > 0
+                text: window.applying ? "Applying…" : backend.busy ? "Working…"
+                    : window.pendingCount === 1 ? "1 change" : window.pendingCount + " changes"
+                color: Qt.rgba(1, 1, 1, 0.6)
+                font.pixelSize: 13
+                rightPadding: 4
+            }
+            MacButton {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: window.pendingCount > 0 || window.applying
+                text: "Revert"
+                enabled: !backend.busy
+                onClicked: window.revert()
+            }
+            MacButton {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: window.pendingCount > 0 || window.applying
+                text: "Apply"
+                primary: true
+                enabled: !backend.busy
+                onClicked: window.apply()
+            }
         }
     }
 
@@ -360,7 +422,7 @@ Window {
         anchors.right: parent.right
         anchors.top: topBar.bottom
         anchors.bottom: parent.bottom
-        contentHeight: column.height + 48 + (applyBar.visible ? applyBar.height : 0)
+        contentHeight: column.height + 48
         clip: true
 
         Column {
@@ -459,9 +521,9 @@ Window {
                     }
                     SettingRow {
                         label: "Frosted blur"
-                        note: "Blurs what is behind see-through windows, menus, the bar and the dock. Off, they stay see-through, unblurred."
+                        note: "How strongly what is behind see-through windows, menus, the bar and the dock is blurred. 0 turns it off; they stay see-through."
                         last: true
-                        SettingSwitch { key: "blur" }
+                        SettingSlider { key: "blur"; from: 0; to: 20; fallback: 10; decimals: 0 }
                     }
                 }
 
@@ -826,47 +888,6 @@ Window {
         }
     }
 
-    // The bar under the content while changes wait: how many, Revert and Apply.
-    Rectangle {
-        id: applyBar
-        anchors.left: sidebar.right
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 52
-        visible: window.pendingCount > 0 || window.applying
-        color: "#2a2a2c"
-
-        Rectangle { width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1) }
-
-        Text {
-            x: 28
-            anchors.verticalCenter: parent.verticalCenter
-            text: window.applying ? "Applying…"
-                : window.pendingCount === 1 ? "1 change" : window.pendingCount + " changes"
-            color: Qt.rgba(1, 1, 1, 0.7)
-            font.pixelSize: 13
-        }
-
-        Row {
-            anchors.right: parent.right
-            anchors.rightMargin: 28
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 10
-
-            MacButton {
-                text: "Revert"
-                enabled: !backend.busy
-                onClicked: window.revert()
-            }
-            MacButton {
-                text: "Apply"
-                primary: true
-                enabled: !backend.busy
-                onClicked: window.apply()
-            }
-        }
-    }
-
     // The app's icon: Omarchy's square frame, redrawn as a macOS app icon.
     component AppIcon: Image {
         property int size: 40
@@ -926,17 +947,19 @@ Window {
         readonly property int leading: 48
         property string key: ""
         property real fallback: 0
+        // 0 for whole-number settings such as blur.
+        property int decimals: 2
         property string needs: "theme"
         width: 180
         value: window.settingValue(key, fallback)
         enabled: !backend.busy && window.pieceOn(needs)
-        onMoved: v => window.markSetting(key, v, fallback)
+        onMoved: v => window.markSetting(key, decimals === 0 ? Math.round(v) : v, fallback)
 
         Text {
             anchors.right: parent.left
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
-            text: parent.shown.toFixed(2)
+            text: parent.shown.toFixed(parent.decimals)
             color: Qt.rgba(1, 1, 1, 0.55)
             font.pixelSize: 12
         }

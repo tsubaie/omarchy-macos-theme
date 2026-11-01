@@ -3,6 +3,7 @@
 
 mod install;
 mod theme;
+mod window;
 
 use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 
@@ -23,6 +24,10 @@ fn main() {
         font.set_family(&QString::from("Inter"));
         app.as_mut().set_application_font(&font);
     }
+
+    // The traffic lights are drawn in the sidebar, as macOS apps do; no
+    // title bar above the window.
+    window::hide_title_bar();
 
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {

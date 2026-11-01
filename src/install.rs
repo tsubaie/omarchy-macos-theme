@@ -69,11 +69,11 @@ impl Setting {
             "web-glass" => ("web-glass", (0.5, 1.0)),
             "magnification" => ("magnification", (1.0, 2.0)),
             "snapping" => ("snapping", (0.0, 1.0)),
-            "blur" => ("blur", (0.0, 1.0)),
+            "blur" => ("blur", (0.0, 20.0)),
             _ => bail!("unknown setting {key:?}"),
         };
-        // Two decimals are all the sliders show; snapping and blur are
-        // switches, 0 or 1.
+        // Two decimals are all the sliders show; snapping is a switch, 0 or 1,
+        // and blur a whole-number strength.
         let value = if key == "snapping" || key == "blur" {
             value.round()
         } else {
@@ -494,7 +494,9 @@ mod tests {
         );
         assert_eq!(arg("snapping", 1.0).expect("in range"), "snapping=1");
         assert_eq!(arg("snapping", 0.2).expect("rounds to off"), "snapping=0");
-        assert_eq!(arg("blur", 1.0).expect("in range"), "blur=1");
+        assert_eq!(arg("blur", 14.6).expect("in range"), "blur=15");
+        assert_eq!(arg("blur", 0.0).expect("off"), "blur=0");
+        assert!(arg("blur", 21.0).is_err());
         assert!(arg("glass", 0.2).is_err());
         assert!(arg("web-glass", 1.5).is_err());
         assert!(arg("size", 1.0).is_err());

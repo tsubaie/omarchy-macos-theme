@@ -28,14 +28,14 @@ Made for Omarchy 4 and later. Open source, MIT.
 |---|---|
 | **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, whether the theme is up to date with an **Update** button when it isn't, and links to both projects |
 | **General** | The theme itself, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, and the dictation pill |
-| **Windows** | How see-through windows are, the same for browsers and Electron apps (Claude, VS Code, Slack…), the frosted blur behind see-through windows, and snapping windows to halves and corners |
+| **Windows** | How see-through windows are, the same for browsers and Electron apps (Claude, VS Code, Slack…), how strong the frosted blur behind them is, and snapping windows to halves and corners |
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash) and how far its icons grow |
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |
 | **Widgets** | The desktop widgets: clock, calendar, weather and now playing |
 | **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center |
 | **Backups** | Back up now, restore any backup, and export or import your setup |
 
-- **Changes wait for Apply.** Flipping switches and moving sliders changes nothing until you press **Apply**. Then every change goes to the installer in one call, so the theme reloads once. **Revert** throws the changes away.
+- **Changes wait for Apply.** Flipping switches and moving sliders changes nothing until you press **Apply** in the toolbar at the top. Then every change goes to the installer in one call, so the theme reloads once. **Revert** throws the changes away.
 - **Every change is backed up first**, by the theme's installer, and can be restored from **Backups**.
 - **Search** at the top of the sidebar finds pages and the settings on them as you type: "glass" finds General, "weather" finds Widgets. Ctrl+F focuses it; ↑ and ↓ move through the results, Return opens one, Esc clears it.
 - **Updates.** When the app opens it asks GitHub whether the theme has new commits. If it has, the theme card in the sidebar and the About page say **Update available**, and **Update** brings the theme up to date.
@@ -73,7 +73,7 @@ Turning off **macOS theme** while it's your current Omarchy theme is refused: sw
 |---|---|---|
 | Window glass | 0.5 (see-through) to 1 (solid) | 0.7 |
 | Browser and app glass | 0.5 to 1 | 1 (solid, since browser menus are hard to read on glass) |
-| Frosted blur | on or off; off, see-through windows stay see-through, unblurred | on |
+| Frosted blur | 0 (off; see-through windows stay see-through, unblurred) to 20 | 10 |
 | Snapping | on or off | on |
 | Dock magnification | 1 (off) to 2 | 1.75 |
 
@@ -219,7 +219,7 @@ The app follows Apple's [Human Interface Guidelines](https://developer.apple.com
 - **macOS text sizes**: 13 pt body, 13 pt semibold headings ([Typography](https://developer.apple.com/design/human-interface-guidelines/typography)).
 - **Color only where it means something**: the controls and the Apply button; everything else neutral ([Color](https://developer.apple.com/design/human-interface-guidelines/color)).
 - **Screen-reader names and roles** for every switch, slider, button and page, and text contrast of at least 4.5:1 ([Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)).
-- **The theme's own title bar**, like every other window, rather than window controls of its own ([Windows](https://developer.apple.com/design/human-interface-guidelines/windows): "Avoid creating custom window UI").
+- **Traffic lights in the sidebar and a toolbar across the top**, as Apple's own apps draw their windows: the page's title on the left, the changes waiting and **Apply** on the right, and the top of the window to drag it by. The theme turns its title bar off for this app only.
 
 ## Troubleshooting
 

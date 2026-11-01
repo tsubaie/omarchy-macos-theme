@@ -64,6 +64,17 @@ pub mod qobject {
         #[qinvokable]
         fn download(self: Pin<&mut Self>);
 
+        /// Minimizes the window into the dock; false when it should minimize
+        /// the ordinary way instead.
+        #[qinvokable]
+        #[cxx_name = "minimizeWindow"]
+        fn minimize_window(&self) -> bool;
+
+        /// Fills the screen with the window, or puts it back.
+        #[qinvokable]
+        #[cxx_name = "zoomWindow"]
+        fn zoom_window(&self);
+
         /// Shows the lock screen without locking.
         #[qinvokable]
         #[cxx_name = "previewLock"]
@@ -176,6 +187,14 @@ impl qobject::ThemeBackend {
 
     pub fn download(self: Pin<&mut Self>) {
         self.run(install::download);
+    }
+
+    pub fn minimize_window(&self) -> bool {
+        crate::window::minimize()
+    }
+
+    pub fn zoom_window(&self) {
+        crate::window::zoom();
     }
 
     pub fn preview_lock(&self) {
