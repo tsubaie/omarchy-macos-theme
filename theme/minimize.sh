@@ -7,8 +7,8 @@ set -u
 
 addr=${1:?usage: minimize.sh <window address>}
 
-read -r ws x y w h mon < <(hyprctl clients -j | jq -r --arg a "$addr" \
-  '.[] | select(.address == $a) | "\(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.monitor)"')
+read -r ws x y w h mon class < <(hyprctl clients -j | jq -r --arg a "$addr" \
+  '.[] | select(.address == $a) | "\(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.monitor) \(.class)"')
 [[ -n ${ws:-} ]] || exit 1
 
 # Omarchy minimizes only on floating workspaces; elsewhere do nothing, as it does.
@@ -17,7 +17,9 @@ read -r ws x y w h mon < <(hyprctl clients -j | jq -r --arg a "$addr" \
 if [[ -f ${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/macos-theme.dock/Genie.qml ]]; then
   monitor=$(hyprctl monitors -j | jq -r --argjson m "$mon" '.[] | select(.id == $m) | .name')
   # The title bar sits above the window's own area; the genie takes both.
+  # macOS Theme Studio has none: it draws its traffic lights itself.
   bar=$(hyprctl -j getoption plugin:hyprbars:bar_height 2>/dev/null | jq -r '.int // 0')
+  [[ $class == omarchy-macos-studio ]] && bar=0
   omarchy-shell omarchy.dock minimize "$addr" "$x" "$((y - bar))" "$w" "$((h + bar))" "$monitor" >/dev/null 2>&1 && exit 0
 fi
 

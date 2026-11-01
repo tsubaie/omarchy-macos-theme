@@ -2,9 +2,10 @@
 -- Loaded last, from a line install.sh adds to ~/.config/hypr/looknfeel.lua, so
 -- it wins over your own look settings only while this theme is active.
 
--- 0 turns off the frosted blur behind see-through windows, menus, the bar and
--- the dock (install.sh --set blur=0); they stay see-through, just unblurred.
-local BLUR = 1
+-- How strong the frosted blur is behind see-through windows, menus, the bar
+-- and the dock: 0 (off; they stay see-through, unblurred) to 20
+-- (install.sh --set blur=<0-20>).
+local BLUR = 10
 
 hl.config({
   general = {
@@ -25,8 +26,8 @@ hl.config({
       color_inactive = "rgba(00000030)",
     },
     blur = {
-      enabled = BLUR == 1,
-      size = 10,
+      enabled = BLUR > 0,
+      size = math.max(BLUR, 1),
       passes = 3,
       ignore_opacity = true,
       new_optimizations = true,
@@ -123,6 +124,10 @@ if hl.plugin.hyprbars then
   }) do
     hl.plugin.hyprbars.add_button({ bg_color = b.color, fg_color = b.fg, size = 14, icon = b.icon, action = b.action })
   end
+
+  -- macOS Theme Studio draws its traffic lights in its sidebar, as macOS apps
+  -- do, so it gets no bar above it.
+  hl.window_rule({ name = "omarchy-macos-studio-no-bar", match = { class = "^omarchy-macos-studio$" }, ["hyprbars:no_bar"] = true })
 
   -- Omarchy sets up its own title bars for floating workspaces after this file
   -- loads, and again when a workspace turns floating. Keep ours: ignore any

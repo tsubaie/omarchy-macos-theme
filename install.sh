@@ -20,7 +20,7 @@
 #   ./install.sh --set glass=0.8  how solid windows are, 0.5 to 1 (1 is solid)
 #   ./install.sh --set web-glass=0.9  the same for browsers, web apps and Electron apps
 #   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
-#   ./install.sh --set blur=0      turn off the frosted blur behind see-through windows (1: on)
+#   ./install.sh --set blur=15     how strong the frosted blur is, 0 (off) to 20; the theme's is 10
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
 #                                 switching to that theme first if the macOS theme is current
@@ -94,9 +94,9 @@ while (( $# )); do
     --set)
       [[ ${2:-} =~ ^(glass|web-glass|magnification|snapping|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
-          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" || k == "blur" ? v == "0" || v == "1" : v >= 0.5 && v <= 1)
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "snapping" ? v == "0" || v == "1" : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping or blur=0 or 1)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, snapping=0 or 1, blur=0 to 20)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -162,8 +162,8 @@ installed() {
 active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
 
 # Glass is the opacity look.lua gives every window, web-glass the one it gives
-# browsers and web and Electron apps, and snapping and blur its SNAPPING and
-# BLUR switches: each a
+# browsers and web and Electron apps, snapping its SNAPPING switch, and blur
+# its BLUR strength: each a
 # line of look.lua, whose value is the second group of its pattern. The theme's
 # own values are the defaults. Magnification is a key of the dock's section of
 # shell.json, which the dock follows live.
@@ -172,9 +172,9 @@ declare -A LOOK_RULE=(
   [glass]='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
   [web-glass]='^(o\.window\("\^\(brave-browser\|[^"]*", \{ opacity = ")([0-9.]+) [0-9.]+'
   [snapping]='^(local SNAPPING = )([01])'
-  [blur]='^(local BLUR = )([01])'
+  [blur]='^(local BLUR = )([0-9]+)'
 )
-declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [blur]=1 [magnification]=1.75)
+declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [blur]=10 [magnification]=1.75)
 look_get() {
   local v
   v=$(sed -nE "s/${LOOK_RULE[$1]}.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null) || true

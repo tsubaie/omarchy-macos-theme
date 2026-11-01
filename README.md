@@ -34,7 +34,7 @@ cd omarchy-macos-theme
 | `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
-| `--set blur=<0\|1>` | Turn the frosted blur behind see-through windows, menus, the bar and the dock off (0) or on (1); they stay see-through |
+| `--set blur=<0-20>` | How strong the frosted blur is behind see-through windows, menus, the bar and the dock; 0 turns it off (they stay see-through), the theme's own is 10 |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
 | `--backups [--json]` | The backups, newest first. One is taken by itself before every change; the last 10 are kept, and the first one for good |
 | `--backup` | Take a backup now |
