@@ -279,14 +279,16 @@ Window {
 
                         HoverHandler { id: hover }
 
-                        // A line symbol in the accent blue with no tile, as Finder
-                        // and most macOS sidebars draw them (HIG, Sidebars).
+                        // A gray line symbol with no tile, as macOS draws sidebars
+                        // in the graphite accent: a step dimmer than the label,
+                        // full white on the selected row.
                         Glyph {
                             id: icon
                             x: 6
                             anchors.verticalCenter: parent.verticalCenter
                             name: entry.modelData.icon
                             size: 20
+                            opacity: entry.selected ? 1 : 0.6
                         }
 
                         Text {
