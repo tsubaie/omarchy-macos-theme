@@ -210,10 +210,55 @@ BarWidget {
         return false
       })
       if (kept.length !== root.hidden.length) root.hidden = kept
+      var keptMarks = root.marked.filter(function(m) {
+        if (m.target) return true
+        m.destroy()
+        return false
+      })
+      if (keptMarks.length !== root.marked.length) root.marked = keptMarks
       var top = root
       while (top.parent) top = top.parent
       root.hideWidgets(top)
       root.airdrop = root.widgetOnBar(top, "netmojo.omdrop")
+      root.markPanels(top)
+    }
+  }
+
+  // The bar marks a widget whose panel is open with a line under it; macOS
+  // lights it with a rounded pane behind it instead. Each slot's mark is the
+  // one Rectangle beside its widget drawn over it (z 50); it is made the pane,
+  // behind the widget, and goes back to the line when Control Center goes.
+  property var marked: []
+  function markPanels(item) {
+    if ("panelOpen" in item && "widgetHolder" in item && item.widgetHolder) {
+      var area = item.widgetHolder.parent
+      for (var i = 0; area && i < area.children.length; i++) {
+        var mark = area.children[i]
+        if (mark.z === 50 && "radius" in mark && !root.marked.some(function(m) { return m.target === mark })) {
+          root.marked = root.marked.concat([pane.createObject(root, { target: mark, slot: item })])
+        }
+      }
+      return
+    }
+    for (var j = 0; j < item.children.length; j++) markPanels(item.children[j])
+  }
+  Component {
+    id: pane
+    QtObject {
+      id: p
+      property var target
+      property var slot
+      readonly property real h: target && target.parent ? Math.round(target.parent.height * 0.74) : 0
+      readonly property real w: target && target.parent ? Math.max(target.parent.width, Math.round(h * 1.6)) : 0
+      property list<QtObject> bindings: [
+        Binding { target: p.target; property: "z"; value: -1; restoreMode: Binding.RestoreBindingOrValue },
+        Binding { target: p.target; property: "width"; value: p.w; restoreMode: Binding.RestoreBindingOrValue },
+        Binding { target: p.target; property: "height"; value: p.h; restoreMode: Binding.RestoreBindingOrValue },
+        Binding { target: p.target; property: "x"; value: p.target && p.target.parent ? Math.round((p.target.parent.width - p.w) / 2) : 0; restoreMode: Binding.RestoreBindingOrValue },
+        Binding { target: p.target; property: "y"; value: p.target && p.target.parent ? Math.round((p.target.parent.height - p.h) / 2) : 0; restoreMode: Binding.RestoreBindingOrValue },
+        Binding { target: p.target; property: "radius"; value: p.h / 2; restoreMode: Binding.RestoreBindingOrValue },
+        Binding { target: p.target; property: "color"; value: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.2); restoreMode: Binding.RestoreBindingOrValue }
+      ]
     }
   }
 
