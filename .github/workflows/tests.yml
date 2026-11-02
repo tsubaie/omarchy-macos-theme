@@ -12,6 +12,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container: archlinux:latest
+    env:
+      # Incremental builds help an edited file rebuild fast, which CI never
+      # does; off, the cached target folder stays a fraction of the size.
+      CARGO_INCREMENTAL: 0
     steps:
       # git first, so the checkout keeps history: the upgrade test installs an
       # older commit. diffutils for cmp, and a font for the QML tests' text.
@@ -22,5 +26,21 @@ jobs:
           fetch-depth: 0
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # Arch moves Rust and Qt forward on its own, and Studio's build links
+      # Qt, so their versions are part of the cache's name: a new one of
+      # either starts the build afresh rather than reusing parts built for
+      # the old one.
+      - name: Versions the build depends on
+        id: versions
+        run: echo "key=rust-$(rustc -V | cut -d' ' -f2)-qt-$(qmake6 -query QT_VERSION)" >> "$GITHUB_OUTPUT"
+      - name: Keep Studio's downloaded crates and compiled code between runs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            studio/target
+          key: cargo-${{ steps.versions.outputs.key }}-${{ hashFiles('studio/Cargo.lock') }}
+          restore-keys: cargo-${{ steps.versions.outputs.key }}-
       - name: Run the tests
         run: tests/run.sh
