@@ -151,7 +151,8 @@ Item {
   function writeNext() {
     if (!root.pendingLayout) return
     saver.command = ["sh", "-c",
-      'f="$1"; [ -s "$f" ] || echo "{}" > "$f"; t=$(mktemp "$f.XXXXXX") && jq --argjson v "$2" ".widgets.layout = \\$v" "$f" > "$t" && mv "$t" "$f" || rm -f "$t"',
+      // Beside the real file (a dotfiles symlink stays one), with its mode.
+      'f=$(readlink -f "$1"); [ -s "$f" ] || echo "{}" > "$f"; t=$(mktemp "$f.XXXXXX") && chmod --reference="$f" "$t" && jq --argjson v "$2" ".widgets.layout = \\$v" "$f" > "$t" && mv "$t" "$f" || rm -f "$t"',
       "sh", root.configPath, JSON.stringify(root.pendingLayout)]
     root.pendingLayout = null
     saver.running = true

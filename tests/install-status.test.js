@@ -17,7 +17,7 @@ fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
 [ "$1 $2" = "theme list" ] && printf 'Macos\\nTokyo Night\\n'
 [ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
 if [ "$1 $2" = "plugin clone" ]; then
-  dir="$XDG_CONFIG_HOME/omarchy/plugins/me.\${3#omarchy.}"
+  dir="$XDG_CONFIG_HOME/omarchy/plugins/$USER.\${3#omarchy.}"
   mkdir -p "$dir" && touch "$dir/Menu.qml"
   printf '{ "omarchy": { "clonedFrom": "%s" } }' "$3" > "$dir/manifest.json"
   echo "Cloned $3 to $dir and switched"
@@ -30,7 +30,7 @@ fi
 exit 0
 `, { mode: 0o755 })
 
-const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night" }
+const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
 const status = () => JSON.parse(execFileSync("bash", [script, "--status", "--json"], { env, encoding: "utf8" }))
 const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "bar-icons", "lock", "widgets"]

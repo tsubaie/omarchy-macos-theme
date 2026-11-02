@@ -18,15 +18,14 @@ SNAPSHOT_FILES="omarchy/shell.json hypr/looknfeel.lua gtk-4.0/gtk.css"
 SNAPSHOT_ID_PATTERN='^[0-9]{8}-[0-9]{6}(-[0-9]+)?$'
 EXPORT_FORMAT=1
 
-# The plugin folders the theme manages, relative to $CONFIG.
+# The plugin folders the theme manages, relative to $CONFIG: its own, and its
+# clones of Omarchy's menu and lock (never clones of yours). Not its workspaces
+# clone: snapshots made before held none, so restoring one would take it off
+# the bar it is still on; --add menubar makes it afresh anyway.
 managed_plugins() {
   local dir
-  for dir in "$PLUGINS_DIR"/macos-theme.* "$PLUGINS_DIR"/*; do
-    [[ -d $dir ]] || continue
-    if [[ $(basename "$dir") == macos-theme.* ]] ||
-      grep -qsE '"clonedFrom": "omarchy\.(menu|lock)"' "$dir/manifest.json"; then
-      echo "omarchy/plugins/$(basename "$dir")"
-    fi
+  for dir in "$PLUGINS_DIR"/macos-theme.* $(wide_menus) $(macos_locks); do
+    [[ -d $dir ]] && echo "omarchy/plugins/$(basename "$dir")"
   done | sort -u
 }
 
@@ -126,6 +125,9 @@ snapshot_unpack() {
 unpack_move() {
   [[ -e $2 || -L $2 ]] || return 0
   local to="$CONFIG/${2#"$1"/}"
+  # Still there after the theme's own were cleared, so not the theme's: a
+  # clone of yours that an older snapshot holds too. Yours stays as it is.
+  [[ -e $to || -L $to ]] && return 0
   mkdir -p "$(dirname "$to")" && mv "$2" "$to"
 }
 
@@ -255,10 +257,7 @@ import_profile() {
   local key
   for key in dock widgets; do
     [[ $(jq -r --arg k "$key" '.shell[$k] | type' "$profile") == object ]] || continue
-    local src=$SHELL_JSON out
-    [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
-    out=$(mktemp "$SHELL_JSON.XXXXXX")
-    jq --arg k "$key" --slurpfile p "$profile" '.[$k] = (.[$k] // {}) + $p[0].shell[$k]' "$src" > "$out" && mv "$out" "$SHELL_JSON"
+    shell_write --arg k "$key" --slurpfile p "$profile" '.[$k] = (.[$k] // {}) + $p[0].shell[$k]'
   done
 
   if [[ -d $THEME_DIR ]]; then

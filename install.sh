@@ -66,6 +66,10 @@ BACKUP_DIR="$CONFIG/omarchy/macos-theme-backups"
 # The bar's arrangement when the menu bar was last removed, to come back with
 # it (a piece removed and added again keeps your settings).
 BAR_REMEMBERED="$BACKUP_DIR/bar-layout.json"
+# The plugins that were on before the theme's first piece, and the bar before
+# the menu bar, so removing them gives back exactly that.
+BEFORE_THEME="$BACKUP_DIR/plugins-before-theme.json"
+BAR_BEFORE="$BACKUP_DIR/bar-before-menubar.json"
 PLUGINS_DIR="$CONFIG/omarchy/plugins"
 LOOKNFEEL="$CONFIG/hypr/looknfeel.lua"
 GTK_CSS="$CONFIG/gtk-4.0/gtk.css"
@@ -170,38 +174,59 @@ if $legacy; then add[theme]=1; add[rows]=1; fi
 
 command -v omarchy >/dev/null || { echo "This needs Omarchy (the omarchy command was not found)." >&2; exit 1; }
 
-# The wide menu is a clone of Omarchy's menu marked by its width comment.
-wide_menus() {
+# The wide menu, the bar's workspaces and the lock screen are clones of
+# Omarchy's plugins. The theme's own clones carry $OWN_MARK; ones it made before
+# that are known by its patch. Clones of your own are never touched.
+OWN_MARK=".macos-theme"
+# theme_clones <omarchy id> <patched file> <patch mark>: their folders.
+theme_clones() {
   local dir
-  for dir in "$PLUGINS_DIR"/*.menu; do
-    [[ -f $dir/Menu.qml ]] && grep -q "macOS theme: wider" "$dir/Menu.qml" && echo "$dir"
+  for dir in "$PLUGINS_DIR"/*; do
+    grep -qs "\"clonedFrom\": \"$1\"" "$dir/manifest.json" || continue
+    [[ -e $dir/$OWN_MARK ]] || grep -qsF "$3" "$dir/$2" && echo "$dir"
   done
   return 0
 }
+# theme_clone <omarchy id> <patched file> <patch mark>: the theme's clone,
+# made if there is none yet, and its folder printed. Omarchy names every clone
+# after you, so one of your own takes that name: then the piece is skipped.
+theme_clone() {
+  local dir mine="$PLUGINS_DIR/${USER:-$(id -un)}.${1#omarchy.}"
+  dir=$(theme_clones "$@" | head -n1)
+  if [[ -z $dir ]]; then
+    if [[ -e $mine ]]; then
+      echo "    $(basename "$mine") is a clone of $1 of your own, so the theme leaves it as it is; move it aside to use the theme's." >&2
+      return 1
+    fi
+    omarchy plugin clone "$1" >/dev/null 2>&1 || true
+    dir=$mine
+    [[ -d $dir ]] || return 1
+  fi
+  touch "$dir/$OWN_MARK"
+  echo "$dir"
+}
+
+WIDE_MARK="macOS theme: wider"
+wide_menus() { theme_clones omarchy.menu Menu.qml "$WIDE_MARK"; }
 
 # The bar's workspaces are a clone of Omarchy's widget, patched by
 # workspaces-patch.pl so a right-click opens a layout menu (WorkspaceMenu.qml).
 WORKSPACES_MARK="macOS theme: a click"
-workspaces_clones() {
-  local dir
-  for dir in "$PLUGINS_DIR"/*; do
-    grep -qs '"clonedFrom": "omarchy.workspaces"' "$dir/manifest.json" && echo "$dir"
-  done
-  return 0
-}
+workspaces_clones() { theme_clones omarchy.workspaces Workspaces.qml "$WORKSPACES_MARK"; }
 
 # The lock screen is a clone of Omarchy's lock with the macOS LockView.qml.
 LOCK_MARK="The macOS lock screen"
-lock_clones() {
-  local dir
-  for dir in "$PLUGINS_DIR"/*; do
-    grep -qs '"clonedFrom": "omarchy.lock"' "$dir/manifest.json" && echo "$dir"
-  done
-  return 0
+macos_locks() { theme_clones omarchy.lock LockView.qml "$LOCK_MARK"; }
+
+# A MacTahoe folder the theme installed: marked, or (installed before the
+# mark) with the large folder icons it copies over the small ones.
+theme_icons() {
+  [[ -e $1/$OWN_MARK ]] || cmp -s "$1/places/16/folder.svg" "$1/places/scalable/folder.svg"
 }
-macos_locks() {
-  local dir
-  for dir in $(lock_clones); do grep -qsF "$LOCK_MARK" "$dir/LockView.qml" && echo "$dir"; done
+# None of the theme's pieces is installed.
+none_installed() {
+  local f
+  for f in $FEATURES; do installed "$f" && return 1; done
   return 0
 }
 
@@ -209,7 +234,7 @@ installed() {
   case "$1" in
     theme) [[ -d $THEME_DIR ]] ;;
     rows) grep -qsF "$ROWS_LINE" "$GTK_CSS" ;;
-    icons) [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] ;;
+    icons) theme_icons "$HOME/.local/share/icons/MacTahoe-dark" ;;
     wide-menu) [[ -n $(wide_menus) ]] ;;
     dock) [[ -d $PLUGINS_DIR/$DOCK_ID ]] ;;
     switcher) [[ -d $PLUGINS_DIR/$SWITCHER_ID ]] ;;
@@ -260,15 +285,25 @@ magnification() {
   m=$(jq '.dock.magnification | numbers' "$SHELL_JSON" 2>/dev/null) || true
   echo "${m:-1.75}"
 }
-# Sets one value in shell.json: shell_set '.dock.magnification' 1.5.
-shell_set() {
-  # A missing shell.json means Omarchy's defaults, as `omarchy dock` treats it.
-  local src=$SHELL_JSON tmp
-  [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
+# Rewrites shell.json through jq: shell_write [jq options] <filter>. A missing
+# one means Omarchy's defaults, as `omarchy dock` treats it. The new file goes
+# beside the real one (a dotfiles symlink stays a symlink), keeps its mode, and
+# takes its place in one rename.
+# shortcut: a write by Omarchy (bar move, dock) between the read and the rename is lost; rare for one person, lock it if that changes.
+shell_write() {
+  local real src tmp
   mkdir -p "$(dirname "$SHELL_JSON")"
-  tmp=$(mktemp)
-  jq -S --argjson v "$2" "$1 = \$v" "$src" >"$tmp" && mv "$tmp" "$SHELL_JSON"
+  real=$(readlink -f "$SHELL_JSON")
+  src=$real
+  [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
+  [[ -s $src ]] || src=/dev/null
+  mkdir -p "$(dirname "$real")"
+  tmp=$(mktemp "$real.XXXXXX")
+  chmod --reference="$real" "$tmp" 2>/dev/null || chmod 644 "$tmp"
+  if jq -S "$@" <(jq -s '.[0] // {}' "$src") >"$tmp"; then mv "$tmp" "$real"; else rm -f "$tmp"; return 1; fi
 }
+# Sets one value in shell.json: shell_set '.dock.magnification' 1.5.
+shell_set() { shell_write --argjson v "$2" "$1 = \$v"; }
 set_magnification() { shell_set '.dock.magnification' "$1"; }
 dock_size() {
   local m
@@ -317,15 +352,9 @@ shown_widgets() {
 # shell.json, the ones kept stay where they are, and a new one gets no cell,
 # so the widgets put it in the first free one.
 set_shown_widgets() {
-  local src=$SHELL_JSON tmp
-  [[ -s $src ]] || src="$OMARCHY_PATH/config/omarchy/shell.json"
-  [[ -s $src ]] || src=/dev/null
-  mkdir -p "$(dirname "$SHELL_JSON")"
-  tmp=$(mktemp)
-  jq -S --arg show "$1" '($show | split(",")) as $show
+  shell_write --arg show "$1" '($show | split(",")) as $show
     | ([(.widgets.layout // []) | arrays | .[] | objects | select(.id as $id | $show | index($id))]) as $kept
-    | .widgets.layout = $kept + [$show[] as $id | select([$kept[].id] | index($id) | not) | {id: $id}]' \
-    <(jq -s '.[0] // {}' "$src") >"$tmp" && mv "$tmp" "$SHELL_JSON"
+    | .widgets.layout = $kept + [$show[] as $id | select([$kept[].id] | index($id) | not) | {id: $id}]'
 }
 
 # The bar's sections, in the order they sit on it.
@@ -418,8 +447,9 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)"
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
+      "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -454,15 +484,25 @@ remove_lines() {
   grep -vxF -e "$comment" -e "$line" "$file.bak.$STAMP" > "$file" || true
 }
 
+# give_back <omarchy id> [placement]: turns on again what stood where the theme's
+# piece is, as it was before the theme: Omarchy's own, a clone of yours, or
+# nothing if you had turned it off. Unrecorded (installed before the record
+# was kept), Omarchy's own.
+give_back() {
+  local ids=$1 id
+  [[ -s $BEFORE_THEME ]] && ids=$(jq -r --arg id "$1" '.[] | select(.id == $id or .clonedFrom == $id) | .id' "$BEFORE_THEME")
+  for id in $ids; do omarchy plugin enable "$id" "${@:2}" >/dev/null 2>&1 || true; done
+}
+
 remove_osd() {
   omarchy plugin disable "$OSD_ID" >/dev/null 2>&1 || true
-  omarchy plugin enable omarchy.osd >/dev/null 2>&1 || true
+  give_back omarchy.osd
   rm -rf "${PLUGINS_DIR:?}/$OSD_ID"
   say "Removed the volume capsule and restored Omarchy's own"
 }
 remove_dock() {
   omarchy plugin disable "$DOCK_ID" >/dev/null 2>&1 || true
-  omarchy plugin enable omarchy.dock >/dev/null 2>&1 || true
+  give_back omarchy.dock
   rm -rf "${PLUGINS_DIR:?}/$DOCK_ID"
   say "Removed the macOS dock and restored Omarchy's own"
 }
@@ -470,7 +510,7 @@ remove_wide_menu() {
   local dir
   for dir in $(wide_menus); do
     omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
-    omarchy plugin enable omarchy.menu >/dev/null 2>&1 || true
+    give_back omarchy.menu
     rm -rf "${dir:?}"
   done
   say "Removed the wide menu and restored Omarchy's own"
@@ -490,16 +530,32 @@ remove_menubar() {
     rm -rf "${PLUGINS_DIR:?}/$id"
   done
   # Omarchy's workspaces back, after the menu button, in place of the
-  # theme's clone (a clone of the user's own is left be).
-  local dir
+  # theme's clone (a clone of your own is left be).
+  local dir drop=$MENUBAR_IDS
   for dir in $(workspaces_clones); do
-    grep -qsF "$WORKSPACES_MARK" "$dir/Workspaces.qml" || continue
     omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
-    omarchy plugin enable omarchy.workspaces --section left --index 1 >/dev/null 2>&1 || true
+    give_back omarchy.workspaces --section left --index 1
+    drop+=" $(basename "$dir")"
     rm -rf "${dir:?}"
   done
-  # Omarchy's widgets back to its default bar: the clock in the middle, the
-  # system icons in a row after the tray.
+  if [[ -s $BAR_BEFORE ]]; then
+    # The bar as it was before the menu bar, with what other plugins have put
+    # on it since; nothing of the menu bar's.
+    if [[ $(cat "$BAR_BEFORE") == null ]]; then
+      shell_write 'del(.bar.layout)'
+    else
+      shell_write --slurpfile was "$BAR_BEFORE" --arg drop "$drop" '($drop | split(" ")) as $drop
+        | $was[0] as $was | ([$was[][]? | objects | .id]) as $known
+        | .bar.layout = reduce ((.bar.layout // {}) | to_entries[]) as $s ($was;
+            .[$s.key] = (.[$s.key] // []) + [$s.value[]? | objects
+              | select(.id as $id | ($known | index($id) | not) and ($drop | index($id) | not))])'
+    fi
+    rm -f "$BAR_BEFORE"
+    say "Removed the menu bar look and put the bar back as it was before it"
+    return
+  fi
+  # Installed before the theme kept the bar's arrangement: Omarchy's default
+  # bar, the clock in the middle, the system icons in a row after the tray.
   omarchy bar move omarchy.clock --section center >/dev/null 2>&1 || true
   omarchy bar move omarchy.tray --section right --index 0 >/dev/null 2>&1 || true
   for id in omarchy.keyboard-layout omarchy.agents omarchy.bluetooth omarchy.network omarchy.tailscale omarchy.audio omarchy.monitor omarchy.power; do
@@ -521,7 +577,7 @@ remove_lock() {
   local dir
   for dir in $(macos_locks); do
     omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
-    omarchy plugin enable omarchy.lock >/dev/null 2>&1 || true
+    give_back omarchy.lock
     rm -rf "${dir:?}"
   done
   # Omarchy's lock stays loaded on purpose, so only a restart hands it back the lock command.
@@ -538,7 +594,10 @@ remove_rows() {
   say "Removed striped Files rows (reopen Files to see it)"
 }
 remove_icons() {
-  rm -rf "$HOME"/.local/share/icons/MacTahoe{,-light,-dark}
+  local t
+  for t in "$HOME"/.local/share/icons/MacTahoe{,-light,-dark}; do
+    theme_icons "$t" && rm -rf "${t:?}"
+  done
   if [[ -d $THEME_DIR ]]; then
     cp "$REPO/theme/icons.theme" "$THEME_DIR/icons.theme"
     if active; then refresh; fi
@@ -614,6 +673,15 @@ if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_
   [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snapshot_take "$(describe_changes)" >/dev/null
 fi
 
+# The plugins that are on, recorded once: before the theme's first piece.
+if (( ${#add[@]} )) && [[ ! -s $BEFORE_THEME ]]; then
+  if none_installed; then
+    mkdir -p "$BACKUP_DIR"
+    omarchy plugin list --json 2>/dev/null |
+      jq -ce '[.[] | select(.enabled) | {id, clonedFrom}]' >"$BEFORE_THEME" 2>/dev/null || rm -f "$BEFORE_THEME"
+  fi
+fi
+
 if [[ -n $switch_to ]] && active; then
   omarchy theme set "$switch_to"
   say "Switched to $switch_to"
@@ -625,6 +693,11 @@ if (( ${#remove[@]} )); then
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
   say "Done. Backups of edited files end in .bak.$STAMP"
+  # All of it gone: the next install records afresh what is on then.
+  none_installed && rm -f "$BEFORE_THEME"
+  if [[ -n ${remove[icons]:-} ]] && ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]]; then
+    echo "    MacTahoe icons weren't installed by the theme, so they stay in ~/.local/share/icons"
+  fi
   if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
     echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons"
   fi
@@ -659,7 +732,9 @@ fi
 
 # 1b. MacTahoe icons (GPL-3.0, github.com/vinceliuice/MacTahoe-icon-theme):
 # only the default color, into your home folder, no password needed.
-if want icons; then
+if want icons && ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]]; then
+  say "MacTahoe icons are already installed, not by the theme; it uses them as they are"
+elif want icons; then
   tmp=$(mktemp -d)
   if git clone -q --depth 1 https://github.com/vinceliuice/MacTahoe-icon-theme.git "$tmp/MacTahoe" &&
     bash "$tmp/MacTahoe/install.sh" -t default >/dev/null; then
@@ -680,6 +755,8 @@ if want icons; then
         [[ -e $sym || ! -f $t/places/symbolic/folder-symbolic.svg ]] || cp "$t/places/symbolic/folder-symbolic.svg" "$sym"
       done
       gtk-update-icon-cache -f -q "$t" 2>/dev/null || true
+      # Only icons with this mark are the theme's to remove.
+      touch "$t/$OWN_MARK"
     done
   else
     echo "Could not install MacTahoe icons; keeping the default icons." >&2
@@ -747,13 +824,16 @@ if want menubar; then
   fresh=true; installed menubar && fresh=false
   kept_layout=
   $fresh || kept_layout=$(jq -ce '.bar.layout | objects' "$SHELL_JSON" 2>/dev/null) || true
+  if $fresh; then
+    mkdir -p "$BACKUP_DIR"
+    jq -c '.bar.layout // null' "$SHELL_JSON" >"$BAR_BEFORE" 2>/dev/null || echo null >"$BAR_BEFORE"
+  fi
   for id in $MENUBAR_IDS; do install_plugin "$id"; done
   # The workspaces: a click goes there, a right-click picks the layout, as a
   # macOS menu-bar item's menu does (Omarchy's cycles the shown one's layout
   # on a click). A clone of this Omarchy's widget, patched; none yet means
   # making one.
-  ws_dir=$(workspaces_clones | head -n1)
-  [[ -n $ws_dir ]] || ws_dir=$(omarchy plugin clone omarchy.workspaces 2>/dev/null | sed -n 's/^Cloned omarchy.workspaces to \(.*\) and switched.*/\1/p')
+  ws_dir=$(theme_clone omarchy.workspaces Workspaces.qml "$WORKSPACES_MARK") || ws_dir=""
   if [[ -n $ws_dir && -f $ws_dir/Workspaces.qml ]]; then
     # This Omarchy's own widget each time, then patched: its updates come
     # along, and so does a newer patch.
@@ -809,11 +889,7 @@ fi
 if want wide-menu; then
   # Clone the menu of the Omarchy version installed here, then patch it (width,
   # magnifying glass, "Search"), so it matches this Omarchy's menu otherwise.
-  # No clone yet fails the lookup, which only means making one.
-  menu_dir=$(ls -d "$PLUGINS_DIR"/*.menu 2>/dev/null | while read -r d; do grep -q '"clonedFrom": "omarchy.menu"' "$d/manifest.json" 2>/dev/null && echo "$d"; done | head -n1) || true
-  if [[ -z $menu_dir ]]; then
-    menu_dir=$(omarchy plugin clone omarchy.menu 2>/dev/null | sed -n 's/^Cloned omarchy.menu to \(.*\) and switched.*/\1/p')
-  fi
+  menu_dir=$(theme_clone omarchy.menu Menu.qml "$WIDE_MARK") || menu_dir=""
   if [[ -n $menu_dir && -f $menu_dir/Menu.qml ]]; then
     perl -0pi "$REPO/menu-patch.pl" "$menu_dir/Menu.qml"
     grep -q "Style.space(560)), panel.width" "$menu_dir/Menu.qml" && say "Widened the Omarchy menu, with a Spotlight search line" || echo "    Could not patch this Omarchy version's menu; it keeps its own look." >&2
@@ -834,16 +910,9 @@ if want lock; then
   # Clone Omarchy's lock (only a clone may unlock), take this Omarchy's own
   # locking and PAM code into it every time, and draw it with the macOS view.
   lock_src="$OMARCHY_PATH/shell/plugins/lock"
-  lock_dir=$(lock_clones | head -n1)
-  if [[ -z $lock_dir ]]; then
-    lock_dir=$(omarchy plugin clone omarchy.lock 2>/dev/null | sed -n 's/^Cloned omarchy.lock to \(.*\) and switched.*/\1/p')
-  fi
-  if [[ -n $lock_dir && -d $lock_dir ]]; then
+  lock_dir=$(theme_clone omarchy.lock LockView.qml "$LOCK_MARK") || lock_dir=""
+  if [[ -n $lock_dir ]]; then
     for f in "$lock_src"/*; do [[ -e $f && ${f##*/} != manifest.json ]] && cp -r "$f" "$lock_dir/"; done
-    # A look of your own on an existing clone is kept beside it.
-    if [[ -f $lock_dir/LockView.qml ]] && ! grep -qF "$LOCK_MARK" "$lock_dir/LockView.qml" && ! cmp -s "$lock_dir/LockView.qml" "$lock_src/LockView.qml"; then
-      cp "$lock_dir/LockView.qml" "$lock_dir/LockView.qml.bak.$STAMP"
-    fi
     cp "$REPO/lock/LockView.qml" "$lock_dir/LockView.qml"
     omarchy plugin enable "$(basename "$lock_dir")" >/dev/null 2>&1 || true
     # The shell caches loaded QML, and Omarchy's lock keeps the lock command
