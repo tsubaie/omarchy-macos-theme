@@ -246,12 +246,13 @@ look_get() {
   v=$(sed -nE "s/${LOOK_RULE[$1]}.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null) || true
   echo "${v:-${DEFAULT[$1]}}"
 }
+# look_set <setting> <value> [folder]: the theme folder, or another copy of it.
 look_set() {
-  local value="$2 $2"
+  local value="$2 $2" dir=${3:-$THEME_DIR}
   [[ $1 == glass || $1 == web-glass ]] || value=$2
-  sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$THEME_DIR/look.lua"
+  sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$dir/look.lua"
   # The menu bar's panels and popups take the windows' glass too.
-  [[ $1 == glass ]] && sed -i -E "/^\[popups\]/,/^\[/ s/^(background-alpha *= *).*/\1$2/" "$THEME_DIR/shell.toml"
+  [[ $1 == glass ]] && sed -i -E "/^\[popups\]/,/^\[/ s/^(background-alpha *= *).*/\1$2/" "$dir/shell.toml"
   return 0
 }
 magnification() {
@@ -564,7 +565,9 @@ remove_theme() {
 # shellcheck source=backup.sh
 source "$REPO/backup.sh"
 
-# A preview writes the settings and shows them, and that is all.
+# A preview shows the settings, and that is all: it edits only the copy of the
+# theme Omarchy is showing, never the theme folder, so it needs no snapshot and
+# the next theme refresh (or Apply) replaces it.
 if $preview; then
   reload=false
   for k in "${!settings[@]}"; do
@@ -575,17 +578,16 @@ if $preview; then
         hyprctl eval "hl.config({ decoration = { blur = { enabled = $( ((v > 0)) && echo true || echo false ), size = $(( v > 0 ? v : 1 )) } } })" >/dev/null 2>&1 || true ;;
       glass|web-glass|snapping|drop-follow|title-bars|traffic-lights)
         installed theme || { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
-        look_set "$k" "${settings[$k]}"
+        shown="$HOME/.local/state/omarchy/current/theme"
+        active && [[ -f $shown/look.lua ]] || continue
+        look_set "$k" "${settings[$k]}" "$shown"
         reload=true ;;
       # The dock shows these itself, with nothing written.
       magnification|dock-size) omarchy-shell -q omarchy.dock preview "$k" "${settings[$k]}" >/dev/null 2>&1 || true ;;
       *) echo "$k can't be previewed; set it instead" >&2; exit 1 ;;
     esac
   done
-  if $reload && active; then
-    cp "$THEME_DIR/look.lua" "$THEME_DIR/shell.toml" "$HOME/.local/state/omarchy/current/theme/" 2>/dev/null || true
-    hyprctl reload >/dev/null 2>&1 || true
-  fi
+  if $reload; then hyprctl reload >/dev/null 2>&1 || true; fi
   exit 0
 fi
 
@@ -598,22 +600,26 @@ case $mode in
   import) import_profile "$mode_arg"; exit 0 ;;
 esac
 
+# Refused runs are refused before their snapshot, which would push out a real one.
+if [[ -n $switch_to ]] && active; then
+  omarchy theme list | grep -qxF "$switch_to" || { echo "No theme called $switch_to (see: omarchy theme list)" >&2; exit 1; }
+fi
+if [[ -n ${remove[theme]:-} && -z $switch_to ]] && active; then
+  echo "Switch to another theme first (omarchy theme set <name>), then remove the theme again." >&2
+  exit 1
+fi
+
 # Every change can be undone: a snapshot of how things are, first.
 if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]]; then
   [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snapshot_take "$(describe_changes)" >/dev/null
 fi
 
 if [[ -n $switch_to ]] && active; then
-  omarchy theme list | grep -qxF "$switch_to" || { echo "No theme called $switch_to (see: omarchy theme list)" >&2; exit 1; }
   omarchy theme set "$switch_to"
   say "Switched to $switch_to"
 fi
 
 if (( ${#remove[@]} )); then
-  if [[ -n ${remove[theme]:-} ]] && active; then
-    echo "Switch to another theme first (omarchy theme set <name>), then remove the theme again." >&2
-    exit 1
-  fi
   # Plugins before the theme they sit on.
   for f in widgets lock osd dock wide-menu switcher bar-icons menubar dictation-hud rows icons theme; do
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi

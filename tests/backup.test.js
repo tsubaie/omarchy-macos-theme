@@ -20,6 +20,8 @@ function makeHome() {
 [ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
 exit 0
 `, { mode: 0o755 })
+  // Never the real one: it would reload the desktop running the tests.
+  fs.writeFileSync(path.join(bin, "hyprctl"), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
   const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}` }
   delete env.MACOS_THEME_NO_SNAPSHOT
   const run = (...args) => {
@@ -79,6 +81,19 @@ try {
   assert.strictEqual(snaps.length, 11)
   assert.ok(snaps.some((x) => x.id === original && x.pinned))
 
+  // A damaged backup is refused before anything is removed, and leaves no
+  // snapshot of its own behind.
+  assert.strictEqual(a.run("--add", "dock").status, 0)
+  snaps = a.json("--backups", "--json")
+  const dockDir = a.config("omarchy/plugins/macos-theme.dock")
+  assert.ok(fs.existsSync(dockDir))
+  fs.writeFileSync(path.join(a.home, ".config/omarchy/macos-theme-backups/snapshots", snaps[0].id, "files.tar.gz"), "not a tarball")
+  const damaged = a.run("--restore", snaps[0].id)
+  assert.strictEqual(damaged.status, 1)
+  assert.match(damaged.out, /damaged/)
+  assert.ok(fs.existsSync(path.join(dockDir, "manifest.json")))
+  assert.strictEqual(a.json("--backups", "--json").length, snaps.length)
+
   // Bad ids are refused.
   assert.strictEqual(a.run("--restore", "nope").status, 1)
   assert.strictEqual(a.run("--restore", "../../etc").status, 1)
@@ -131,6 +146,58 @@ try {
   spawnSync("tar", ["-C", evil, "-czf", path.join(evil, "future.tar.gz"), "profile.json"])
   assert.strictEqual(c.run("--import", path.join(evil, "future.tar.gz")).status, 1)
   assert.strictEqual(c.run("--import", path.join(evil, "missing.tar.gz")).status, 1)
+
+  // A link in the file is refused, even with an image's name: it would copy
+  // what it points to (a private key, say) into the theme.
+  fs.writeFileSync(path.join(evil, "profile.json"), JSON.stringify({ format: 1, pieces: [] }))
+  fs.writeFileSync(path.join(evil, "secret"), "private")
+  fs.mkdirSync(path.join(evil, "backgrounds"))
+  fs.symlinkSync(path.join(evil, "secret"), path.join(evil, "backgrounds/a.jpg"))
+  spawnSync("tar", ["-C", evil, "-czf", path.join(evil, "link.tar.gz"), "profile.json", "backgrounds"])
+  const linked = c.run("--import", path.join(evil, "link.tar.gz"))
+  assert.strictEqual(linked.status, 1)
+  assert.match(linked.out, /links/)
+  assert.ok(!fs.existsSync(c.config("omarchy/themes/macos/backgrounds/a.jpg")))
+
+  // A restore that fails half-way puts back how things were, the theme's own
+  // wallpapers too. A file where gtk-4.0 should be makes the move fail.
+  const e = makeHome()
+  assert.strictEqual(e.run("--add", "theme", "--add", "rows").status, 0)
+  assert.ok(fs.existsSync(e.config("gtk-4.0/gtk.css")))
+  assert.strictEqual(e.run("--backup").status, 0)
+  const withGtk = e.json("--backups", "--json")[0].id
+  fs.rmSync(e.config("gtk-4.0"), { recursive: true })
+  fs.writeFileSync(e.config("gtk-4.0"), "in the way")
+  const failed = e.run("--restore", withGtk)
+  assert.strictEqual(failed.status, 1)
+  assert.match(failed.out, /put back as they were/)
+  assert.strictEqual(fs.readFileSync(e.config("gtk-4.0"), "utf8"), "in the way")
+  for (const w of fs.readdirSync(path.join(__dirname, "..", "theme/backgrounds")))
+    assert.ok(fs.existsSync(e.config(`omarchy/themes/macos/backgrounds/${w}`)), w)
+  assert.strictEqual(e.json("--status", "--json").features.theme, true)
+  assert.deepStrictEqual(fs.readdirSync(e.config("")).filter((f) => f.startsWith(".macos-theme-restore")), [])
+
+  // Removing the current theme is refused before its snapshot is taken.
+  const d = makeHome()
+  assert.strictEqual(d.run("--add", "theme").status, 0)
+  fs.writeFileSync(path.join(d.home, "current"), "Macos")
+  const count = d.json("--backups", "--json").length
+  const refusedRemove = d.run("--remove", "theme")
+  assert.strictEqual(refusedRemove.status, 1)
+  assert.match(refusedRemove.out, /Switch to another theme first/)
+  assert.strictEqual(d.json("--backups", "--json").length, count)
+
+  // A preview edits only the theme Omarchy is showing, never the theme
+  // folder, so a quit mid-drag leaves nothing saved.
+  const shown = path.join(d.home, ".local/state/omarchy/current/theme")
+  fs.mkdirSync(shown, { recursive: true })
+  fs.cpSync(d.config("omarchy/themes/macos"), shown, { recursive: true })
+  const lookBefore = fs.readFileSync(d.config("omarchy/themes/macos/look.lua"), "utf8")
+  const previewed = d.run("--preview", "--set", "glass=0.9")
+  assert.strictEqual(previewed.status, 0, previewed.out)
+  assert.strictEqual(fs.readFileSync(d.config("omarchy/themes/macos/look.lua"), "utf8"), lookBefore)
+  assert.match(fs.readFileSync(path.join(shown, "look.lua"), "utf8"), /0\.9 0\.9/)
+  assert.strictEqual(d.json("--backups", "--json").length, count)
 } finally {
   for (const home of homes) fs.rmSync(home, { recursive: true, force: true })
 }

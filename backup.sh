@@ -102,22 +102,53 @@ snapshot_list_text() {
   snapshot_list_json | jq -r '.[] | "\(.id)  \(.created[0:16] | sub("T"; " "))  \(if .original then "Before macOS theme" else .note end)\(if .pinned then "  (kept)" else "" end)"'
 }
 
+# Puts a snapshot's files in place of the theme's, all or nothing: they are
+# unpacked beside them first, so a damaged archive changes nothing.
+snapshot_unpack() {
+  local stage p moved=true
+  # A restore killed half-way leaves its folder; the next one clears it.
+  rm -rf "${CONFIG:?}"/.macos-theme-restore.*
+  stage=$(mktemp -d "$CONFIG/.macos-theme-restore.XXXXXX") || return 1
+  tar -C "$stage" --no-same-owner -xzf "$1" 2>/dev/null || { rm -rf "${stage:?}"; return 1; }
+
+  for p in $SNAPSHOT_FILES; do rm -f "${CONFIG:?}/$p"; done
+  while read -r p; do [[ -n $p ]] && rm -rf "${CONFIG:?}/$p"; done < <(managed_plugins)
+  rm -rf "${THEME_DIR:?}"
+  # Same filesystem, so each move is a rename. Globbed, so names may hold spaces.
+  for p in $SNAPSHOT_FILES; do unpack_move "$stage" "$stage/$p" || moved=false; done
+  for p in "$stage"/omarchy/plugins/* "$stage/omarchy/themes/macos"; do unpack_move "$stage" "$p" || moved=false; done
+  rm -rf "${stage:?}"
+  # The theme's own files, left out of snapshots.
+  [[ -d $THEME_DIR ]] && cp -rn "$REPO/theme/." "$THEME_DIR/"
+  $moved
+}
+# unpack_move <stage> <path in it>: moves it to the same place under $CONFIG.
+unpack_move() {
+  [[ -e $2 || -L $2 ]] || return 0
+  local to="$CONFIG/${2#"$1"/}"
+  mkdir -p "$(dirname "$to")" && mv "$2" "$to"
+}
+
 # Puts a snapshot back: first a snapshot of now, so the restore can be undone,
 # then the files, then the Omarchy theme that was current, reloaded once.
 snapshot_restore() {
   local id="$1" dir="$SNAPSHOTS/$1" p theme
   [[ $id =~ $SNAPSHOT_ID_PATTERN && -f $dir/files.tar.gz ]] ||
     { echo "No backup called $id (see: ./install.sh --backups)" >&2; exit 1; }
+  tar -tzf "$dir/files.tar.gz" >/dev/null 2>&1 ||
+    { echo "The backup $id is damaged and can't be restored; nothing was changed" >&2; exit 1; }
   theme=$(jq -r '.theme // ""' "$dir/meta.json")
   local undo
   undo=$(snapshot_take "Before restoring $(jq -r '.created[0:16] | sub("T"; " ")' "$dir/meta.json")")
 
-  for p in $SNAPSHOT_FILES; do rm -f "${CONFIG:?}/$p"; done
-  while read -r p; do [[ -n $p ]] && rm -rf "${CONFIG:?}/$p"; done < <(managed_plugins)
-  rm -rf "${THEME_DIR:?}"
-  tar -C "$CONFIG" --no-same-owner -xzf "$dir/files.tar.gz"
-  # The theme's own files, left out of snapshots.
-  [[ -d $THEME_DIR ]] && cp -rn "$REPO/theme/." "$THEME_DIR/"
+  if ! snapshot_unpack "$dir/files.tar.gz"; then
+    if snapshot_unpack "$SNAPSHOTS/$undo/files.tar.gz"; then
+      echo "Couldn't restore the backup $id; your files were put back as they were" >&2
+    else
+      echo "Couldn't restore the backup $id; put your files back with: ./install.sh --restore $undo" >&2
+    fi
+    exit 1
+  fi
 
   if [[ -n $theme && $theme != "$(omarchy theme current 2>/dev/null)" ]]; then
     omarchy theme set "$theme"
@@ -179,6 +210,9 @@ import_profile() {
     [[ $entry =~ ^(\./)?(profile\.json|backgrounds/?|backgrounds/[A-Za-z0-9._\ -]+\.(jpg|jpeg|png|webp))$ ]] ||
       { echo "Not a macOS theme export (unexpected $entry)" >&2; exit 1; }
   done < <(tar -tzf "$file" 2>/dev/null || echo "?")
+  # Plain files and folders only: a link would let it copy any file of yours.
+  [[ -z $(tar -tvzf "$file" | cut -c1 | grep -v '[-d]') ]] ||
+    { echo "Not a macOS theme export (it holds links)" >&2; exit 1; }
   tmp=$(mktemp -d)
   tar -C "$tmp" --no-same-owner --no-same-permissions -xzf "$file"
   local profile="$tmp/profile.json"
