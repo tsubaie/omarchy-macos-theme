@@ -4,7 +4,7 @@
 # show for its window. Build it first (cargo build --release).
 #
 #   ./install-desktop.sh                     the app manages ~/.local/share/omarchy-macos-theme
-#   ./install-desktop.sh ~/Projects/omarchy-macos-theme   it manages that checkout instead
+#   ./install-desktop.sh ..                  it manages the theme in this checkout instead
 #   ./install-desktop.sh --remove            take the entry and icon away
 set -euo pipefail
 

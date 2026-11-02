@@ -427,12 +427,13 @@ pub fn fetch(dir: &Path) {
 }
 
 /// How many commits the theme on GitHub is ahead of the one here, as last
-/// fetched; 0 when that can't be told.
+/// fetched; 0 when that can't be told. Commits that touch only Studio, which
+/// lives in the same repository, don't count: they change nothing installed.
 pub fn updates_behind(dir: &Path) -> u32 {
     Command::new("git")
         .arg("-C")
         .arg(dir)
-        .args(["rev-list", "--count", "HEAD..@{upstream}"])
+        .args(["rev-list", "--count", "HEAD..@{upstream}", "--", ".", ":(exclude)studio"])
         .output()
         .ok()
         .filter(|output| output.status.success())

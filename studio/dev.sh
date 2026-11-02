@@ -3,7 +3,7 @@
 # It reopens on the page it was on, which the app remembers by itself.
 #
 #   ./dev.sh                     against ~/.local/share/omarchy-macos-theme
-#   ./dev.sh ~/Projects/omarchy-macos-theme   against a checkout of the theme
+#   ./dev.sh ..                  against the theme in this checkout
 #
 # Needs inotifywait (inotify-tools). Ctrl+C stops it and closes the app.
 set -u

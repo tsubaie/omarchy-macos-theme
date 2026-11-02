@@ -1,6 +1,6 @@
 # macOS Theme Studio
 
-Install, customize, back up and update the [macOS theme for Omarchy](https://github.com/tsubaie/omarchy-macos-theme), in a window shaped like macOS System Settings.
+Install, customize, back up and update the [macOS theme for Omarchy](../README.md), in a window shaped like macOS System Settings.
 
 ![macOS Theme Studio, General page](docs/general.png)
 
@@ -47,8 +47,8 @@ The app needs Omarchy and Rust. Omarchy already has Qt 6, which the app uses.
 
 ```bash
 sudo pacman -S rust
-git clone https://github.com/tsubaie/omarchy-macos-studio.git
-cd omarchy-macos-studio
+git clone https://github.com/tsubaie/omarchy-macos-theme.git
+cd omarchy-macos-theme/studio
 cargo build --release
 ./target/release/omarchy-macos-studio
 ```
@@ -57,7 +57,7 @@ To put it in the app launcher, with its name and icon (which the bar, the dock a
 
 ```bash
 ./install-desktop.sh                                  # it manages ~/.local/share/omarchy-macos-theme
-./install-desktop.sh ~/Projects/omarchy-macos-theme   # or a checkout of the theme
+./install-desktop.sh ..                               # or the theme in this checkout
 ./install-desktop.sh --remove                         # take it out again
 ```
 
@@ -159,10 +159,10 @@ QMAKE=qmake6 cargo build --release
 
 Release builds use thin link-time optimization so they rebuild quickly; packages use the `dist` profile for the smallest program (`cargo build --profile dist`). For the quickest rebuilds while working, use a debug build (`cargo build`, or `./dev.sh`).
 
-To work against a checkout of the theme instead of the downloaded copy:
+To work against the theme in this checkout instead of the downloaded copy:
 
 ```bash
-OMARCHY_MACOS_THEME_DIR=~/Projects/omarchy-macos-theme ./target/release/omarchy-macos-studio
+OMARCHY_MACOS_THEME_DIR=.. ./target/release/omarchy-macos-studio
 ```
 
 Open a given page with `--page <id>`: `overview`, `general`, `windows`, `dock`, `lock`, `widgets`, `menubar` or `backups`.
@@ -194,7 +194,7 @@ dev.sh           Watch mode
 ### Watch mode
 
 ```bash
-./dev.sh ~/Projects/omarchy-macos-theme
+./dev.sh ..
 ```
 
 Rebuilds and reopens the app on the same page whenever a file in `qml/`, `src/` or `assets/` is saved. A failed build leaves the last good app open, with the errors above it. Needs `inotify-tools`.

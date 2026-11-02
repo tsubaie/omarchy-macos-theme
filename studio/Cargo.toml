@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "Install, remove and customize the macOS theme for Omarchy"
 license = "MIT"
-repository = "https://github.com/tsubaie/omarchy-macos-studio"
+repository = "https://github.com/tsubaie/omarchy-macos-theme"
 
 [dependencies]
 anyhow = "1"
