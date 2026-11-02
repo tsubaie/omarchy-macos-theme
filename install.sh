@@ -27,6 +27,8 @@
 #                                 the theme's) or top (right, under the bar)
 #   ./install.sh --set dictation-hud=top  the same for the dictation panel
 #   ./install.sh --bar [--json]   the bar's items by section, and the hidden ones
+#   ./install.sh --doctor         what the running shell logged against the theme's plugins
+#                                 (errors, binding loops); exits 1 if anything
 #   ./install.sh --bar-layout '{"sections":{"right":["omarchy.clock",…],…},"hidden":["omarchy.weather"]}'
 #                                 show, hide and order the bar's items (sections: left,
 #                                 centerBegin, center, centerEnd, right, tray)
@@ -151,6 +153,7 @@ while (( $# )); do
     --status) status=true ;;
     --backups) mode=backups ;;
     --bar) mode=bar ;;
+    --doctor) mode=doctor ;;
     --bar-layout)
       bar_layout=${2:-}
       [[ -n $bar_layout ]] || { echo "--bar-layout needs a layout (try --help)" >&2; exit 1; }
@@ -379,7 +382,9 @@ bar_widgets() {
 bar_json() {
   local widgets layout
   widgets=$(bar_widgets)
-  layout=$(jq -c '.bar.layout // {}' "$SHELL_JSON" 2>/dev/null || echo "{}")
+  layout=$(jq -c '.bar.layout // {}' "$SHELL_JSON" 2>/dev/null) || true
+  # jq given nothing (no plugin list, an empty shell.json) prints nothing and succeeds.
+  : "${widgets:={\}}" "${layout:={\}}"
   # With Control Center on the bar, the widgets it stands in for that sit in
   # the tray's drawer are unseen there and open from it alone, so they are
   # listed as hidden; showing one puts it on the bar, hiding it puts it back.
@@ -626,6 +631,34 @@ remove_theme() {
   say "Removed the theme (kept in $kept)"
 }
 
+# What the running shell logged against the theme's plugins and clones: errors
+# and warnings, less the ones every shell logs (a second IPC handler, a
+# reload cutting a load short, a clone living outside the shell's folder).
+doctor() {
+  command -v qs >/dev/null || { echo "Needs Quickshell's qs command" >&2; exit 1; }
+  local dir ours=() log problems
+  for dir in "$PLUGINS_DIR"/macos-theme.* $(wide_menus) $(workspaces_clones) $(macos_locks); do
+    [[ -d $dir ]] && ours+=("$(basename "$dir" | sed 's/\./\\./g')")
+  done
+  (( ${#ours[@]} )) || { say "None of the theme's plugins is installed"; exit 0; }
+  # No log (the shell isn't running, or crashed) is no clean bill of health.
+  log=$(qs log -c "$OMARCHY_PATH/shell" 2>/dev/null) && [[ -n $log ]] ||
+    { echo "Couldn't read the shell's log; is it running? (omarchy restart shell)" >&2; exit 1; }
+  local IFS='|'
+  problems=$(sed 's/\x1b\[[0-9;]*m//g' <<<"$log" |
+    grep -E "^ *(WARN|ERROR|CRIT)" | grep -E "plugins/(${ours[*]})/" |
+    grep -vE 'Handler was registered but will not be used|destroyed during incubation|outside of the config folder' |
+    sed -E 's/^ *//; s#(file|qs):///[^ ]*/plugins/##g' | sort | uniq -c | sort -rn) || true
+  if [[ -z $problems ]]; then
+    say "Nothing logged against the theme's plugins"
+    exit 0
+  fi
+  echo "Since the shell started, it logged these against the theme's plugins (how often, then what);" >&2
+  echo "to see only what comes after a fix: omarchy restart shell, then --doctor again." >&2
+  echo "$problems" >&2
+  exit 1
+}
+
 # shellcheck source=backup.sh
 source "$REPO/backup.sh"
 
@@ -656,6 +689,7 @@ if $preview; then
 fi
 
 case $mode in
+  doctor) doctor ;;
   bar) if $json; then bar_json; else bar_text; fi; exit 0 ;;
   backups) if $json; then snapshot_list_json; else snapshot_list_text; fi; exit 0 ;;
   backup) say "Backed up as $(snapshot_take "Backed up by hand")"; exit 0 ;;

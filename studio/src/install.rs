@@ -51,6 +51,19 @@ impl fmt::Display for Piece {
     }
 }
 
+/// The settings Studio sets, each with the range `install.sh --set` accepts
+/// and whether it takes whole numbers only (a switch, a size in points).
+const SETTINGS: [(&str, f64, f64, bool); 8] = [
+    ("glass", 0.5, 1.0, false),
+    ("web-glass", 0.5, 1.0, false),
+    ("magnification", 1.0, 2.0, false),
+    ("dock-size", 32.0, 80.0, true),
+    ("snapping", 0.0, 1.0, true),
+    ("title-bars", 0.0, 1.0, true),
+    ("traffic-lights", 10.0, 20.0, true),
+    ("blur", 0.0, 20.0, true),
+];
+
 /// A setting `install.sh --set` takes, with the range it accepts.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Setting {
@@ -65,26 +78,18 @@ impl Setting {
     ///
     /// Fails for an unknown key or a value `install.sh` would refuse.
     pub fn try_new(key: &str, value: f64) -> Result<Self> {
-        let (key, range): (&'static str, (f64, f64)) = match key {
-            "glass" => ("glass", (0.5, 1.0)),
-            "web-glass" => ("web-glass", (0.5, 1.0)),
-            "magnification" => ("magnification", (1.0, 2.0)),
-            "dock-size" => ("dock-size", (32.0, 80.0)),
-            "snapping" => ("snapping", (0.0, 1.0)),
-            "title-bars" => ("title-bars", (0.0, 1.0)),
-            "traffic-lights" => ("traffic-lights", (10.0, 20.0)),
-            "blur" => ("blur", (0.0, 20.0)),
-            _ => bail!("unknown setting {key:?}"),
-        };
-        // Two decimals are all the sliders show; snapping is a switch, 0 or 1,
-        // blur a whole-number strength and the dock's size whole points.
-        let value = if matches!(key, "snapping" | "title-bars" | "traffic-lights" | "blur" | "dock-size") {
+        let &(key, low, high, whole) = SETTINGS
+            .iter()
+            .find(|setting| setting.0 == key)
+            .with_context(|| format!("unknown setting {key:?}"))?;
+        // Two decimals are all the sliders show; the rest are whole numbers.
+        let value = if whole {
             value.round()
         } else {
             (value * 100.0).round() / 100.0
         };
-        if !(range.0..=range.1).contains(&value) {
-            bail!("{key} must be from {} to {}, not {value}", range.0, range.1);
+        if !(low..=high).contains(&value) {
+            bail!("{key} must be from {low} to {high}, not {value}");
         }
         Ok(Setting { key, value })
     }
@@ -880,5 +885,137 @@ mod tests {
             "Switch to another theme first"
         );
         assert_eq!(last_line(b"", "fallback"), "fallback");
+    }
+}
+
+/// Studio against the real `install.sh` next to it, in a throwaway home with
+/// a fake `omarchy`: the names, ranges and arguments Studio sends are ones the
+/// installer takes, and what the installer prints is what Studio reads. A
+/// change to either side that breaks the other fails here.
+#[cfg(test)]
+mod contract {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Output;
+
+    struct Home(PathBuf);
+
+    impl Drop for Home {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    impl Home {
+        fn new() -> Self {
+            let home = env::temp_dir().join(format!("studio-contract-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&home);
+            let bin = home.join("bin");
+            fs::create_dir_all(&bin).expect("a throwaway home");
+            // Clones named after the user, as Omarchy names them; every other
+            // call succeeds quietly, and nothing reaches the real desktop.
+            let fakes = [
+                ("omarchy", "#!/bin/sh\n[ \"$1 $2\" = \"theme current\" ] && echo Other\n[ \"$1 $2\" = \"theme list\" ] && printf 'Macos\\nOther\\n'\nexit 0\n"),
+                ("hyprctl", "#!/bin/sh\nexit 0\n"),
+                ("omarchy-shell", "#!/bin/sh\nexit 0\n"),
+                ("fc-list", "#!/bin/sh\necho Inter\n"),
+            ];
+            for (name, script) in fakes {
+                let file = bin.join(name);
+                fs::write(&file, script).expect("a fake command");
+                fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).expect("executable");
+            }
+            Home(home)
+        }
+
+        fn install_sh(&self, args: &[&str]) -> Output {
+            let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+            let path = format!("{}:{}", self.0.join("bin").display(), env::var("PATH").unwrap_or_default());
+            Command::new("bash")
+                .arg(repo.join("install.sh"))
+                .args(args)
+                .env("HOME", &self.0)
+                .env("XDG_CONFIG_HOME", self.0.join(".config"))
+                .env("PATH", path)
+                .env("USER", "studio")
+                .env_remove("MACOS_THEME_NO_SNAPSHOT")
+                .output()
+                .expect("bash runs install.sh")
+        }
+
+        fn ok(&self, args: &[&str]) -> String {
+            let out = self.install_sh(args);
+            assert!(out.status.success(), "install.sh {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+            String::from_utf8(out.stdout).expect("text")
+        }
+    }
+
+    /// A list `install.sh` keeps as `NAME="a b c"`.
+    fn install_sh_list(name: &str) -> Vec<String> {
+        let script = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../install.sh")).expect("install.sh");
+        let line = script
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}=\"")))
+            .unwrap_or_else(|| panic!("install.sh has no {name}"));
+        line.trim_end_matches('"').split_whitespace().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn studio_knows_the_installer_lists() {
+        assert_eq!(install_sh_list("FEATURES"), PIECES);
+        assert_eq!(install_sh_list("DESKTOP_WIDGETS"), DESKTOP_WIDGETS);
+        assert_eq!(install_sh_list("BAR_SECTIONS"), BAR_SECTIONS);
+    }
+
+    #[test]
+    fn the_installer_takes_what_studio_sends_and_studio_reads_what_it_says() {
+        let home = Home::new();
+        home.ok(&["--add", "theme"]);
+
+        // Every setting's range: its ends are taken, a step past them refused.
+        for (key, low, high, whole) in SETTINGS {
+            let step = if whole { 1.0 } else { 0.01 };
+            for value in [low, high] {
+                home.ok(&["--set", &Setting::try_new(key, value).expect("in range").arg()]);
+            }
+            for value in [low - step, high + step] {
+                let arg = format!("{key}={}", (value * 100.0).round() / 100.0);
+                assert!(!home.install_sh(&["--set", &arg]).status.success(), "install.sh took {arg}");
+            }
+        }
+
+        // An Apply as the window sends one, every kind of change in it.
+        let changes = Changes::from_json(
+            r#"{"add": ["dock", "widgets"], "remove": ["rows"],
+                "set": {"glass": 0.8, "magnification": 1.5, "dock-size": 56, "blur": 12},
+                "clock": "center", "places": {"volume-hud": "top", "dictation-hud": "bottom"},
+                "widgets": ["clock", "weather"]}"#,
+        )
+        .expect("changes the window can send");
+        let args = changes.args();
+        home.ok(&args.iter().map(String::as_str).collect::<Vec<_>>());
+
+        // What it reports back, read by Studio's own readers.
+        let status = parse_status(&home.ok(&["--status", "--json"])).expect("a status Studio reads");
+        assert_eq!(status.features.keys().map(String::as_str).collect::<Vec<_>>(), {
+            let mut pieces = PIECES.to_vec();
+            pieces.sort_unstable();
+            pieces
+        });
+        for (key, ..) in SETTINGS {
+            assert!(status.settings.contains_key(key), "the status leaves out {key}");
+        }
+        assert_eq!(status.settings.get("glass"), Some(&0.8));
+        assert_eq!(status.clock.as_deref(), Some("center"));
+        assert_eq!(status.volume_hud.as_deref(), Some("top"));
+        assert_eq!(status.widgets, Some(vec!["clock".to_owned(), "weather".to_owned()]));
+        assert!(status.features["dock"]);
+
+        home.ok(&["--backup"]);
+        let backups: Vec<Backup> = serde_json::from_str(&home.ok(&["--backups", "--json"])).expect("backups Studio reads");
+        assert!(backups.len() >= 2, "{backups:?}");
+        assert!(backup_id(&backups[0].id).is_ok(), "an id Studio would restore: {}", backups[0].id);
+        serde_json::from_str::<serde_json::Value>(&home.ok(&["--bar", "--json"])).expect("a bar Studio reads");
     }
 }

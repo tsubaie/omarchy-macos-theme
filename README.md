@@ -264,6 +264,16 @@ Bar, menu, launcher, notification and popup colors and transparency are in `shel
 - Title bars fade with their window, so on glass windows they are about 70% opaque. Hyprland fades a window as a whole.
 - Apps that draw their own title bar (like Brave or Files) show the macOS strip above it.
 
+## Tests
+
+```bash
+tests/run.sh            # everything: the installer, Studio, an upgrade from an older version
+tests/run.sh --quick    # the installer's tests only, without building Studio
+./install.sh --doctor   # what the running shell logged against the theme's plugins
+```
+
+Most tests run the real `install.sh` in a throwaway home with a fake `omarchy`, so they never touch your setup. `tests/omarchy-compat.test.js` checks the theme against the Omarchy installed here: the menu and workspaces patches still apply, Omarchy's lock still drives `lock/LockView.qml`, Omarchy accepts each plugin, and no QML file has a syntax error. Run `tests/run.sh` after `omarchy-update`, and `--doctor` after reloading the shell. GitHub runs everything that doesn't need Omarchy on each push.
+
 ## Credits
 
 - Wallpapers: [photo by Pawel Czerwinski on Unsplash](https://unsplash.com/photos/ZkzobNDayXo) and [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4), used under the [Unsplash License](https://unsplash.com/license).

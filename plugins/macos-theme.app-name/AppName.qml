@@ -18,7 +18,11 @@ BarWidget {
   readonly property string name: entry && entry.name ? String(entry.name) : appId
 
   visible: name !== "" && !vertical
-  implicitWidth: visible ? Math.min(Style.space(240), label.implicitWidth) + Style.space(16) : 0
+  // Measured apart from the label: the label's width comes from this one, and
+  // an elided Text lays out again when its width changes, so taking its
+  // implicitWidth here made a binding loop.
+  TextMetrics { id: metrics; text: root.name; font: label.font }
+  implicitWidth: visible ? Math.min(Style.space(240), Math.ceil(metrics.advanceWidth)) + Style.space(16) : 0
   implicitHeight: barSize
 
   Text {

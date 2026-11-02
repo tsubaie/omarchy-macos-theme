@@ -1,0 +1,26 @@
+# Every test that runs without Omarchy: the theme's in throwaway homes with a
+# fake omarchy, the upgrade from an older version, and Studio's Rust and QML
+# tests. The checks against a real Omarchy skip themselves here; run
+# tests/run.sh on a machine with Omarchy for those.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      # git first, so the checkout keeps history: the upgrade test installs an
+      # older commit. diffutils for cmp, and a font for the QML tests' text.
+      - name: Install what the tests use
+        run: pacman -Syu --noconfirm --needed git base-devel diffutils rust nodejs jq perl qt6-base qt6-declarative ttf-dejavu
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Run the tests
+        run: tests/run.sh

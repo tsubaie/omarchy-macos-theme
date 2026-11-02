@@ -29,6 +29,19 @@ if [ "$1" = "bar" ] && [ -s "$XDG_CONFIG_HOME/omarchy/shell.json" ]; then
 fi
 exit 0
 `, { mode: 0o755 })
+// The shell's log for --doctor: one binding loop and one error from the theme's
+// plugins, and lines every shell logs, which --doctor leaves out.
+fs.writeFileSync(path.join(bin, "qs"), `#!/bin/sh
+[ "$1" = log ] || exit 0
+[ -e "$HOME/no-shell" ] && exit 1
+[ -e "$HOME/quiet-log" ] && { echo " DEBUG qml: all quiet"; exit 0; }
+P="file://$XDG_CONFIG_HOME/omarchy/plugins"
+echo "  WARN scene: QML AppName at $P/macos-theme.dock/Dock.qml[11:1]: Binding loop detected for property \\"implicitWidth\\":"
+echo " ERROR scene: $P/macos-theme.dock/Dock.qml[40:3]: TypeError: Cannot read property 'x' of null"
+echo "  WARN scene: QML ShellIpc at $P/macos-theme.dock/Dock.qml[9:3]: Handler was registered but will not be used because another handler is registered"
+echo "  INFO: qs://$XDG_CONFIG_HOME/omarchy/plugins/macos-theme.dock/Dock.qml: Object or context destroyed during incubation"
+echo "  WARN scene: QML Thing at $P/someone.else/Thing.qml[1:1]: Binding loop detected"
+`, { mode: 0o755 })
 // Inter installed, whatever this machine has, so a warning about it can't show up.
 fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
 
@@ -48,6 +61,23 @@ try {
   assert.match(hud.stderr, /Voxtype/)
   assert.doesNotMatch(hud.stdout, /Voxtype/)
   assert.strictEqual(run("--add", "dictation-hud").stderr, "")
+
+  // --doctor: what the shell logged against the theme's plugins, not the
+  // noise every shell logs or other plugins' problems; nothing logged is a pass.
+  const doctor = run("--doctor")
+  assert.strictEqual(doctor.status, 1)
+  assert.match(doctor.stderr, /macos-theme\.dock\/Dock\.qml\[11:1\]: Binding loop/)
+  assert.match(doctor.stderr, /TypeError/)
+  assert.doesNotMatch(doctor.stderr, /Handler was registered|incubation|someone\.else/)
+  fs.writeFileSync(path.join(home, "quiet-log"), "")
+  assert.strictEqual(run("--doctor").status, 0)
+  fs.rmSync(path.join(home, "quiet-log"))
+  // No shell running, so no log: that is a failure, not a pass.
+  fs.writeFileSync(path.join(home, "no-shell"), "")
+  const noShell = run("--doctor")
+  assert.strictEqual(noShell.status, 1)
+  assert.match(noShell.stderr, /Couldn't read the shell's log/)
+  fs.rmSync(path.join(home, "no-shell"))
   assert.strictEqual(run("--remove", "dock", "--remove", "dictation-hud").status, 0)
 
   // A fresh home: nothing installed, and every piece is reported.

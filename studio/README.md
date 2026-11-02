@@ -207,7 +207,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-`node tests/bar-model.test.js` tests the menu bar's Left, Center and Right groups, and `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml` drives real presses, drags and releases on its rows: moving within and between groups, hiding and showing, dropping into an empty group, letting go over nothing, the page holding still under a drag and scrolling at its edges, and several drags in a row.
+`../tests/run.sh` runs these and the theme's tests in one go. The Rust tests include a contract with the real `../install.sh`: the pieces, settings and ranges Studio sends are ones it takes, and Studio reads what it reports. `node tests/bar-model.test.js` tests the menu bar's Left, Center and Right groups, and `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml` drives real presses, drags and releases on its rows: moving within and between groups, hiding and showing, dropping into an empty group, letting go over nothing, the page holding still under a drag and scrolling at its edges, and several drags in a row.
 
 The Rust tests cover what can go wrong between the window and the installer: piece names, settings and their ranges, how changes combine into one installer call, refusing bad changes before anything runs, reading the installer's status and backups, backup ids, which pieces an update reinstalls, and recoloring Omarchy's logo.
 
