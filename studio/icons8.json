@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "icons": {
+    "pack": "sf-regular",
+    "sizes": [
+      17,
+      18,
+      20
+    ],
+    "color": "#ffffff",
+    "items": {
+      "general": {
+        "id": "M9s3DeMEWotE",
+        "commonName": "settings"
+      },
+      "dock": {
+        "id": "RXUO2mGBNQP2",
+        "commonName": "minimize-window"
+      },
+      "lock": {
+        "id": "DZbPJ4lsqOdQ",
+        "commonName": "lock"
+      },
+      "widgets": {
+        "id": "oSLHbQtBBBXk",
+        "commonName": "dashboard-layout"
+      },
+      "menubar": {
+        "id": "LBSGcgVt8pkY",
+        "commonName": "application-window"
+      },
+      "backups": {
+        "id": "MpN00l6F80aB",
+        "commonName": "time-machine"
+      },
+      "about": {
+        "id": "DWp2BGf88ZZb",
+        "commonName": "info"
+      },
+      "search": {
+        "id": "TQPOC8XaUqZ0",
+        "commonName": "search"
+      },
+      "clear": {
+        "id": "0UkEquwk40Zu",
+        "commonName": "cancel"
+      },
+      "windows": {
+        "id": "NWgTplOSnbXN",
+        "commonName": "picture-in-picture"
+      }
+    }
+  }
+}
