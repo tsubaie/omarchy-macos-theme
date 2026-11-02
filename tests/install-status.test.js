@@ -29,6 +29,8 @@ if [ "$1" = "bar" ] && [ -s "$XDG_CONFIG_HOME/omarchy/shell.json" ]; then
 fi
 exit 0
 `, { mode: 0o755 })
+// Inter installed, whatever this machine has, so a warning about it can't show up.
+fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
 
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
@@ -36,6 +38,18 @@ const status = () => JSON.parse(execFileSync("bash", [script, "--status", "--jso
 const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "bar-icons", "lock", "widgets"]
 
 try {
+  // stdout says what was done; stderr is for warnings only, which Studio shows
+  // as such: a plain install has none, the HUD's Voxtype tip is one, and it
+  // comes once, not again on every reinstall.
+  const plain = run("--add", "dock")
+  assert.strictEqual(plain.status, 0, plain.stderr)
+  assert.strictEqual(plain.stderr, "")
+  const hud = run("--add", "dictation-hud")
+  assert.match(hud.stderr, /Voxtype/)
+  assert.doesNotMatch(hud.stdout, /Voxtype/)
+  assert.strictEqual(run("--add", "dictation-hud").stderr, "")
+  assert.strictEqual(run("--remove", "dock", "--remove", "dictation-hud").status, 0)
+
   // A fresh home: nothing installed, and every piece is reported.
   let s = status()
   assert.deepStrictEqual(Object.keys(s.features), pieces)

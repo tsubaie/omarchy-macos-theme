@@ -20,6 +20,7 @@ pub mod qobject {
         #[qproperty(bool, busy)]
         #[qproperty(bool, downloaded)]
         #[qproperty(QString, error)]
+        #[qproperty(QString, warning)]
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
         #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
         #[qproperty(i32, updates, cxx_name = "updates")]
@@ -111,6 +112,7 @@ pub struct ThemeBackendRust {
     busy: bool,
     downloaded: bool,
     error: QString,
+    warning: QString,
     theme_dir: QString,
     theme_version: QString,
     updates: i32,
@@ -139,6 +141,7 @@ impl Default for ThemeBackendRust {
             busy: false,
             downloaded: install::is_downloaded(&dir),
             error: QString::default(),
+            warning: QString::default(),
             theme_dir: QString::from(dir.display().to_string().as_str()),
             theme_version: QString::default(),
             updates: 0,
@@ -161,6 +164,7 @@ struct Outcome {
     bar: Option<String>,
     updates: u32,
     error: Option<String>,
+    warning: String,
 }
 
 impl qobject::ThemeBackend {
@@ -170,7 +174,7 @@ impl qobject::ThemeBackend {
             if install::is_downloaded(dir) {
                 install::fetch(dir);
             }
-            Ok(())
+            Ok(install::Warnings::new())
         });
     }
 
@@ -262,18 +266,22 @@ impl qobject::ThemeBackend {
     /// both on the Qt thread. One job at a time: a click while busy is ignored.
     fn run<F>(mut self: Pin<&mut Self>, job: F)
     where
-        F: FnOnce(&std::path::Path) -> Result<()> + Send + 'static,
+        F: FnOnce(&std::path::Path) -> Result<install::Warnings> + Send + 'static,
     {
         if *self.busy() {
             return;
         }
         self.as_mut().set_busy(true);
         self.as_mut().set_error(QString::default());
+        self.as_mut().set_warning(QString::default());
 
         let dir = self.rust().dir.clone();
         let qt_thread = self.qt_thread();
         thread::spawn(move || {
-            let error = job(&dir).err().map(|error| format!("{error:#}"));
+            let (error, warning) = match job(&dir) {
+                Ok(warning) => (None, warning),
+                Err(error) => (Some(format!("{error:#}")), String::new()),
+            };
             let downloaded = install::is_downloaded(&dir);
             let (status, backups) = if downloaded {
                 (install::status(&dir), install::backups(&dir))
@@ -291,6 +299,7 @@ impl qobject::ThemeBackend {
                     0
                 },
                 error,
+                warning,
             };
             let queued = qt_thread.queue(move |mut backend| {
                 backend.as_mut().set_downloaded(downloaded);
@@ -327,6 +336,8 @@ impl qobject::ThemeBackend {
         self.as_mut().set_backups_json(QString::from(json.as_str()));
         self.as_mut()
             .set_error(QString::from(error.unwrap_or_default().as_str()));
+        self.as_mut()
+            .set_warning(QString::from(outcome.warning.as_str()));
         self.as_mut().set_busy(false);
     }
 }

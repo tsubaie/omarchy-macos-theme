@@ -48,10 +48,15 @@
 #   Every change takes a snapshot first, so it can be undone (the first one is kept for good):
 #   ./install.sh --backups [--json]   the snapshots, newest first
 #   ./install.sh --backup             take one now
-#   ./install.sh --restore <id>       put one back (taking a snapshot of now first)
+#   ./install.sh --restore <id>       put one back (taking a snapshot of now first); shell.json,
+#                                     looknfeel.lua and gtk.css come back whole, so edits you
+#                                     made to them since go too
 #   ./install.sh --export <file|dir>  your choices in one file, for another computer or a new install
 #   ./install.sh --import <file>      apply an export here
 #   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets
+#
+#   What it did goes to stdout; warnings and errors to stderr. So a run that
+#   succeeds (exit 0) may still have warned, about a piece it skipped, say.
 #
 # Why a script and not `omarchy theme install <url>`: themes installed from git
 # have their .lua files and ghostty.conf stripped for safety, and those carry
@@ -696,10 +701,10 @@ if (( ${#remove[@]} )); then
   # All of it gone: the next install records afresh what is on then.
   none_installed && rm -f "$BEFORE_THEME"
   if [[ -n ${remove[icons]:-} ]] && ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]]; then
-    echo "    MacTahoe icons weren't installed by the theme, so they stay in ~/.local/share/icons"
+    echo "    MacTahoe icons weren't installed by the theme, so they stay in ~/.local/share/icons" >&2
   fi
   if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
-    echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons"
+    echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons" >&2
   fi
   (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout ]] || exit 0
 fi
@@ -924,13 +929,17 @@ if want lock; then
   fi
 fi
 if want dictation-hud; then
+  # The Voxtype tips once, when the HUD is new, not on every reinstall (each Update).
+  hud_fresh=true; installed dictation-hud && hud_fresh=false
   install_plugin "$HUD_ID"
   say "Installed the dictation HUD"
-  if command -v voxtype >/dev/null; then
-    echo "    Voxtype draws its own overlay too. To show only the HUD, run:"
-    echo "      voxtype config set osd.enabled false && systemctl --user restart voxtype"
-  else
-    echo "    Voxtype isn't installed; the HUD stays hidden until it is."
+  if $hud_fresh; then
+    if command -v voxtype >/dev/null; then
+      echo "    Voxtype draws its own overlay too. To show only the HUD, run:" >&2
+      echo "      voxtype config set osd.enabled false && systemctl --user restart voxtype" >&2
+    else
+      echo "    Voxtype isn't installed; the HUD stays hidden until it is." >&2
+    fi
   fi
 fi
 

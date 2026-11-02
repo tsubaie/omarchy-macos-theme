@@ -3,8 +3,8 @@
 # A snapshot is a copy of what the theme changes, taken before every change so
 # any of them can be undone on this computer: shell.json, looknfeel.lua,
 # gtk.css, the theme folder, and the plugins the theme manages (its own, and
-# its clones of Omarchy's menu and lock). Other plugins are left out, so
-# restoring never rolls back something the theme didn't touch.
+# its clones of Omarchy's menu and lock). Other plugins are left out, so a
+# restore never touches them; the three files come back whole, though.
 #
 # An export holds your choices instead of files (which pieces, the settings,
 # the dock and widget setup, your own wallpapers), and an import re-applies

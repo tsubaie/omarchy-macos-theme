@@ -526,6 +526,29 @@ Window {
                 }
             }
 
+            // What the last action warned about though it succeeded (a piece
+            // it skipped, a font that's missing), in install.sh's own words.
+            Rectangle {
+                visible: backend.error === "" && backend.warning !== ""
+                width: parent.width
+                height: warningText.height + 20
+                radius: 8
+                color: Qt.rgba(1, 0.62, 0.04, 0.15)
+                border.width: 1
+                border.color: Qt.rgba(1, 0.62, 0.04, 0.4)
+
+                Text {
+                    id: warningText
+                    x: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 24
+                    text: backend.warning
+                    color: "#ffb340"
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+            }
+
             // Not downloaded yet: one button to fetch it.
             Group {
                 visible: !backend.downloaded
@@ -811,7 +834,7 @@ Window {
                                 enabled: !backend.busy
                                 onClicked: window.confirm = {
                                     title: "Restore the backup from " + window.when(modelData.created) + "?",
-                                    text: "Your theme goes back to how it was then. Your setup now is backed up first, so you can undo this.",
+                                    text: "Your theme goes back to how it was then: its plugins and folder, and shell.json, looknfeel.lua and gtk.css whole, so edits you made to those since (a keybinding, a bar change) go too. Your setup now is backed up first, so you can undo this.",
                                     button: "Restore",
                                     action: () => { window.discard(); backend.restore(modelData.id) }
                                 }

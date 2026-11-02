@@ -178,7 +178,7 @@ impl BarLayout {
 ///
 /// Fails when the installer can't list them, as one older than this does.
 pub fn bar(dir: &Path) -> Result<String> {
-    let json = run(dir, &["--bar", "--json"])?;
+    let json = run(dir, &["--bar", "--json"])?.out;
     serde_json::from_str::<serde_json::Value>(&json).context("reading the bar")?;
     Ok(json.trim().to_owned())
 }
@@ -219,7 +219,7 @@ pub fn is_downloaded(dir: &Path) -> bool {
 ///
 /// Fails when `install.sh` can't run or its report can't be read.
 pub fn status(dir: &Path) -> Result<Status> {
-    let report = run(dir, &["--status", "--json"])?;
+    let report = run(dir, &["--status", "--json"])?.out;
     parse_status(&report)
 }
 
@@ -378,18 +378,18 @@ fn shown_widgets(names: Vec<String>) -> Result<Vec<&'static str>> {
         .collect()
 }
 
-/// Applies the changes in one `install.sh` call.
+/// Applies the changes in one `install.sh` call, and returns its warnings.
 ///
 /// # Errors
 ///
 /// Fails with `install.sh`'s own message when it does.
-pub fn apply(dir: &Path, changes: &Changes) -> Result<()> {
+pub fn apply(dir: &Path, changes: &Changes) -> Result<Warnings> {
     if changes.is_empty() {
-        return Ok(());
+        return Ok(Warnings::new());
     }
     let args = changes.args();
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    run(dir, &args).map(drop)
+    run(dir, &args).map(|ran| ran.warnings)
 }
 
 /// Downloads the theme into `dir`.
@@ -397,7 +397,7 @@ pub fn apply(dir: &Path, changes: &Changes) -> Result<()> {
 /// # Errors
 ///
 /// Fails when `git` can't fetch it.
-pub fn download(dir: &Path) -> Result<()> {
+pub fn download(dir: &Path) -> Result<Warnings> {
     if let Some(parent) = dir.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
@@ -413,7 +413,7 @@ pub fn download(dir: &Path) -> Result<()> {
             last_line(&output.stderr, "git could not download the theme")
         );
     }
-    Ok(())
+    Ok(Warnings::new())
 }
 
 /// Asks GitHub for the theme's new commits. Offline or without git, it
@@ -461,7 +461,7 @@ fn reinstall(status: &Status) -> Vec<Piece> {
 ///
 /// Fails when git can't pull (such as when the folder has changes of its
 /// own), or with `install.sh`'s own message.
-pub fn update(dir: &Path) -> Result<()> {
+pub fn update(dir: &Path) -> Result<Warnings> {
     let installed = reinstall(&status(dir)?);
     let output = Command::new("git")
         .arg("-C")
@@ -552,7 +552,7 @@ pub struct Backup {
 ///
 /// Fails when `install.sh` can't list them.
 pub fn backups(dir: &Path) -> Result<Vec<Backup>> {
-    let list = run(dir, &["--backups", "--json"])?;
+    let list = run(dir, &["--backups", "--json"])?.out;
     serde_json::from_str(&list).context("reading the backups")
 }
 
@@ -561,8 +561,8 @@ pub fn backups(dir: &Path) -> Result<Vec<Backup>> {
 /// # Errors
 ///
 /// Fails with `install.sh`'s own message when it does.
-pub fn back_up(dir: &Path) -> Result<()> {
-    run(dir, &["--backup"]).map(drop)
+pub fn back_up(dir: &Path) -> Result<Warnings> {
+    run(dir, &["--backup"]).map(|ran| ran.warnings)
 }
 
 /// Checks a snapshot id: digits and dashes only, as `install.sh` makes them.
@@ -583,8 +583,8 @@ pub fn backup_id(id: &str) -> Result<String> {
 /// # Errors
 ///
 /// Fails with `install.sh`'s own message when it does.
-pub fn restore(dir: &Path, id: &str) -> Result<()> {
-    run(dir, &["--restore", id]).map(drop)
+pub fn restore(dir: &Path, id: &str) -> Result<Warnings> {
+    run(dir, &["--restore", id]).map(|ran| ran.warnings)
 }
 
 /// Writes the user's choices to `file`.
@@ -592,9 +592,9 @@ pub fn restore(dir: &Path, id: &str) -> Result<()> {
 /// # Errors
 ///
 /// Fails with `install.sh`'s own message when it does.
-pub fn export(dir: &Path, file: &Path) -> Result<()> {
+pub fn export(dir: &Path, file: &Path) -> Result<Warnings> {
     let file = file.to_str().context("the file's name isn't text")?;
-    run(dir, &["--export", file]).map(drop)
+    run(dir, &["--export", file]).map(|ran| ran.warnings)
 }
 
 /// Applies an export; `install.sh` snapshots the present first.
@@ -602,12 +602,12 @@ pub fn export(dir: &Path, file: &Path) -> Result<()> {
 /// # Errors
 ///
 /// Fails when the file is missing, or with `install.sh`'s own message.
-pub fn import(dir: &Path, file: &Path) -> Result<()> {
+pub fn import(dir: &Path, file: &Path) -> Result<Warnings> {
     if !file.is_file() {
         bail!("no file {}", file.display());
     }
     let file = file.to_str().context("the file's name isn't text")?;
-    run(dir, &["--import", file]).map(drop)
+    run(dir, &["--import", file]).map(|ran| ran.warnings)
 }
 
 /// Shows settings at once, for a slider being dragged: `install.sh --preview`
@@ -623,7 +623,19 @@ pub fn preview(dir: &Path, settings: &[Setting]) -> Result<()> {
     run(dir, &all).map(drop)
 }
 
-fn run(dir: &Path, args: &[&str]) -> Result<String> {
+/// What `install.sh` warned about on a run that still succeeded: a piece it
+/// skipped, a font that's missing. One per line; empty when it didn't.
+pub type Warnings = String;
+
+/// A run of `install.sh` that succeeded.
+struct Ran {
+    out: String,
+    warnings: Warnings,
+}
+
+/// Runs `install.sh`. It writes what it did to stdout, and warnings and
+/// errors to stderr, so stderr on success is its warnings.
+fn run(dir: &Path, args: &[&str]) -> Result<Ran> {
     let script = dir.join("install.sh");
     let output = Command::new("bash")
         .arg(&script)
@@ -634,7 +646,20 @@ fn run(dir: &Path, args: &[&str]) -> Result<String> {
     if !output.status.success() {
         bail!("{}", last_line(&output.stderr, "install.sh failed"));
     }
-    String::from_utf8(output.stdout).context("install.sh printed something that isn't text")
+    Ok(Ran {
+        out: String::from_utf8(output.stdout).context("install.sh printed something that isn't text")?,
+        warnings: warnings(&output.stderr),
+    })
+}
+
+/// The lines of stderr that say something, trimmed.
+fn warnings(stderr: &[u8]) -> Warnings {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The last line a command wrote to stderr, which is where `install.sh` says why.
@@ -837,6 +862,15 @@ mod tests {
             .expect("valid report");
         let names: Vec<String> = reinstall(&status).iter().map(ToString::to_string).collect();
         assert_eq!(names, ["dock", "theme"]);
+    }
+
+    #[test]
+    fn warnings_are_stderr_lines_that_say_something() {
+        assert_eq!(
+            warnings(b"    Could not patch the menu\n\n    Install Inter\n"),
+            "Could not patch the menu\nInstall Inter"
+        );
+        assert_eq!(warnings(b"\n  \n"), "");
     }
 
     #[test]

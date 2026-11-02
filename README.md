@@ -191,7 +191,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 
 ## Backups
 
-Every change the installer makes is backed up first, to `~/.config/omarchy/macos-theme-backups/snapshots`: your Omarchy shell settings (`shell.json`), `looknfeel.lua`, `gtk.css`, the theme folder and the plugins the theme manages. Plugins of your own are left out, so restoring never rolls back something the theme didn't touch. The theme's own wallpapers come back from the repository, so a backup is a few hundred KB. The first backup, from before the theme changed anything, is kept for good.
+Every change the installer makes is backed up first, to `~/.config/omarchy/macos-theme-backups/snapshots`: your Omarchy shell settings (`shell.json`), `looknfeel.lua`, `gtk.css`, the theme folder and the plugins the theme manages. Plugins and clones of your own are left out, so a restore never touches them. `shell.json`, `looknfeel.lua` and `gtk.css` come back whole, though: an edit you made to them after the backup (a keybinding, a bar change) goes too. The theme's own wallpapers come back from the repository, so a backup is a few hundred KB. The first backup, from before the theme changed anything, is kept for good.
 
 An export is different: it holds your choices rather than files, and an import applies them with the installer it runs in. So an export from one computer fits another, a new install, or a newer version of Omarchy and the theme. Pieces a newer version no longer has are skipped with a note.
 
