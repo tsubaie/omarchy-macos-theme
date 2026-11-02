@@ -913,10 +913,10 @@ mod contract {
             let _ = fs::remove_dir_all(&home);
             let bin = home.join("bin");
             fs::create_dir_all(&bin).expect("a throwaway home");
-            // Clones named after the user, as Omarchy names them; every other
-            // call succeeds quietly, and nothing reaches the real desktop.
+            // Every call succeeds quietly and nothing reaches the real desktop;
+            // bar moves are logged, so the test sees what was asked of the bar.
             let fakes = [
-                ("omarchy", "#!/bin/sh\n[ \"$1 $2\" = \"theme current\" ] && echo Other\n[ \"$1 $2\" = \"theme list\" ] && printf 'Macos\\nOther\\n'\nexit 0\n"),
+                ("omarchy", "#!/bin/sh\n[ \"$1 $2\" = \"theme current\" ] && echo Other\n[ \"$1 $2\" = \"theme list\" ] && printf 'Macos\\nOther\\n'\n[ \"$1 $2\" = \"bar move\" ] && echo \"$*\" >> \"$HOME/bar.log\"\nexit 0\n"),
                 ("hyprctl", "#!/bin/sh\nexit 0\n"),
                 ("omarchy-shell", "#!/bin/sh\nexit 0\n"),
                 ("fc-list", "#!/bin/sh\necho Inter\n"),
@@ -926,6 +926,11 @@ mod contract {
                 fs::write(&file, script).expect("a fake command");
                 fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).expect("executable");
             }
+            // Omarchy's own default shell.json, the one file of it the
+            // installer reads, as an empty one: the same here as in CI.
+            let defaults = home.join("omarchy/config/omarchy");
+            fs::create_dir_all(&defaults).expect("Omarchy's defaults");
+            fs::write(defaults.join("shell.json"), "{}").expect("Omarchy's default shell.json");
             Home(home)
         }
 
@@ -939,6 +944,7 @@ mod contract {
                 .env("XDG_CONFIG_HOME", self.0.join(".config"))
                 .env("PATH", path)
                 .env("USER", "studio")
+                .env("OMARCHY_PATH", self.0.join("omarchy"))
                 .env_remove("MACOS_THEME_NO_SNAPSHOT")
                 .output()
                 .expect("bash runs install.sh")
@@ -1007,7 +1013,9 @@ mod contract {
             assert!(status.settings.contains_key(key), "the status leaves out {key}");
         }
         assert_eq!(status.settings.get("glass"), Some(&0.8));
-        assert_eq!(status.clock.as_deref(), Some("center"));
+        // The clock moves through Omarchy's bar, which the fake only logs.
+        let bar_log = fs::read_to_string(home.0.join("bar.log")).unwrap_or_default();
+        assert!(bar_log.contains("bar move omarchy.clock --section center"), "{bar_log}");
         assert_eq!(status.volume_hud.as_deref(), Some("top"));
         assert_eq!(status.widgets, Some(vec!["clock".to_owned(), "weather".to_owned()]));
         assert!(status.features["dock"]);

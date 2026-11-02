@@ -94,6 +94,21 @@ try {
   assert.ok(fs.existsSync(path.join(dockDir, "manifest.json")))
   assert.strictEqual(a.json("--backups", "--json").length, snaps.length)
 
+  // Several in one second come newest first: -10 after -2, as numbers.
+  const t = makeHome()
+  const snapshots = t.config("omarchy/macos-theme-backups/snapshots")
+  for (const id of ["20260101-000000", "20260101-000000-2", "20260101-000000-10", "20251231-235959"]) {
+    fs.mkdirSync(path.join(snapshots, id), { recursive: true })
+    fs.writeFileSync(path.join(snapshots, id, "meta.json"), JSON.stringify({ id, created: "", note: id, pinned: false, original: false }))
+  }
+  assert.deepStrictEqual(t.json("--backups", "--json").map((x) => x.id),
+    ["20260101-000000-10", "20260101-000000-2", "20260101-000000", "20251231-235959"])
+  // And one taken in a second that already has one is numbered after it.
+  for (let i = 0; i < 3; i++) assert.strictEqual(t.run("--backup").status, 0)
+  const taken = t.json("--backups", "--json").filter((x) => x.note === "Backed up by hand").map((x) => x.id)
+  assert.strictEqual(new Set(taken).size, 3)
+  for (const id of taken) assert.match(id, /^[0-9]{8}-[0-9]{6}(-[0-9]+)?$/)
+
   // Bad ids are refused.
   assert.strictEqual(a.run("--restore", "nope").status, 1)
   assert.strictEqual(a.run("--restore", "../../etc").status, 1)

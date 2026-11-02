@@ -16,6 +16,9 @@ SNAPSHOTS="$BACKUP_DIR/snapshots"
 SNAPSHOT_KEEP=10
 SNAPSHOT_FILES="omarchy/shell.json hypr/looknfeel.lua gtk-4.0/gtk.css"
 SNAPSHOT_ID_PATTERN='^[0-9]{8}-[0-9]{6}(-[0-9]+)?$'
+# Snapshots in the order they were taken: by the second, then by the number a
+# second one in the same second gets (-2, -3, …), as a number, not as text.
+SNAPSHOT_ORDER='def taken: .id | capture("^(?<at>[0-9]{8}-[0-9]{6})(-(?<n>[0-9]+))?$") | [.at, ((.n // "1") | tonumber)];'
 EXPORT_FORMAT=1
 
 # The plugin folders the theme manages, relative to $CONFIG: its own, and its
@@ -45,7 +48,8 @@ describe_changes() {
 snapshot_take() {
   local note="$1" id dir paths=() p first=false original=false
   id=$(date +%Y%m%d-%H%M%S)
-  [[ -d $SNAPSHOTS/$id ]] && id="$id-$$"
+  local base=$id n=1
+  while [[ -d $SNAPSHOTS/$id ]]; do id="$base-$((++n))"; done
   dir="$SNAPSHOTS/$id"
   [[ -n $(ls -A "$SNAPSHOTS" 2>/dev/null) ]] || first=true
   mkdir -p "$dir"
@@ -83,7 +87,7 @@ snapshot_take() {
 snapshot_prune() {
   local old
   jq -rs --argjson keep "$SNAPSHOT_KEEP" \
-    '[.[] | select(.pinned | not)] | sort_by(.id) | reverse | .[$keep:][] | .id' \
+    "$SNAPSHOT_ORDER"' [.[] | select(.pinned | not)] | sort_by(taken) | reverse | .[$keep:][] | .id' \
     "$SNAPSHOTS"/*/meta.json 2>/dev/null | while read -r old; do
     [[ $old =~ $SNAPSHOT_ID_PATTERN ]] && rm -rf "${SNAPSHOTS:?}/$old"
   done
@@ -91,7 +95,7 @@ snapshot_prune() {
 
 snapshot_list_json() {
   if compgen -G "$SNAPSHOTS/*/meta.json" >/dev/null; then
-    jq -s 'sort_by(.id) | reverse' "$SNAPSHOTS"/*/meta.json
+    jq -s "$SNAPSHOT_ORDER"' sort_by(taken) | reverse' "$SNAPSHOTS"/*/meta.json
   else
     echo "[]"
   fi
