@@ -12,7 +12,6 @@ Column {
     property var groups: ({ left: [], center: [], right: [], hidden: [] })
     // {id: name}
     property var names: ({})
-    property bool enabled: true
     // The page this sits in, scrolled while a row is dragged near its edges,
     // and kept from scrolling under a drag.
     property Flickable flickable: null
@@ -38,6 +37,16 @@ Column {
 
     function moveTo(id, group, index) {
         changed(BarModel.move(groups, id, group, index))
+    }
+
+    // The keyboard's move: one place up or down, its handle keeping the focus
+    // once the rows are rebuilt around it.
+    property string refocus: ""
+    function nudge(id, delta) {
+        const next = BarModel.nudge(groups, id, delta)
+        if (next === groups) return
+        refocus = id
+        changed(next)
     }
 
     // Every row and empty group, so a drag can tell what it is over from where
@@ -237,6 +246,16 @@ Column {
 
                                     Accessible.role: Accessible.Grip
                                     Accessible.name: "Move " + root.name(row.modelData)
+                                    Accessible.description: "Up and Down move it, into the next group at either end"
+
+                                    // Tab reaches it; Up and Down (with Alt too, as in
+                                    // macOS lists) move the item a place at a time.
+                                    activeFocusOnTab: true
+                                    Keys.onUpPressed: root.nudge(row.modelData, -1)
+                                    Keys.onDownPressed: root.nudge(row.modelData, 1)
+                                    Component.onCompleted: if (root.refocus === row.modelData) { root.refocus = ""; forceActiveFocus() }
+
+                                    FocusRing { controlRadius: 6 }
 
                                     Text {
                                         anchors.centerIn: parent

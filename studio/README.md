@@ -38,6 +38,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 - **Changes wait for Apply.** Flipping switches and moving sliders changes nothing until you press **Apply** in the toolbar at the top. Then every change goes to the installer in one call, so the theme reloads once. **Revert** throws the changes away.
 - **Every change is backed up first**, by the theme's installer, and can be restored from **Backups**.
 - **Search** at the top of the sidebar finds pages and the settings on them as you type: "glass" finds General, "weather" finds Widgets. Ctrl+F focuses it; ↑ and ↓ move through the results, Return opens one, Esc clears it.
+- **The keyboard does it all.** Tab moves between the sidebar and each control, with the blue ring macOS draws; ↑ and ↓ go through the sidebar's pages, Space or Return flips a switch or presses a button, the arrows move a slider (Page Up and Down, Home and End too) or pick a segment, and ↑ and ↓ on a menu bar item's handle move it, into the next group at either end. Ctrl+S applies. A question sheet holds the focus until it is answered: Esc cancels, and when the action would replace something, Cancel is the default. A control that can't be used says why under its row.
 - **Updates.** When the app opens it asks GitHub whether the theme has new commits. If it has, the theme card in the sidebar and the About page say **Update available**, and **Update** brings the theme up to date.
 - **It reopens on the page you last used**, and the window's title follows the page, as in macOS.
 
@@ -230,7 +231,7 @@ The app follows Apple's [Human Interface Guidelines](https://developer.apple.com
 - **The window title follows the page, and the last page is restored** ([Settings](https://developer.apple.com/design/human-interface-guidelines/settings)).
 - **macOS text sizes**: 13 pt body, 13 pt semibold headings ([Typography](https://developer.apple.com/design/human-interface-guidelines/typography)).
 - **Color only where it means something**: the controls and the Apply button; everything else neutral ([Color](https://developer.apple.com/design/human-interface-guidelines/color)).
-- **Screen-reader names and roles** for every switch, slider, button and page, and text contrast of at least 4.5:1 ([Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)).
+- **Screen-reader names and roles** for every switch, slider, button, page and question sheet (a dialog), a reason on a control that can't be used, full keyboard use, and text contrast of at least 4.5:1 ([Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)).
 - **Traffic lights in the sidebar and a toolbar across the top**, as Apple's own apps draw their windows: the page's title on the left, the changes waiting and **Apply** on the right, and the top of the window to drag it by. The theme turns its title bar off for this app only.
 
 ## Troubleshooting

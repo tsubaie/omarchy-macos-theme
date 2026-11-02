@@ -67,6 +67,20 @@ Item {
             wait(30)
         }
 
+        // The keyboard: Down on a handle moves the item a place, past its
+        // group's end into the next, and the handle keeps the focus.
+        function test_keyboard_moves_an_item_and_keeps_the_focus() {
+            find("grip-workspaces").forceActiveFocus()
+            keyClick(Qt.Key_Down)
+            compare(spy.last.left, ["menu"])
+            compare(spy.last.center, ["workspaces", "clock", "weather"])
+            tryVerify(() => findChild(list, "grip-workspaces") && findChild(list, "grip-workspaces").activeFocus)
+            keyClick(Qt.Key_Up)
+            compare(spy.last.left, ["menu", "workspaces"])
+            keyClick(Qt.Key_Up)
+            compare(spy.last.left, ["workspaces", "menu"])
+        }
+
         function test_move_down_within_a_group() {
             drag("menu", find("row-workspaces"), 0.8)
             verify(spy.last)

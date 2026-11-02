@@ -8,14 +8,26 @@ Item {
     // [{ value, label }], left to right.
     property var options: []
     property string value: ""
-    property bool enabled: true
     // What it picks, for screen readers; a row gives it its label.
     property string accessibleName: ""
+    property string reason: ""
     signal picked(string value)
+
+    // Tab reaches it; Left and Right pick the segment beside the chosen one.
+    activeFocusOnTab: true
+    function step(by) {
+        const at = options.findIndex(o => o.value === value)
+        const next = options[Math.max(0, Math.min(options.length - 1, at + by))]
+        if (next && next.value !== value) picked(next.value)
+    }
+    Keys.onLeftPressed: step(-1)
+    Keys.onRightPressed: step(1)
 
     implicitWidth: options.length * 64
     implicitHeight: 22
     opacity: enabled ? 1 : 0.4
+
+    FocusRing { controlRadius: 6 }
 
     Rectangle {
         anchors.fill: parent
@@ -43,6 +55,7 @@ Item {
                     Accessible.name: root.accessibleName + ": " + modelData.label
                     Accessible.checkable: true
                     Accessible.checked: chosen
+                    Accessible.description: root.enabled ? "" : root.reason
                     Accessible.onPressAction: if (root.enabled) root.picked(modelData.value)
 
                     Text {

@@ -55,6 +55,25 @@ function move(g, id, group, index) {
     return next
 }
 
+// One place up (-1) or down (+1), for the keyboard: within its group, and
+// past a group's end into the next one (Left, Center, Right, then not in the
+// menu bar), as a drag over that edge would. At the very ends it stays.
+function nudge(g, id, delta) {
+    var order = ["left", "center", "right", "hidden"]
+    for (var i = 0; i < order.length; i++) {
+        var list = g[order[i]] || []
+        var at = list.indexOf(id)
+        if (at < 0) continue
+        if (delta < 0 && at > 0) return move(g, id, order[i], at - 1)
+        // move() counts the index before taking the item out, so two below.
+        if (delta > 0 && at < list.length - 1) return move(g, id, order[i], at + 2)
+        var next = order[i + delta]
+        if (!next) return g
+        return move(g, id, next, delta < 0 ? (g[next] || []).length : 0)
+    }
+    return g
+}
+
 // The arrangement to apply, in Omarchy's sections: a group left as it was
 // keeps its sections untouched; a changed Center goes in the middle section
 // alone, and a changed Right goes on the right after the tray, with the
@@ -82,4 +101,4 @@ function layout(bar, g) {
     return { sections: sections, hidden: g.hidden.slice() }
 }
 
-if (typeof module !== "undefined") module.exports = { groups: groups, move: move, layout: layout }
+if (typeof module !== "undefined") module.exports = { groups: groups, move: move, nudge: nudge, layout: layout }

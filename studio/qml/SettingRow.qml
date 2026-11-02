@@ -9,6 +9,10 @@ Item {
     property string note: ""
     property bool last: false
     default property alias control: slot.data
+    // Why the control can't be used now, from the control itself (its
+    // reason), shown under the label while it can't.
+    readonly property Item firstControl: slot.children.length > 0 ? slot.children[0] : null
+    readonly property string reason: firstControl && !firstControl.enabled && firstControl.reason ? firstControl.reason : ""
 
     width: parent ? parent.width : 0
 
@@ -43,6 +47,15 @@ Item {
             visible: root.note !== ""
             text: root.note
             color: Qt.rgba(1, 1, 1, 0.5)
+            font.pixelSize: 11
+            wrapMode: Text.WordWrap
+        }
+
+        Text {
+            width: parent.width
+            visible: root.reason !== ""
+            text: root.reason
+            color: Qt.rgba(1, 1, 1, 0.6)
             font.pixelSize: 11
             wrapMode: Text.WordWrap
         }

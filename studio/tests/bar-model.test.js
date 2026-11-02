@@ -65,4 +65,15 @@ assert.deepStrictEqual(m.move(g, "clock", "middle", 0), g)
 const noTray = { sections: { right: [item("a")], tray: [item("b")] }, hidden: [] }
 assert.deepStrictEqual(m.groups(noTray).right, ["a", "b"])
 
+// The keyboard's one place up or down: within a group, across into the next
+// at its edge, and nowhere past the very ends.
+const k = { left: ["a", "b"], center: ["c"], right: [], hidden: ["d"] }
+assert.deepStrictEqual(m.nudge(k, "a", 1).left, ["b", "a"])
+assert.deepStrictEqual(m.nudge(k, "b", -1).left, ["b", "a"])
+assert.deepStrictEqual(m.nudge(k, "b", 1), { left: ["a"], center: ["b", "c"], right: [], hidden: ["d"] })
+assert.deepStrictEqual(m.nudge(k, "c", -1), { left: ["a", "b", "c"], center: [], right: [], hidden: ["d"] })
+assert.deepStrictEqual(m.nudge(k, "c", 1), { left: ["a", "b"], center: [], right: ["c"], hidden: ["d"] })
+assert.deepStrictEqual(m.nudge(k, "a", -1), k)
+assert.deepStrictEqual(m.nudge(k, "d", 1), k)
+
 console.log("bar model: ok")

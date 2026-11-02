@@ -9,14 +9,35 @@ Item {
     property real from: 0
     property real to: 1
     property real value: 0
-    property bool enabled: true
     property string accessibleName: ""
+    property string reason: ""
+    // How far an arrow key moves it; Page Up and Page Down move ten times that.
+    property real step: (to - from) / 20
     signal moved(real value)
     signal dragged(real value)
 
+    // Tab reaches it; the arrows, Page Up and Down, Home and End move it, as
+    // on a macOS slider. Each press is a move, as a let-go drag is.
+    activeFocusOnTab: true
+    function nudge(by) {
+        moved(Math.max(from, Math.min(to, value + by)))
+    }
+    Keys.onLeftPressed: nudge(-step)
+    Keys.onDownPressed: nudge(-step)
+    Keys.onRightPressed: nudge(step)
+    Keys.onUpPressed: nudge(step)
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_PageUp) nudge(step * 10)
+        else if (event.key === Qt.Key_PageDown) nudge(-step * 10)
+        else if (event.key === Qt.Key_Home) moved(from)
+        else if (event.key === Qt.Key_End) moved(to)
+        else return
+        event.accepted = true
+    }
+
     Accessible.role: Accessible.Slider
     Accessible.name: accessibleName
-    Accessible.description: shown.toFixed(2)
+    Accessible.description: enabled ? shown.toFixed(2) : reason
 
     // While dragging it shows where the knob is, and otherwise the value it
     // is given, so it follows the setting again once the theme has it.
@@ -55,6 +76,8 @@ Item {
         color: "white"
         border.width: 0.5
         border.color: Qt.rgba(0, 0, 0, 0.3)
+
+        FocusRing { controlRadius: knob.radius; visible: root.activeFocus }
     }
 
     MouseArea {

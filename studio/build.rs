@@ -11,7 +11,8 @@ fn main() {
             .qml_file("qml/SettingRow.qml")
             .qml_file("qml/SearchField.qml")
             .qml_file("qml/TrafficLights.qml")
-            .qml_file("qml/BarItems.qml"),
+            .qml_file("qml/BarItems.qml")
+            .qml_file("qml/FocusRing.qml"),
     )
     // Logic the QML imports, next to it, so node can test it too.
     .qrc_resources(["qml/BarModel.js"])

@@ -117,6 +117,13 @@ Window {
         return piece in pendingPieces ? pendingPieces[piece] : installed(piece)
     }
 
+    // Why a control waits on a piece, under its row while that piece is off.
+    function why(piece) {
+        const names = { theme: "the theme", dock: "the macOS dock", osd: "the volume panel",
+            "dictation-hud": "the dictation HUD", widgets: "the desktop widgets", lock: "the lock screen" }
+        return "Turn on " + (names[piece] || piece) + " to change this"
+    }
+
     function settingValue(key, fallback) {
         return key in pendingSettings ? pendingSettings[key] : setting(key, fallback)
     }
@@ -211,6 +218,36 @@ Window {
         sequences: [StandardKey.Find]
         onActivated: searchField.focusField()
     }
+    // Ctrl+S applies what is waiting; Escape leaves a search.
+    Shortcut {
+        sequences: [StandardKey.Save]
+        enabled: window.confirm === null && window.pendingCount > 0 && !backend.busy
+        onActivated: window.apply()
+    }
+    Shortcut {
+        sequence: "Escape"
+        enabled: window.confirm === null && window.query !== ""
+        onActivated: window.open(window.page)
+    }
+
+    // The sheet takes the focus while it asks, on Cancel when the action
+    // replaces something (HIG, Alerts: a destructive action is never the
+    // default), and gives it back to where it was.
+    property Item focusBeforeSheet: null
+    onConfirmChanged: {
+        if (confirm) {
+            focusBeforeSheet = window.activeFocusItem
+            Qt.callLater(() => (window.confirm && window.confirm.destructive ? sheetCancel : sheetAction).forceActiveFocus())
+        } else if (focusBeforeSheet) {
+            focusBeforeSheet.forceActiveFocus()
+            focusBeforeSheet = null
+        }
+    }
+    function acceptSheet() {
+        const action = confirm.action
+        confirm = null
+        action()
+    }
 
     // Sections group the sidebar as System Settings does; keywords are the
     // words on each page's rows, which search also finds.
@@ -242,6 +279,20 @@ Window {
         width: 232
         height: parent.height
         color: "#181818"
+
+        // One stop for Tab, as a macOS sidebar is: Up and Down go through its
+        // pages, the overview first, a ring on the one shown.
+        activeFocusOnTab: true
+        Accessible.role: Accessible.PageTabList
+        Accessible.name: "Settings"
+        Keys.onUpPressed: step(-1)
+        Keys.onDownPressed: step(1)
+        function step(by) {
+            if (window.query !== "") return
+            const ids = ["overview"].concat(window.listed.map(p => p.id))
+            const at = ids.indexOf(window.page)
+            window.page = ids[Math.max(0, Math.min(ids.length - 1, at + by))]
+        }
 
         Rectangle {
             anchors.right: parent.right
@@ -307,6 +358,8 @@ Window {
 
                 HoverHandler { id: cardHover }
 
+                FocusRing { controlRadius: 8; visible: sidebar.activeFocus && window.page === "overview" }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: window.open("overview")
@@ -362,7 +415,8 @@ Window {
                         topPadding: entry.index === 0 ? 2 : 12
                         bottomPadding: 4
                         text: ["", "Theme", "Data"][entry.modelData.section]
-                        color: Qt.rgba(1, 1, 1, 0.45)
+                        // 0.6, not lighter: dimmer fails text contrast (4.5:1) on the sidebar.
+                        color: Qt.rgba(1, 1, 1, 0.6)
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
                     }
@@ -379,6 +433,8 @@ Window {
                         Accessible.onPressAction: window.open(entry.modelData.id)
 
                         HoverHandler { id: hover }
+
+                        FocusRing { controlRadius: 6; visible: sidebar.activeFocus && entry.selected }
 
                         // A gray line symbol with no tile, as macOS draws sidebars
                         // in the graphite accent: a step dimmer than the label,
@@ -647,7 +703,7 @@ Window {
                         label: "Traffic light size"
                         note: "How big the close, minimize and zoom buttons are, in points; the bar grows to fit larger ones"
                         last: true
-                        SettingSlider { key: "traffic-lights"; from: 10; to: 20; fallback: 14; decimals: 0; available: window.settingValue("title-bars", 1) === 1 }
+                        SettingSlider { key: "traffic-lights"; from: 10; to: 20; fallback: 14; decimals: 0; available: window.settingValue("title-bars", 1) === 1; unavailable: "Turn on title bars to size their traffic lights" }
                     }
                 }
 
@@ -703,6 +759,7 @@ Window {
                     MacButton {
                         text: "Show"
                         enabled: window.installed("lock")
+                        reason: enabled ? "" : window.why("lock")
                         onClicked: backend.previewLock()
                     }
                 }
@@ -742,6 +799,8 @@ Window {
                                 checked: shown
                                 enabled: !backend.busy && window.pieceOn("widgets")
                                     && !(shown && window.widgetsShown.length === 1)
+                                reason: !window.pieceOn("widgets") ? window.why("widgets")
+                                    : shown && window.widgetsShown.length === 1 ? "One widget always stays shown" : ""
                                 onToggled: on => window.markWidget(modelData.id, on)
                             }
                         }
@@ -836,6 +895,7 @@ Window {
                                     title: "Restore the backup from " + window.when(modelData.created) + "?",
                                     text: "Your theme goes back to how it was then: its plugins and folder, and shell.json, looknfeel.lua and gtk.css whole, so edits you made to those since (a keybinding, a bar change) go too. Your setup now is backed up first, so you can undo this.",
                                     button: "Restore",
+                                    destructive: true,
                                     action: () => { window.discard(); backend.restore(modelData.id) }
                                 }
                             }
@@ -1021,6 +1081,7 @@ Window {
                 title: "Import " + file.split("/").pop() + "?",
                 text: "Your theme is set up to match it: its pieces, settings, dock, widgets and wallpapers. Your setup now is backed up first, so you can undo this.",
                 button: "Import",
+                destructive: true,
                 action: () => { window.discard(); backend.importFrom(file) }
             }
         }
@@ -1043,6 +1104,13 @@ Window {
             color: "#2c2c2e"
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.12)
+
+            Accessible.role: Accessible.Dialog
+            Accessible.name: window.confirm ? window.confirm.title : ""
+            Accessible.description: window.confirm ? window.confirm.text : ""
+            // Escape cancels; Return presses the focused button, which is the
+            // default one when the sheet opens.
+            Keys.onEscapePressed: window.confirm = null
 
             Column {
                 id: sheet
@@ -1070,15 +1138,23 @@ Window {
                 Row {
                     anchors.right: parent.right
                     spacing: 10
-                    MacButton { text: "Cancel"; onClicked: window.confirm = null }
+                    // Tab goes between the two and nowhere else while it asks.
                     MacButton {
+                        id: sheetCancel
+                        text: "Cancel"
+                        primary: !!window.confirm && !!window.confirm.destructive
+                        KeyNavigation.tab: sheetAction
+                        KeyNavigation.backtab: sheetAction
+                        onClicked: window.confirm = null
+                    }
+                    MacButton {
+                        id: sheetAction
                         text: window.confirm ? window.confirm.button : ""
-                        primary: true
-                        onClicked: {
-                            const action = window.confirm.action
-                            window.confirm = null
-                            action()
-                        }
+                        primary: !window.confirm || !window.confirm.destructive
+                        destructive: !!window.confirm && !!window.confirm.destructive
+                        KeyNavigation.tab: sheetCancel
+                        KeyNavigation.backtab: sheetCancel
+                        onClicked: window.acceptSheet()
                     }
                 }
             }
@@ -1137,6 +1213,7 @@ Window {
         options: [{ value: "bottom", label: "Bottom" }, { value: "top", label: "Top" }]
         value: window.placeValue(panel)
         enabled: !backend.busy && window.pieceOn(needs)
+        reason: window.pieceOn(needs) ? "" : window.why(needs)
         onPicked: place => window.markPlace(panel, place)
     }
 
@@ -1145,6 +1222,7 @@ Window {
         property string key: ""
         checked: window.settingValue(key, 1) === 1
         enabled: !backend.busy && window.pieceOn("theme")
+        reason: window.pieceOn("theme") ? "" : window.why("theme")
         onToggled: on => window.markSetting(key, on ? 1 : 0, 1)
     }
 
@@ -1637,11 +1715,14 @@ Window {
         // 0 for whole-number settings such as blur.
         property int decimals: 2
         property string needs: "theme"
-        // False while another setting makes this one moot.
+        // False while another setting makes this one moot, and why.
         property bool available: true
+        property string unavailable: ""
         width: 180
+        step: decimals === 0 ? 1 : 0.05
         value: window.settingValue(key, fallback)
         enabled: !backend.busy && window.pieceOn(needs) && available
+        reason: !window.pieceOn(needs) ? window.why(needs) : available ? "" : unavailable
         function take(v) {
             window.markSetting(key, decimals === 0 ? Math.round(v) : v, fallback)
             if (window.previewable.includes(key) && !previewSoon.running) previewSoon.start()
@@ -1666,21 +1747,34 @@ Window {
         }
     }
 
-    // The macOS push button: gray, rounded, white text.
+    // The macOS push button: gray, rounded, white text; blue for the default
+    // action, red for one that replaces or removes something.
     component MacButton: Rectangle {
         id: button
         property string text: ""
-        property bool enabled: true
         property bool primary: false
+        property bool destructive: false
+        property string reason: ""
         Accessible.role: Accessible.Button
         Accessible.name: text
+        Accessible.description: enabled ? "" : reason
         Accessible.onPressAction: if (enabled) clicked()
         signal clicked()
+        // Tab reaches it; Space or Return presses it.
+        activeFocusOnTab: true
+        Keys.onSpacePressed: clicked()
+        Keys.onReturnPressed: clicked()
+        Keys.onEnterPressed: clicked()
         width: label.width + 24
         height: 24
         radius: 6
         opacity: enabled ? 1 : 0.4
-        color: primary ? (press.pressed ? "#0a6fdc" : "#0a84ff") : (press.pressed ? "#5a5a5e" : "#48484c")
+        // Blues and reds dark enough for white text to read (4.5:1 and up).
+        color: destructive ? (press.pressed ? "#b00012" : "#d70015")
+            : primary ? (press.pressed ? "#0057b8" : "#0064d1")
+            : (press.pressed ? "#5a5a5e" : "#48484c")
+
+        FocusRing { controlRadius: 6 }
 
         Text {
             id: label

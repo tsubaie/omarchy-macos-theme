@@ -7,10 +7,17 @@ Item {
     id: root
 
     property bool checked: false
-    property bool enabled: true
     // What it turns on or off, for screen readers; a row gives it its label.
     property string accessibleName: ""
+    // Why it can't be used right now, shown under its row while it can't.
+    property string reason: ""
     signal toggled(bool checked)
+
+    // Tab reaches it; Space or Return flips it, as a macOS checkbox.
+    activeFocusOnTab: true
+    Keys.onSpacePressed: toggled(!checked)
+    Keys.onReturnPressed: toggled(!checked)
+    Keys.onEnterPressed: toggled(!checked)
 
     implicitWidth: 32
     implicitHeight: 18
@@ -20,6 +27,7 @@ Item {
     Accessible.name: accessibleName
     Accessible.checkable: true
     Accessible.checked: checked
+    Accessible.description: enabled ? "" : reason
     Accessible.onToggleAction: if (enabled) toggled(!checked)
     Accessible.onPressAction: if (enabled) toggled(!checked)
 
@@ -39,6 +47,8 @@ Item {
             Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
         }
     }
+
+    FocusRing { controlRadius: root.height / 2 }
 
     MouseArea {
         anchors.fill: parent
