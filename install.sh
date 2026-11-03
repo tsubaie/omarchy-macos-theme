@@ -121,6 +121,14 @@ SWITCHER_ID="macos-theme.switcher"
 WIDGETS_ID="macos-theme.widgets"
 # The desktop widgets, as the widgets' WidgetsModel.js names them.
 DESKTOP_WIDGETS="clock calendar weather playing"
+# Your own widgets: a folder each, named for its id, with a Widget.qml
+# (docs/make-a-widget/SKILL.md says how to make one).
+CUSTOM_WIDGETS_DIR="$CONFIG/omarchy/macos-theme-widgets"
+# A widget of your own by that id: a name a folder can safely have, not the
+# theme's own, and its Widget.qml there.
+custom_widget() {
+  [[ $1 =~ ^[a-z0-9][a-z0-9-]*$ && " $DESKTOP_WIDGETS " != *" $1 "* && -f $CUSTOM_WIDGETS_DIR/$1/Widget.qml ]]
+}
 # It gives Omarchy's own widgets macOS icons from the bar, unseen there, so
 # the arrangement leaves it out.
 BAR_ICONS_ID="macos-theme.bar-icons"
@@ -187,7 +195,8 @@ while (( $# )); do
       show_widgets=${2:-}
       [[ -n ${show_widgets//,/} ]] || { echo "--show-widgets needs at least one of: ${DESKTOP_WIDGETS// /, }" >&2; exit 1; }
       for w in ${show_widgets//,/ }; do
-        [[ " $DESKTOP_WIDGETS " == *" $w "* ]] || { echo "Unknown widget: $w (one of: ${DESKTOP_WIDGETS// /, })" >&2; exit 1; }
+        [[ " $DESKTOP_WIDGETS " == *" $w "* ]] || custom_widget "$w" ||
+          { echo "Unknown widget: $w (one of: ${DESKTOP_WIDGETS// /, }, or one of yours in $CUSTOM_WIDGETS_DIR)" >&2; exit 1; }
       done
       shift ;;
     --backup) mode=backup ;;
@@ -497,10 +506,22 @@ set_clock() {
 # The desktop widgets shown, as a JSON array: the known ids in shell.json's
 # widgets.layout, or all of them when it has none, as the widgets do.
 shown_widgets() {
-  { cat "$SHELL_JSON" 2>/dev/null || true; } | jq -cs --arg all "$DESKTOP_WIDGETS" '($all | split(" ")) as $all
+  local known
+  known="$DESKTOP_WIDGETS $(custom_widgets | jq -r 'map(.id) | join(" ")')"
+  { cat "$SHELL_JSON" 2>/dev/null || true; } | jq -cs --arg all "$known" --arg own "$DESKTOP_WIDGETS" '($all | split(" ") | map(select(length > 0))) as $all
     | [(.[0].widgets.layout? // []) | arrays | .[] | .id? | strings | select(. as $id | $all | index($id))]
-    | if length == 0 then $all else [$all[] as $id | select(index($id)) | $id] end' 2>/dev/null ||
+    | if length == 0 then $own | split(" ") else [$all[] as $id | select(index($id)) | $id] end' 2>/dev/null ||
     jq -cn --arg all "$DESKTOP_WIDGETS" '$all | split(" ")'
+}
+# Your own widgets, as [{id, name}]: the name from its manifest.json, else its id.
+custom_widgets() {
+  local d id name
+  for d in "$CUSTOM_WIDGETS_DIR"/*/; do
+    id=$(basename "$d")
+    custom_widget "$id" || continue
+    name=$(jq -r '.name | strings' "$d/manifest.json" 2>/dev/null) || name=""
+    jq -cn --arg id "$id" --arg name "${name:-$id}" '{id: $id, name: $name}'
+  done | jq -cs .
 }
 # Shows only the widgets named in $1 (comma-separated): the others leave
 # shell.json, the ones kept stay where they are, and a new one gets no cell,
@@ -606,8 +627,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"custom-widgets":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(custom_widgets)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
       "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
       "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"

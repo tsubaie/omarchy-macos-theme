@@ -132,6 +132,12 @@ pub mod qobject {
         #[cxx_name = "minimizeWindow"]
         fn minimize_window(&self) -> bool;
 
+        /// Makes a folder (and those above it) if it isn't there, so it can be
+        /// opened: the one your own desktop widgets go in.
+        #[qinvokable]
+        #[cxx_name = "makeFolder"]
+        fn make_folder(&self, path: &QString) -> bool;
+
         /// Fills the screen with the window, or puts it back.
         #[qinvokable]
         #[cxx_name = "zoomWindow"]
@@ -447,6 +453,10 @@ impl qobject::ThemeBackend {
         if *self.busy() {
             install::stop(&self.rust().watch);
         }
+    }
+
+    pub fn make_folder(&self, path: &QString) -> bool {
+        std::fs::create_dir_all(path.to_string()).is_ok()
     }
 
     pub fn minimize_window(&self) -> bool {

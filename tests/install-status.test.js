@@ -299,6 +299,23 @@ try {
   assert.strictEqual(run("--remove", "dock", "--show-widgets", "clock").status, 0)
   assert.deepStrictEqual(status().widgets, ["clock"])
 
+  // Widgets of your own: listed by their folder's name with their manifest's
+  // name; shown like the theme's own; a folder without a Widget.qml, one
+  // named like the theme's own, or a name that's no safe id isn't one.
+  const own = path.join(home, ".config/omarchy/macos-theme-widgets")
+  for (const dir of ["uptime", "my-quotes", "clock", "no-widget", "Bad Name"]) fs.mkdirSync(path.join(own, dir), { recursive: true })
+  for (const dir of ["uptime", "my-quotes", "clock", "Bad Name"]) fs.writeFileSync(path.join(own, dir, "Widget.qml"), "")
+  fs.writeFileSync(path.join(own, "my-quotes/manifest.json"), JSON.stringify({ name: "Quotes" }))
+  assert.deepStrictEqual(status()["custom-widgets"], [{ id: "my-quotes", name: "Quotes" }, { id: "uptime", name: "uptime" }])
+  const ownShown = run("--show-widgets", "clock,uptime")
+  assert.strictEqual(ownShown.status, 0, ownShown.stderr)
+  assert.deepStrictEqual(status().widgets, ["clock", "uptime"])
+  for (const bad of ["clock,no-widget", "clock,Bad Name", "clock,../uptime"]) assert.strictEqual(run("--show-widgets", bad).status, 1, bad)
+  // Its folder gone, it's no longer shown; the theme's own stay.
+  fs.rmSync(path.join(own, "uptime"), { recursive: true })
+  assert.deepStrictEqual(status().widgets, ["clock"])
+  fs.rmSync(own, { recursive: true })
+
   // An update whose menu bar part Omarchy won't enable takes the whole menu bar out, and
   // puts the bar back as it was before it: Network back out of the tray drawer.
   const unbarred = { left: [{ id: "omarchy.workspaces" }], right: [{ id: "omarchy.network" }] }

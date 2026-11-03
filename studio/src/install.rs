@@ -134,6 +134,9 @@ pub struct Status {
     /// The desktop widgets shown. Older themes don't report them.
     #[serde(default)]
     pub widgets: Option<Vec<String>>,
+    /// Your own desktop widgets, as `{id, name}`. Older themes don't report them.
+    #[serde(default, rename = "custom-widgets")]
+    pub custom_widgets: Vec<serde_json::Value>,
     /// Where the volume panel shows: "bottom" or "top". Older themes don't
     /// report it.
     #[serde(default, rename = "volume-hud")]
@@ -338,7 +341,7 @@ pub struct Changes {
     clock: Option<&'static str>,
     places: Vec<(&'static str, &'static str)>,
     bar: Option<BarLayout>,
-    widgets: Option<Vec<&'static str>>,
+    widgets: Option<Vec<String>>,
     switch_to: Option<String>,
 }
 
@@ -479,22 +482,21 @@ impl Changes {
     }
 }
 
-/// Checks the widgets to show: known ones, at least one, as the desktop
-/// always keeps one.
-fn shown_widgets(names: Vec<String>) -> Result<Vec<&'static str>> {
+/// Checks the widgets to show: at least one, as the desktop always keeps one,
+/// each the theme's own or named as a widget of your own can be (its folder's
+/// name: lowercase letters, digits and dashes), which `install.sh` then finds.
+fn shown_widgets(names: Vec<String>) -> Result<Vec<String>> {
     if names.is_empty() {
         bail!("at least one desktop widget stays shown");
     }
-    names
-        .iter()
-        .map(|name| {
-            DESKTOP_WIDGETS
-                .iter()
-                .copied()
-                .find(|known| known == name)
-                .with_context(|| format!("unknown desktop widget {name:?}"))
-        })
-        .collect()
+    for name in &names {
+        let own = name.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !DESKTOP_WIDGETS.contains(&name.as_str()) && !own {
+            bail!("unknown desktop widget {name:?}");
+        }
+    }
+    Ok(names)
 }
 
 /// Applies the changes in one `install.sh` call, and returns its warnings.
@@ -1314,6 +1316,15 @@ mod tests {
         assert!(!changes.is_empty());
         assert!(Changes::from_json(r#"{"widgets":[]}"#).is_err());
         assert!(Changes::from_json(r#"{"widgets":["clock,dock"]}"#).is_err());
+        // One of your own, by its folder's name; nothing that could be more than a name.
+        let own = Changes::from_json(r#"{"widgets":["clock","my-quotes"]}"#).expect("your own");
+        assert_eq!(own.args().expect("args"), ["--show-widgets", "clock,my-quotes"]);
+        for bad in ["My", "-x", "a b", "../x", "x;y", ""] {
+            assert!(Changes::from_json(&format!(r#"{{"widgets":["{bad}"]}}"#)).is_err(), "{bad}");
+        }
+        let custom = parse_status(r#"{"active":true,"features":{},"settings":{},"custom-widgets":[{"id":"my-quotes","name":"Quotes"}]}"#)
+            .expect("valid");
+        assert_eq!(custom.custom_widgets.len(), 1);
         let status =
             parse_status(r#"{"active":true,"features":{},"settings":{},"widgets":["weather"]}"#)
                 .expect("valid");

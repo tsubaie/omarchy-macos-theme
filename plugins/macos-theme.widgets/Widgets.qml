@@ -134,7 +134,7 @@ Item {
   // top left; dragging one snaps it to the nearest cell, and dropping it on
   // another swaps them. Where each sits is saved in shell.json.
   readonly property int cell: size + gap
-  readonly property var layout: Model.normalizeLayout(config.layout)
+  readonly property var layout: Model.normalizeLayout(config.layout, known)
   readonly property int cols: Math.max(1, Math.floor((window.width - area.x + gap) / cell))
   readonly property int rows: Math.max(1, Math.floor((window.height - area.y + gap) / cell))
   // Motion kept still: Omarchy's animations off, or the theme's Reduce
@@ -185,7 +185,38 @@ Item {
   // the shell never reads half of it), one write at a time.
   property var pendingLayout: null
 
+  // Widgets of your own: a folder each in ~/.config/omarchy/macos-theme-widgets,
+  // named for its id, with a Widget.qml and maybe a manifest.json naming it
+  // (docs/make-a-widget/SKILL.md). Looked for at start and whenever a widget's
+  // menu opens, so a new one can be added without a restart.
+  readonly property string customDir: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/macos-theme-widgets"
+  property var custom: []
+  property bool scanned: false
+  readonly property var known: Model.WIDGETS.concat(custom.map(function(w) { return w.id }))
+  function nameOf(id) {
+    var own = custom.find(function(w) { return w.id === id })
+    return own ? own.name : (Model.NAMES[id] || id)
+  }
+  Process {
+    id: scan
+    running: true
+    // The same rule as install.sh's custom_widget: a safe name, not the theme's own.
+    command: ["sh", "-c", 'for d in "$1"/*/; do id=$(basename "$d"); '
+      + 'case "$id" in clock|calendar|weather|playing) continue ;; esac; '
+      + 'printf "%s" "$id" | grep -qE "^[a-z0-9][a-z0-9-]*$" && [ -f "$d/Widget.qml" ] || continue; '
+      + 'name=$(jq -r ".name | strings" "$d/manifest.json" 2>/dev/null); '
+      + 'jq -cn --arg id "$id" --arg name "${name:-$id}" "{id: \\$id, name: \\$name}"; done | jq -cs .', "sh", root.customDir]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.custom = JSON.parse(text) } catch (e) { root.custom = [] }
+        root.scanned = true
+      }
+    }
+  }
+
   function save(layout) {
+    // Not before your own widgets are known, or their places would be dropped.
+    if (!root.scanned) return
     root.config = Object.assign({}, root.config, { layout: layout })
     root.pendingLayout = layout
     if (!saver.running) root.writeNext()
@@ -211,6 +242,7 @@ Item {
   property point menuAt: Qt.point(0, 0)
 
   function openMenu(id, x, y) {
+    if (!scan.running) scan.running = true
     root.menuFor = id
     root.menuAt = Qt.point(x, y)
     menuLeave.stop()
@@ -258,7 +290,7 @@ Item {
         anchors.fill: parent
 
         Repeater {
-          model: Model.WIDGETS
+          model: root.known
 
           delegate: Glass {
             id: tile
@@ -305,7 +337,26 @@ Item {
 
             Loader {
               anchors.fill: parent
+              active: !!root.contents[tile.modelData]
               sourceComponent: root.contents[tile.modelData]
+            }
+            // One of yours: its Widget.qml, filling the card. One that doesn't
+            // load says so in its card, and the others carry on.
+            Loader {
+              id: own
+              anchors.fill: parent
+              active: !root.contents[tile.modelData]
+              source: active ? "file://" + root.customDir + "/" + tile.modelData + "/Widget.qml" : ""
+            }
+            Text {
+              visible: own.active && own.status === Loader.Error
+              anchors.fill: parent
+              anchors.margins: Math.round(16 * root.s)
+              text: root.nameOf(tile.modelData) + " couldn't load. Its Widget.qml has an error; the shell's log says which."
+              color: Qt.rgba(1, 1, 1, 0.7)
+              font.pixelSize: Math.round(12 * root.s)
+              wrapMode: Text.WordWrap
+              verticalAlignment: Text.AlignVCenter
             }
           }
         }
@@ -340,7 +391,7 @@ Item {
           }
 
           Rectangle {
-            visible: Model.hidden(root.layout).length > 0
+            visible: Model.hidden(root.layout, root.known).length > 0
             width: parent.width
             height: visible ? Math.round(9 * root.s) : 0
             color: "transparent"
@@ -348,11 +399,11 @@ Item {
           }
 
           Repeater {
-            model: Model.hidden(root.layout)
+            model: Model.hidden(root.layout, root.known)
             delegate: MenuRow {
               required property string modelData
-              label: "Add " + Model.NAMES[modelData]
-              onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows))
+              label: "Add " + root.nameOf(modelData)
+              onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows, root.known))
             }
           }
         }

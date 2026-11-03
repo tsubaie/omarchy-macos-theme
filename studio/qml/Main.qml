@@ -212,7 +212,20 @@ Window {
     readonly property var desktopWidgets: [
         { id: "clock", name: "Clock" }, { id: "calendar", name: "Calendar" },
         { id: "weather", name: "Weather" }, { id: "playing", name: "Now Playing" }
-    ]
+    ].concat(status["custom-widgets"] || [])
+    // Your own widgets' folder (docs/make-a-widget/SKILL.md), and the prompt
+    // that has an AI agent make one from that guide.
+    readonly property string customWidgetsFolder: localPath(StandardPaths.writableLocation(StandardPaths.ConfigLocation)) + "/omarchy/macos-theme-widgets"
+    readonly property string widgetPrompt: "Make me a desktop widget for the macOS theme for Omarchy, following the guide at "
+        + "https://github.com/tsubaie/omarchy-macos-theme/blob/main/docs/make-a-widget/SKILL.md "
+        + "Save it in " + customWidgetsFolder + "/<its-id>/ as that guide says. It should show: "
+    // Text onto the clipboard, through an unseen text field (QML has no clipboard of its own).
+    function copy(text) {
+        clipboardField.text = text
+        clipboardField.selectAll()
+        clipboardField.copy()
+    }
+    TextEdit { id: clipboardField; visible: false }
     readonly property var widgetsNow: status.widgets || null
     property var pendingWidgets: null
     readonly property var widgetsShown: pendingWidgets || widgetsNow || []
@@ -1333,6 +1346,29 @@ Window {
                                 reason: !window.pieceOn("widgets") ? window.why("widgets")
                                     : shown && window.widgetsShown.length === 1 ? "One widget always stays shown" : ""
                                 onToggled: on => window.markWidget(modelData.id, on)
+                            }
+                        }
+                    }
+                }
+
+                // Your own: any AI agent can make one from the guide, and the
+                // folder they go in.
+                Group {
+                    title: "Make Your Own"
+                    SettingRow {
+                        label: "A widget of your own"
+                        note: "Copy the prompt, paste it into your AI agent with what the widget should show, and it makes one from the theme's guide. Put it in the widgets folder, then switch it on above. A widget runs with your account's rights: only add ones you trust."
+                        last: true
+                        Row {
+                            spacing: 8
+                            MacButton {
+                                text: "Open Folder"
+                                onClicked: { backend.makeFolder(window.customWidgetsFolder); Qt.openUrlExternally("file://" + window.customWidgetsFolder) }
+                            }
+                            MacButton {
+                                text: copiedPrompt.running ? "Copied" : "Copy Prompt"
+                                onClicked: { window.copy(window.widgetPrompt); copiedPrompt.restart() }
+                                Timer { id: copiedPrompt; interval: 2000 }
                             }
                         }
                     }

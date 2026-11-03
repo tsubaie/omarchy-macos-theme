@@ -195,6 +195,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
   - **Now Playing**: the artwork, song and artist, with previous, play/pause and next, from Omarchy's media service.
 - **Drag a widget** to move it: it snaps to a grid, and dropping it on another widget swaps the two. **Right-click a widget** to remove it, or to add back one you removed. Where they sit is saved in `~/.config/omarchy/shell.json` (`widgets.layout`).
 - They show on your first screen. To pick another, add `"widgets": { "screen": "HDMI-A-1" }` to `~/.config/omarchy/shell.json`, with a name from `hyprctl monitors`; they move right away.
+- **Widgets of your own**: a folder in `~/.config/omarchy/macos-theme-widgets/`, named for the widget (`my-quotes`), with a `Widget.qml` and an optional `manifest.json` naming it. Right-click a widget › **Add** shows it, as Studio's Widgets page does, and it drags like the others. [docs/make-a-widget/SKILL.md](docs/make-a-widget/SKILL.md) says how to make one, and works as a prompt for any AI agent: Studio's **Copy Prompt** puts one on the clipboard. An example: [docs/make-a-widget/example/uptime](docs/make-a-widget/example/uptime). A widget runs inside the shell with your account's rights, so only add ones you made or have read.
 
 ### Lock screen (`--lock`)
 - The date and a large clock at the top, in 12- or 24-hour time as your bar's clock shows it, over the wallpaper.
