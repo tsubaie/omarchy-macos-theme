@@ -4,6 +4,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons
 import "DockModel.js" as DockModel
+import "AppEntries.js" as AppEntries
 
 // An app dock that shows on floating workspaces. A floating workspace has no
 // tiles to hand the apps out, so the dock gives back a place to find them:
@@ -142,63 +143,21 @@ Item {
   property var pendingPins: null
   onDockConfigChanged: pendingPins = null
 
-  // Entries that can claim a terminal app's window: those run in a terminal,
-  // and those that hand the terminal an app id of their own.
-  readonly property var terminalEntries: {
-    var values = DesktopEntries.applications.values
-    var out = []
-    for (var i = 0; i < values.length; i++) {
-      var entry = values[i]
-      if (entry.runInTerminal || String(entry.execString || "").indexOf("--app-id=") >= 0)
-        out.push({ id: entry.id, execString: entry.execString, command: entry.command, runInTerminal: entry.runInTerminal })
-    }
-    return out
-  }
+  // Entries that can claim a terminal app's window.
+  readonly property var terminalEntries: AppEntries.terminalEntries(DesktopEntries.applications.values)
 
-  function entryForAppId(appId) {
-    var entry = DesktopEntries.heuristicLookup(appId)
-    if (entry) return entry
-    var id = DockModel.claimingEntryId(appId, root.terminalEntries)
-    return id ? DesktopEntries.byId(id) : null
-  }
-
-  // A window with no app id can still name its app in its title, as in
-  // "Untitled 1 — RusTXT". Match the longest app name the title ends with.
-  function entryForTitle(title) {
-    title = String(title || "")
-    if (!title) return null
-    var best = null
-    var values = DesktopEntries.applications.values
-    for (var i = 0; i < values.length; i++) {
-      var name = String(values[i].name || "")
-      if (name.length < 3 || values[i].noDisplay) continue
-      var at = title.length - name.length
-      var bounded = at === 0 || /[\s\-—–|:·]/.test(title.charAt(at - 1))
-      if (at >= 0 && title.substr(at) === name && bounded && (!best || name.length > best.name.length)) best = values[i]
-    }
-    return best
-  }
-
-  function entryForWindow(toplevel) {
-    return toplevel.appId ? root.entryForAppId(toplevel.appId) : root.entryForTitle(toplevel.title)
-  }
-
-  // A pinned app that is not installed has nothing to launch, so it is left
-  // out until it is. Windows are matched to the desktop entry that claims them.
-  readonly property var items: {
+  // Every app window, matched to the desktop entry that claims it: the pinned
+  // and the unpinned side of the dock both draw from this one scan.
+  readonly property var windows: {
     var appsRevision = DesktopEntries.applications.values.length
-    var pinned = (root.pendingPins || DockModel.pinnedIds(dockConfig, defaultDockConfig)).filter(function(id) {
-      return !!DesktopEntries.byId(id)
-    })
-
-    var windows = []
+    var out = []
     var toplevels = Hyprland.toplevels.values
     for (var i = 0; i < toplevels.length; i++) {
       var toplevel = toplevels[i].wayland
       if (!toplevel || toplevel.parent) continue
-      var entry = root.entryForWindow(toplevel)
+      var entry = AppEntries.entryFor(toplevel.appId, toplevel.title, DesktopEntries, root.terminalEntries)
       var workspace = toplevels[i].workspace
-      windows.push({
+      out.push({
         key: entry ? entry.id : (toplevel.appId || "window:" + toplevels[i].address),
         hasEntry: !!entry && !entry.noDisplay,
         standalone: !entry && !toplevel.appId,
@@ -208,33 +167,24 @@ Item {
         toplevel: toplevel
       })
     }
+    return out
+  }
 
-    return DockModel.orderItems(DockModel.buildItems(pinned, windows), root.order)
+  // A pinned app that is not installed has nothing to launch, so it is left
+  // out until it is.
+  readonly property var items: {
+    var pinned = (root.pendingPins || DockModel.pinnedIds(dockConfig, defaultDockConfig)).filter(function(id) {
+      return !!DesktopEntries.byId(id)
+    })
+    return DockModel.orderItems(DockModel.buildItems(pinned, root.windows), root.order)
       .filter(function(item) { return item.pinned })
   }
 
   // Running apps that are not pinned: they sit on the right of the divider,
   // open or minimized, and move to the left only once pinned.
   readonly property var unpinnedItems: {
-    var windows = []
-    var toplevels = Hyprland.toplevels.values
-    for (var i = 0; i < toplevels.length; i++) {
-      var toplevel = toplevels[i].wayland
-      if (!toplevel || toplevel.parent) continue
-      var entry = root.entryForWindow(toplevel)
-      var workspace = toplevels[i].workspace
-      windows.push({
-        key: entry ? entry.id : (toplevel.appId || "window:" + toplevels[i].address),
-        hasEntry: !!entry && !entry.noDisplay,
-        standalone: !entry && !toplevel.appId,
-        workspaceId: workspace ? workspace.id : -1,
-        minimized: !!workspace && DockModel.isMinimizedWorkspace(workspace.name),
-        address: toplevels[i].address,
-        toplevel: toplevel
-      })
-    }
     var pinned = root.pinnedKeys
-    return DockModel.buildItems([], windows).filter(function(item) { return pinned.indexOf(item.key) < 0 })
+    return DockModel.buildItems([], root.windows).filter(function(item) { return pinned.indexOf(item.key) < 0 })
   }
 
   readonly property var itemsByKey: {
@@ -381,11 +331,13 @@ Item {
     }) : null
     var overlay = screen ? root.genieOn(screen) : null
     var dock = screen ? root.dockOn(screen) : null
-    if (overlay && dock && overlay.hasPicture(address)) {
+    if (overlay && dock && overlay.hasPicture(address))
       overlay.restore(address, dock.iconRectFor(address), function() { Util.execDetached(command) })
-      return
-    }
-    Util.execDetached(command)
+    else
+      Util.execDetached(command)
+    // Taken back on another screen than it went away on, its picture is
+    // never poured back out: let it go.
+    root.forgetPicture(address)
   }
 
   function quit(item) {
@@ -510,6 +462,8 @@ Item {
     function onRawEvent(event) {
       var name = event ? String(event.name) : ""
       if (name === "configreloaded") root.refresh()
+      // A closed window's genie picture is a whole window's worth of memory.
+      else if (name === "closewindow") root.forgetPicture(String(event.data))
       // Hyprland's window and workspace lists do not follow fullscreen on
       // their own.
       else if (name === "fullscreen") {
@@ -560,6 +514,11 @@ Item {
   function snapHide() {
     var outlines = snapPreviews.instances
     for (var i = 0; i < outlines.length; i++) outlines[i].hide()
+  }
+
+  function forgetPicture(address) {
+    var overlays = genies.instances
+    for (var i = 0; i < overlays.length; i++) overlays[i].forget(address)
   }
 
   function genieOn(screen) {

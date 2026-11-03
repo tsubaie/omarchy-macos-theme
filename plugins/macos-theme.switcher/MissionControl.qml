@@ -7,6 +7,7 @@ import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
 import "MissionLayout.js" as MissionLayout
+import "HyprQuery.js" as HyprQuery
 
 // Mission Control, as macOS has it (Ctrl+Up): the current workspace's windows
 // fly from where they are into a spread over the dimmed wallpaper, and the
@@ -57,29 +58,18 @@ Item {
   }
 
   // The live window behind a Hyprland address, for the screen copy.
-  function toplevelFor(address) {
-    var want = String(address || "").replace(/^0x/, "")
-    var values = Hyprland.toplevels.values
-    for (var i = 0; i < values.length; i++) {
-      if (String(values[i].address || "").replace(/^0x/, "") === want) return values[i].wayland
-    }
-    return null
-  }
+  function toplevelFor(address) { return HyprQuery.toplevelFor(address, Hyprland.toplevels.values) }
 
-  // Clients, monitors, workspaces and the wallpaper, a line of @@ apart.
   function load(text) {
-    var parts = text.split("\n@@\n")
-    var clients = [], monitors = [], workspaces = []
-    try { clients = JSON.parse(parts[0]) } catch (e) {}
-    try { monitors = JSON.parse(parts[1]) } catch (e) {}
-    try { workspaces = JSON.parse(parts[2]) } catch (e) {}
-    root.wallpaper = String(parts[3] || "").trim()
+    var got = HyprQuery.parse(text)
+    var clients = got.clients, monitors = got.monitors, workspaces = got.workspaces
+    root.wallpaper = got.wallpaper
 
     var monitor = monitors.filter(function(m) { return m.focused })[0] || monitors[0]
     if (!monitor) return
     root.monitorName = monitor.name
     var active = monitor.activeWorkspace ? monitor.activeWorkspace.id : 0
-    var seen = function(c) { return c.mapped && !c.hidden && c.workspace && c.workspace.id > 0 }
+    var seen = HyprQuery.seen
     var place = function(c) {
       return { address: c.address, title: String(c.title || c["class"] || ""), x: c.at[0] - monitor.x, y: c.at[1] - monitor.y,
                w: c.size[0], h: c.size[1], floating: c.floating, focus: c.focusHistoryID }
@@ -102,7 +92,7 @@ Item {
 
   Process {
     id: query
-    command: ["sh", "-c", "hyprctl clients -j; echo; echo @@; hyprctl monitors -j; echo; echo @@; hyprctl workspaces -j; echo; echo @@; readlink -f \"$HOME/.local/state/omarchy/current/background\""]
+    command: HyprQuery.COMMAND
     stdout: SplitParser {
       splitMarker: ""
       onRead: function(data) { root.collect.push(data) }

@@ -1158,8 +1158,10 @@ PanelWindow {
       MenuRow {
         visible: window.settingsMenu
         text: Commons.I18n.t("dock.autoHide")
-        checked: window.autohide
-        onTriggered: Util.execDetached("omarchy-dock autohide " + (window.autohide ? "off" : "on"))
+        // The setting, not whether the dock is hiding now: a maximized window
+        // hides it too, with auto-hide off.
+        checked: !!window.dock && window.dock.autohide
+        onTriggered: Util.execDetached("omarchy-dock autohide " + (window.dock && window.dock.autohide ? "off" : "on"))
       }
 
       // The app's open windows: a check marks the front one, a diamond a

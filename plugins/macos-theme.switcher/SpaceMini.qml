@@ -4,6 +4,7 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.Commons
+import "HyprQuery.js" as HyprQuery
 
 // One workspace as a live miniature, labelled "Desktop N" below it: the
 // wallpaper with each window drawn at its place. Mission Control's strip and
@@ -30,14 +31,7 @@ Item {
   height: thumbHeight + Style.space(24)
 
   // The live window behind a Hyprland address, for the screen copy.
-  function toplevelFor(address) {
-    var want = String(address || "").replace(/^0x/, "")
-    var values = Hyprland.toplevels.values
-    for (var i = 0; i < values.length; i++) {
-      if (String(values[i].address || "").replace(/^0x/, "") === want) return values[i].wayland
-    }
-    return null
-  }
+  function toplevelFor(address) { return HyprQuery.toplevelFor(address, Hyprland.toplevels.values) }
 
   ClippingRectangle {
     id: frame

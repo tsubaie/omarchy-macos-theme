@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "HyprQuery.js" as HyprQuery
 
 // Super+Tab workspace switcher, in the same glass as the app switcher. Each
 // workspace with windows is a miniature: the wallpaper with every window drawn
@@ -51,6 +52,8 @@ Item {
       root.opened = true
       root.commitWhenLoaded = false
       root.pendingStep = direction
+      // Opened again before the last query finished: that query fills it.
+      if (spacesQuery.running) return
       root.spaces = []
       root.collect = []
       spacesQuery.running = true
@@ -73,31 +76,20 @@ Item {
   }
 
   // The live window behind a Hyprland address, for the screen copy.
-  function toplevelFor(address) {
-    var want = String(address || "").replace(/^0x/, "")
-    var values = Hyprland.toplevels.values
-    for (var i = 0; i < values.length; i++) {
-      if (String(values[i].address || "").replace(/^0x/, "") === want) return values[i].wayland
-    }
-    return null
-  }
+  function toplevelFor(address) { return HyprQuery.toplevelFor(address, Hyprland.toplevels.values) }
 
-  // One line each: clients, monitors, the active workspace, the wallpaper.
   function load(text) {
-    var parts = text.split("\n@@\n")
-    var clients = [], monitors = [], active = {}
-    try { clients = JSON.parse(parts[0]) } catch (e) {}
-    try { monitors = JSON.parse(parts[1]) } catch (e) {}
-    try { active = JSON.parse(parts[2]) } catch (e) {}
-    root.wallpaper = String(parts[3] || "").trim()
+    var got = HyprQuery.parse(text)
+    var clients = got.clients, monitors = got.monitors, active = got.active
+    root.wallpaper = got.wallpaper
 
     var monitorById = {}
     monitors.forEach(function(m) { monitorById[m.id] = m })
     var byId = {}
     var out = []
     clients.forEach(function(c) {
-      var ws = c.workspace || {}
-      if (!c.mapped || !(ws.id > 0)) return
+      if (!HyprQuery.seen(c)) return
+      var ws = c.workspace
       var space = byId[ws.id]
       if (!space) {
         var m = monitorById[c.monitor] || monitors[0] || { x: 0, y: 0, width: 1920, height: 1080 }
@@ -123,14 +115,13 @@ Item {
     root.spaces = out
 
     if (out.length === 0) { root.close(); return }
-    if (root.pendingStep < 0) root.index = out.length - 1
-    else root.index = out.length > 1 ? 1 : 0
+    root.index = HyprQuery.startIndex(out, active.id, root.pendingStep)
     if (root.commitWhenLoaded) root.commit()
   }
 
   Process {
     id: spacesQuery
-    command: ["sh", "-c", "hyprctl clients -j; echo; echo @@; hyprctl monitors -j; echo; echo @@; hyprctl activeworkspace -j; echo; echo @@; readlink -f \"$HOME/.local/state/omarchy/current/background\""]
+    command: HyprQuery.COMMAND
     stdout: SplitParser {
       splitMarker: ""
       onRead: function(data) { root.collect.push(data) }
