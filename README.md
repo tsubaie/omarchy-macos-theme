@@ -27,12 +27,13 @@ cd omarchy-macos-theme
 | `--lock` | The macOS lock screen |
 | `--widgets` | Desktop widgets: clock, calendar, weather and now playing |
 | `--all` | All of the above |
-| `--uninstall` | Undo everything; with `--switch-to <theme>` too while the macOS theme is current |
+| `--uninstall` | Undo everything, the MacTahoe icons too, giving back what each piece replaced; while the macOS theme is current it switches first to the theme you had before it (or `--switch-to <theme>`) |
+| `--restore-original` | Go back to before the macOS theme: the backup taken before its first change, whole, and the icons gone. Refuses when there is none (installs from before backups were kept) |
 | `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `bar-icons`, `lock` or `widgets` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
 | `--set glass=<0.75-1>` | How solid the windows you aren't using are; 1 is solid, the theme's own is 0.85. The window you are using is always solid. The menus, launcher, notifications and popups take the same glass. Kept when the theme is updated |
-| `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
+| `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall` removes all of it |
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
 | `--set drop-follow=<0\|1>` | Whether dropping a window onto another workspace takes you there too (1, the theme's) or sends it alone (0) |
@@ -253,11 +254,17 @@ Each run takes a snapshot first (see [Backups](#backups)). A removed theme folde
 ## Uninstall
 
 ```bash
-./install.sh --switch-to "Tokyo Night" --uninstall   # or any other theme you have
-./install.sh --switch-to "Tokyo Night" --uninstall --remove icons   # the MacTahoe icons too
+./install.sh --uninstall            # remove it; your other changes since stay
+./install.sh --restore-original     # or go back to exactly how things were before it
 ```
 
-`--switch-to` is needed only while the macOS theme is the current one. This removes the theme, its plugins and its clones of Omarchy's menu, lock and workspaces, and turns back on what stood in their place before the theme: Omarchy's own dock, on-screen display, menu and lock, or a clone of your own, or nothing where you had turned it off. The bar goes back to how it was before the menu bar. The lines added to `looknfeel.lua` and `gtk.css`, and the lock screen's update hook, come out. The theme folder is kept in `~/.config/omarchy/macos-theme-backups/`, wallpapers of yours included, and every backup stays, so the uninstall can be undone with `--restore`. MacTahoe icons stay unless you add `--remove icons`, and only icons the theme installed are removed.
+Or in [macOS Theme Studio](studio/): **Remove macOS Theme…** on its About page does either.
+
+**`--uninstall`** removes the theme, its plugins, its clones of Omarchy's menu, lock and workspaces, and the MacTahoe icons it installed (icons installed some other way stay), and turns back on what stood in their place before the theme: Omarchy's own dock, on-screen display, menu and lock, or a clone of your own, or nothing where you had turned it off. The bar goes back to how it was before the menu bar, Alt+Tab to your own binding, and the lines added to `looknfeel.lua` and `gtk.css`, and the lock screen's update hook, come out. While the macOS theme is current, it first switches to the theme you had before installing it (Tokyo Night when that isn't known; `--switch-to <theme>` picks another). Your dock's pinned apps stay pinned in Omarchy's dock, and its size and magnification stay in `shell.json` for when it comes back, which Omarchy's dock ignores. Changes you made since, to the bar or anything else, stay.
+
+**`--restore-original`** puts back the backup taken before the theme's first change: `shell.json`, `looknfeel.lua` and `gtk.css` whole, the plugins as they were, and the theme that was current, with the theme's icons gone. Edits you made to those three files since, a keybinding or a bar widget, go too. Undoing it brings the theme back but not the icons, which backups don't hold; `--add icons` does. A computer where the theme was installed before backups were kept has no such backup; use `--uninstall` there.
+
+Either way, the theme folder is kept in `~/.config/omarchy/macos-theme-backups/`, wallpapers of yours included, and every backup stays, so it can be undone with `--restore` (the installer prints the backup to restore), all but the MacTahoe icons, which backups don't hold: `--add icons` brings them back. Delete that folder once you're sure. If you had turned Voxtype's own overlay off for the dictation pill, the installer says how to turn it back on.
 
 ## Customize
 

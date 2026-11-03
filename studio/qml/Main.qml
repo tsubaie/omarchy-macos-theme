@@ -255,7 +255,8 @@ Window {
 
     readonly property var workingText: ({
         apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
-        export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…"
+        export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…",
+        remove: "Removing the macOS theme…"
     })
 
     function doneText() {
@@ -269,6 +270,7 @@ Window {
         case "import": return "Imported " + actionDetail + ". Your setup before it is backed up."
         case "download": return "Downloaded the theme."
         case "undo": return "Undid the changes. How they were is backed up too, should you want them back."
+        case "remove": return "Removed the macOS theme, and what it replaced is back."
         }
         return ""
     }
@@ -281,11 +283,42 @@ Window {
         case "download": return "Check the network, then Download again."
         case "restore":
         case "undo":
+        case "remove":
         case "import": return "If it got as far as changing anything, Backups has how things were before it."
         case "backup":
         case "export": return "Nothing was changed; try again."
         }
         return ""
+    }
+
+    // Remove macOS Theme: every piece off in one Apply, so its progress, Stop
+    // and Undo work as Apply's do; or, when there is one, the backup from
+    // before the theme, whole.
+    function askRemove() {
+        const original = backups.find(b => b.original)
+        // install.sh picks the same theme itself; it is named here so the question can say it.
+        const back = status.active ? status["previous-theme"] : null
+        confirm = {
+            title: "Remove the macOS theme?",
+            text: "The theme and all its pieces go, its icons too, and what each one replaced comes back: Omarchy's dock, bar, menu and lock screen, or your own."
+                + (back ? "\n\nOmarchy switches to " + back + " first." : "")
+                + "\n\nYour setup now is backed up first, so you can undo this; the icons then come back from General > MacTahoe icons."
+                + (original ? "\n\nGo Back puts everything as it was on " + when(original.created) + ", before the macOS theme, instead. "
+                    + "shell.json, looknfeel.lua and gtk.css come back whole, so edits you made to them since go too." : "")
+                + droppedNote(),
+            button: "Remove",
+            destructive: true,
+            alternate: original ? "Go Back" : "",
+            alternateAction: () => { discard(); start("restore", when(original.created)); backend.restore(original.id) },
+            action: () => {
+                discard()
+                start("remove")
+                backupBeforeApply = backups.length > 0 ? backups[0].id : ""
+                const changes = { remove: Object.keys(status.features || {}) }
+                if (back) changes.switchTo = back
+                backend.apply(JSON.stringify(changes))
+            }
+        }
     }
 
     function apply() {
@@ -322,7 +355,7 @@ Window {
             }
             if (backend.error === "" && !window.stopping) window.notice = window.doneText()
             // Undo restores the backup this Apply took, the one new since it started.
-            window.undoBackup = window.action === "apply" && backend.error === "" && window.backups.length > 0
+            window.undoBackup = (window.action === "apply" || window.action === "remove") && backend.error === "" && window.backups.length > 0
                 && window.backups[0].id !== window.backupBeforeApply ? window.backups[0].id : ""
             if (!window.applying) return
             window.applying = false
@@ -411,7 +444,7 @@ Window {
     // words on each page's rows, which search also finds.
     readonly property var pages: [
         { id: "overview", title: "About", icon: "about", section: 0,
-          keywords: "about version license open source github omarchy" },
+          keywords: "about version license open source github omarchy remove uninstall go back" },
         { id: "general", title: "General", icon: "general", section: 1,
           keywords: "theme colors title bars gaps motion wallpapers mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype position place top bottom" },
         { id: "windows", title: "Windows", icon: "windows", section: 1,
@@ -751,7 +784,7 @@ Window {
                 tint: Qt.rgba(0.19, 0.82, 0.35, 1)
                 ink: "#30d158"
                 text: window.notice
-                actionText: window.undoBackup !== "" && window.action === "apply" ? "Undo" : ""
+                actionText: window.undoBackup !== "" && (window.action === "apply" || window.action === "remove") ? "Undo" : ""
                 onActed: {
                     const id = window.undoBackup
                     window.start("undo")
@@ -1158,7 +1191,8 @@ Window {
                                     title: "Restore the backup from " + window.when(modelData.created) + "?",
                                     text: "These go back to how they were then, whole, so edits you made to them since (a keybinding, a bar change) go too:\n"
                                         + "  ·  ~/.config/omarchy/shell.json\n  ·  ~/.config/hypr/looknfeel.lua\n  ·  ~/.config/gtk-4.0/gtk.css\n"
-                                        + "  ·  ~/.config/omarchy/themes/macos/\n  ·  the theme's plugins in ~/.config/omarchy/plugins/\n\n"
+                                        + "  ·  ~/.config/omarchy/themes/macos/\n  ·  the theme's plugins in ~/.config/omarchy/plugins/\n"
+                                        + (modelData.original ? "  ·  the theme's MacTahoe icons are removed\n" : "") + "\n"
                                         + "Your setup now is backed up first, so you can undo this." + window.droppedNote(),
                                     button: "Restore",
                                     destructive: true,
@@ -1324,6 +1358,18 @@ Window {
                     MacButton { text: "App on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-studio") }
                 }
 
+                Item { width: 1; height: 14 }
+
+                MacButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: Object.values(window.status.features || {}).some(on => on)
+                    text: "Remove macOS Theme…"
+                    destructive: true
+                    enabled: !backend.busy
+                    reason: "Wait for what's running to finish"
+                    onClicked: window.askRemove()
+                }
+
                 Item { width: 1; height: 28 }
 
                 Text {
@@ -1416,11 +1462,14 @@ Window {
                 Row {
                     anchors.right: parent.right
                     spacing: 10
-                    // Tab goes between the two and nowhere else while it asks.
+                    // Tab goes between its buttons and nowhere else while it asks.
                     // A third choice, as "Don't Save" is, when the question has one.
                     MacButton {
+                        id: sheetAlternate
                         visible: !!window.confirm && !!window.confirm.alternate
                         text: window.confirm && window.confirm.alternate ? window.confirm.alternate : ""
+                        KeyNavigation.tab: sheetCancel
+                        KeyNavigation.backtab: sheetAction
                         onClicked: { const then = window.confirm.alternateAction; window.confirm = null; then() }
                     }
                     MacButton {
@@ -1428,7 +1477,7 @@ Window {
                         text: "Cancel"
                         primary: !!window.confirm && !!window.confirm.destructive
                         KeyNavigation.tab: sheetAction
-                        KeyNavigation.backtab: sheetAction
+                        KeyNavigation.backtab: sheetAlternate.visible ? sheetAlternate : sheetAction
                         onClicked: window.confirm = null
                     }
                     MacButton {
@@ -1436,7 +1485,7 @@ Window {
                         text: window.confirm ? window.confirm.button : ""
                         primary: !window.confirm || !window.confirm.destructive
                         destructive: !!window.confirm && !!window.confirm.destructive
-                        KeyNavigation.tab: sheetCancel
+                        KeyNavigation.tab: sheetAlternate.visible ? sheetAlternate : sheetCancel
                         KeyNavigation.backtab: sheetCancel
                         onClicked: window.acceptSheet()
                     }

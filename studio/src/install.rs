@@ -124,6 +124,10 @@ pub struct Status {
     /// it is current. Older themes don't report them.
     #[serde(default)]
     pub themes: Vec<String>,
+    /// The theme removing this one while it is current switches to: the one
+    /// before it. Older themes, and a computer with no other, don't report one.
+    #[serde(default, rename = "previous-theme")]
+    pub previous_theme: Option<String>,
     /// The desktop widgets shown. Older themes don't report them.
     #[serde(default)]
     pub widgets: Option<Vec<String>>,
@@ -1164,7 +1168,11 @@ mod tests {
         assert_eq!(changes.args().expect("args")[..4], ["--switch-to", "Tokyo Night", "--remove", "theme"]);
         let status = parse_status(r#"{"active":true,"features":{},"settings":{},"themes":["Tokyo Night"]}"#).expect("valid");
         assert_eq!(status.themes, ["Tokyo Night"]);
-        assert!(parse_status(r#"{"active":true,"features":{},"settings":{}}"#).expect("older").themes.is_empty());
+        let older = parse_status(r#"{"active":true,"features":{},"settings":{}}"#).expect("older");
+        assert!(older.themes.is_empty());
+        assert_eq!(older.previous_theme, None);
+        let status = parse_status(r#"{"active":true,"features":{},"settings":{},"previous-theme":"Nord"}"#).expect("valid");
+        assert_eq!(status.previous_theme.as_deref(), Some("Nord"));
     }
 
     #[test]
@@ -1425,5 +1433,13 @@ mod contract {
         assert!(backups.len() >= 2, "{backups:?}");
         assert!(backup_id(&backups[0].id).is_ok(), "an id Studio would restore: {}", backups[0].id);
         serde_json::from_str::<serde_json::Value>(&home.ok(&["--bar", "--json"])).expect("a bar Studio reads");
+        assert_eq!(status.previous_theme.as_deref(), Some("Other"));
+
+        // Remove macOS Theme, as the About page sends it: every piece off at once.
+        let all: Vec<String> = PIECES.iter().map(|p| format!("\"{p}\"")).collect();
+        let changes = Changes::from_json(&format!(r#"{{"remove": [{}]}}"#, all.join(","))).expect("the removal");
+        home.ok(&changes.args().expect("args").iter().map(String::as_str).collect::<Vec<_>>());
+        let status = parse_status(&home.ok(&["--status", "--json"])).expect("a status Studio reads");
+        assert!(status.features.values().all(|on| !on), "{:?}", status.features);
     }
 }

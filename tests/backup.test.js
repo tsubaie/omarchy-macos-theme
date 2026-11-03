@@ -16,7 +16,7 @@ function makeHome() {
   fs.mkdirSync(bin)
   fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
 [ "$1 $2" = "theme current" ] && { cat "$HOME/current" 2>/dev/null || echo "Tokyo Night"; }
-[ "$1 $2" = "theme list" ] && { [ -f "$HOME/only-macos" ] && echo Macos || printf 'Macos\\nTokyo Night\\n'; }
+[ "$1 $2" = "theme list" ] && { [ -f "$HOME/themes" ] && cat "$HOME/themes" || { [ -f "$HOME/only-macos" ] && echo Macos || printf 'Macos\\nTokyo Night\\n'; }; }
 [ "$1 $2" = "plugin enable" ] && [ -f "$HOME/fail-enable" ] && exit 1
 [ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
 exit 0
@@ -202,15 +202,18 @@ try {
   assert.strictEqual(e.json("--status", "--json").features.theme, true)
   assert.deepStrictEqual(fs.readdirSync(e.config("")).filter((f) => f.startsWith(".macos-theme-restore")), [])
 
-  // Removing the current theme is refused before its snapshot is taken.
+  // Removing the current theme with no other to switch to is refused before
+  // its snapshot is taken.
   const d = makeHome()
   assert.strictEqual(d.run("--add", "theme").status, 0)
   fs.writeFileSync(path.join(d.home, "current"), "Macos")
+  fs.writeFileSync(path.join(d.home, "only-macos"), "")
   const count = d.json("--backups", "--json").length
   const refusedRemove = d.run("--remove", "theme")
   assert.strictEqual(refusedRemove.status, 1)
-  assert.match(refusedRemove.out, /Switch to another theme first/)
+  assert.match(refusedRemove.out, /no other theme to switch to/)
   assert.strictEqual(d.json("--backups", "--json").length, count)
+  fs.rmSync(path.join(d.home, "only-macos"))
 
   // A preview edits only the theme Omarchy is showing, never the theme
   // folder, so a quit mid-drag leaves nothing saved.
@@ -292,6 +295,74 @@ try {
   assert.match(half.out, /not every piece went in/)
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(h.config("omarchy/shell.json"), "utf8")).dock.pinned, ["firefox.desktop"])
   assert.strictEqual(fs.readFileSync(h.config("omarchy/themes/macos/backgrounds/mine.jpg"), "utf8"), "photo")
+  // --uninstall leaves nothing to do by hand: while the theme is current it
+  // switches back to the theme you had before it, takes the MacTahoe icons it
+  // installed too, and says how to undo it.
+  const u = makeHome()
+  fs.writeFileSync(path.join(u.home, "themes"), "Macos\nTokyo Night\nNord\n")
+  fs.writeFileSync(path.join(u.home, "current"), "Nord")
+  assert.strictEqual(u.run("--add", "theme", "--add", "dock").status, 0)
+  const uIcons = path.join(u.home, ".local/share/icons")
+  for (const t of ["MacTahoe", "MacTahoe-dark", "MacTahoe-light"]) {
+    fs.mkdirSync(path.join(uIcons, t), { recursive: true })
+    fs.writeFileSync(path.join(uIcons, t, ".macos-theme"), "")
+  }
+  fs.writeFileSync(path.join(u.home, "current"), "Macos")
+  assert.strictEqual(u.json("--status", "--json")["previous-theme"], "Nord")
+  const gone = u.run("--uninstall")
+  assert.strictEqual(gone.status, 0, gone.out)
+  assert.strictEqual(fs.readFileSync(path.join(u.home, "current"), "utf8").trim(), "Nord")
+  assert.ok(Object.values(u.json("--status", "--json").features).every((on) => on === false))
+  assert.deepStrictEqual(fs.readdirSync(uIcons), [])
+  assert.match(gone.out, /Undo it with: \.\/install\.sh --restore [0-9]{8}-[0-9]{6}/)
+  assert.doesNotMatch(gone.out, /hyprctl reload/)
+  // All of it gone, so the next install records afresh what was current.
+  assert.ok(!fs.existsSync(u.config("omarchy/macos-theme-backups/theme-before-theme.txt")))
+
+  // --restore-original goes back to before the theme: the first snapshot, the
+  // icons and the lock's update hook gone too; undone like any restore.
+  const o = makeHome()
+  const none = o.run("--restore-original")
+  assert.strictEqual(none.status, 1)
+  assert.match(none.out, /no backup from before the macOS theme/)
+  assert.strictEqual(o.run("--add", "dock", "--add", "rows").status, 0)
+  const oIcons = path.join(o.home, ".local/share/icons/MacTahoe-dark")
+  fs.mkdirSync(oIcons, { recursive: true })
+  fs.writeFileSync(path.join(oIcons, ".macos-theme"), "")
+  const hook = path.join(o.home, ".config/omarchy/hooks/post-update.d/macos-theme-lock")
+  fs.mkdirSync(path.dirname(hook), { recursive: true })
+  fs.writeFileSync(hook, "")
+  // The theme's lock, a marked clone of Omarchy's: gone with the restore,
+  // back with its undo, and its update hook with it.
+  const lockClone = o.config("omarchy/plugins/me.lock")
+  fs.mkdirSync(lockClone, { recursive: true })
+  fs.writeFileSync(path.join(lockClone, "manifest.json"), '{ "omarchy": { "clonedFrom": "omarchy.lock" } }')
+  fs.writeFileSync(path.join(lockClone, ".macos-theme"), "")
+  assert.strictEqual(o.json("--status", "--json").features.lock, true)
+  const back = o.run("--restore-original")
+  assert.strictEqual(back.status, 0, back.out)
+  assert.ok(Object.values(o.json("--status", "--json").features).every((on) => on === false))
+  assert.ok(!fs.existsSync(oIcons))
+  assert.ok(!fs.existsSync(hook))
+  const undo = o.json("--backups", "--json")[0]
+  assert.match(undo.note, /^Before restoring/)
+  assert.strictEqual(o.run("--restore", undo.id).status, 0)
+  assert.strictEqual(o.json("--status", "--json").features.dock, true)
+  assert.strictEqual(o.json("--status", "--json").features.rows, true)
+  assert.strictEqual(o.json("--status", "--json").features.lock, true)
+  assert.ok(fs.existsSync(hook))
+
+  // Installed before backups were kept, there's no snapshot from before the
+  // theme: --restore-original refuses and changes nothing.
+  const late = makeHome()
+  assert.strictEqual(late.run("--add", "dock").status, 0)
+  fs.rmSync(late.config("omarchy/macos-theme-backups/snapshots"), { recursive: true })
+  assert.strictEqual(late.run("--backup").status, 0)
+  assert.strictEqual(late.json("--backups", "--json")[0].original, false)
+  const refusedBack = late.run("--restore-original")
+  assert.strictEqual(refusedBack.status, 1)
+  assert.match(refusedBack.out, /--uninstall/)
+  assert.strictEqual(late.json("--status", "--json").features.dock, true)
 } finally {
   for (const home of homes) fs.rmSync(home, { recursive: true, force: true })
 }

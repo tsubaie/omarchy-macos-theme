@@ -85,6 +85,15 @@ Each switch is one part ("piece") of the theme. Flip the ones you want, then pre
 
 Turning off **macOS theme** while it's your current Omarchy theme shows a **Switch to** row of your other themes: pick one, and Apply switches to it before the macOS theme goes.
 
+### Removing the theme
+
+**Remove macOS Theme…** at the bottom of About takes it all away in one step, after asking:
+
+- **Remove** turns every piece off in one Apply, the MacTahoe icons too, and gives back what each one replaced: Omarchy's dock, bar, menu and lock screen, or your own. While the macOS theme is current, Omarchy switches first to the theme you had before it, which the question names. Your other changes since stay. **Undo** in the green note puts it all back but the icons, which backups don't hold; turn **MacTahoe icons** on again in General for those.
+- **Go Back**, offered when there is a backup from before the theme, restores that backup instead: everything as it was that day, whole, so edits to `shell.json`, `looknfeel.lua` and `gtk.css` since go too.
+
+Studio itself stays installed, so you can install the theme again from General.
+
 A setting or piece the installed theme is too old for is shown dimmed, with "Update the theme to use this".
 
 ### Settings
@@ -112,6 +121,7 @@ The theme's installer backs up what it is about to change before every change, s
 - Each backup is listed with when it was taken and what changed after it ("Added macOS dock", "Window glass 0.9"). **Restore** puts it back after asking, naming the files it replaces, and backs up your setup first, so a restore can be undone too.
 - **Where they are** shows the folder, `~/.config/omarchy/macos-theme-backups`, with **Open**.
 - The last 10 backups are kept, and the very first one for good. On a computer where the theme is new, that first one is "Before macOS theme": Omarchy as it was.
+- **Before macOS theme** restores like any backup, and also removes the theme's MacTahoe icons, so the computer is as it was before the theme.
 - Backups are small, a few hundred KB, because the theme's own wallpapers come back from the repository instead of being copied.
 
 ### Export and import
