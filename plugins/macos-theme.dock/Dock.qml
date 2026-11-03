@@ -111,6 +111,9 @@ Item {
   // How big its icons are, in points before the shell's scale: 32 to 80. Set
   // with install.sh --set dock-size=<32-80>.
   readonly property int configuredIconSize: typeof dockConfig.iconSize === "number" ? Math.round(Math.max(32, Math.min(80, dockConfig.iconSize))) : 48
+  // An app's windows shown over its icon after a short hover; on unless
+  // turned off with install.sh --set dock-previews=0.
+  readonly property bool previews: dockConfig.previews !== false
 
   // A slider being dragged in macOS Theme Studio shows its value here first
   // (install.sh --preview, through preview() below), with nothing written.

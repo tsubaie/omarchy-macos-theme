@@ -37,6 +37,7 @@
 #                                 centerBegin, center, centerEnd, right, tray)
 #   ./install.sh --set magnification=1.5  how far dock icons grow, 1 (off) to 2
 #   ./install.sh --set dock-size=56  how big dock icons are, 32 to 80 points; 48 by default
+#   ./install.sh --set dock-previews=0  no window previews over dock icons on hover (1, the default: on)
 #   ./install.sh --set drop-follow=0  a window dropped onto another workspace goes alone
 #                                 (1, the theme's: you go along with it)
 #   ./install.sh --set title-bars=0  turn off the title bars with traffic lights (1: on)
@@ -155,11 +156,11 @@ while (( $# )); do
         settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
         shift; shift; continue
       fi
-      [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|snapping|drop-follow|title-bars|reduce-motion|traffic-lights|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
+      [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|dock-previews|snapping|drop-follow|title-bars|reduce-motion|traffic-lights|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
-          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "snapping" || k == "drop-follow" || k == "title-bars" || k == "reduce-motion" ? v == "0" || v == "1" : k == "traffic-lights" ? v ~ /^[0-9]+$/ && v >= 10 && v <= 20 : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : k == "glass" ? v >= 0.75 && v <= 1 : v >= 0.5 && v <= 1)
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "dock-previews" || k == "snapping" || k == "drop-follow" || k == "title-bars" || k == "reduce-motion" ? v == "0" || v == "1" : k == "traffic-lights" ? v ~ /^[0-9]+$/ && v >= 10 && v <= 20 : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : k == "glass" ? v >= 0.75 && v <= 1 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass=0.75 to 1, web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, snapping, drop-follow, title-bars or reduce-motion=0 or 1, traffic-lights=10 to 20, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass=0.75 to 1, web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, dock-previews, snapping, drop-follow, title-bars or reduce-motion=0 or 1, traffic-lights=10 to 20, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -358,6 +359,10 @@ shell_write() {
 # Sets one value in shell.json: shell_set '.dock.magnification' 1.5.
 shell_set() { shell_write --argjson v "$2" "$1 = \$v"; }
 set_magnification() { shell_set '.dock.magnification' "$1"; }
+# Whether the dock shows an app's windows over its icon on hover: 1 unless turned off.
+dock_previews() {
+  [[ $(jq '.dock.previews' "$SHELL_JSON" 2>/dev/null) == false ]] && echo 0 || echo 1
+}
 dock_size() {
   local m
   m=$(jq '.dock.iconSize | numbers' "$SHELL_JSON" 2>/dev/null) || true
@@ -505,8 +510,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
       "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
       "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"
@@ -518,6 +523,7 @@ if $status; then
     for k in $LOOK_SETTINGS; do printf '%-14s %s\n' "$k" "$(look_get "$k")"; done
     printf '%-14s %s\n' magnification "$(magnification)"
     printf '%-14s %s\n' dock-size "$(dock_size)"
+    printf '%-14s %s\n' dock-previews "$(dock_previews)"
     printf '%-14s %s\n' clock "$(clock_position)"
     printf '%-14s %s\n' volume-hud "$(hud_position volume)"
     printf '%-14s %s\n' dictation-hud "$(hud_position dictation)"
@@ -1125,6 +1131,11 @@ fi
 if [[ -n ${settings[dock-size]:-} ]]; then
   shell_set '.dock.iconSize' "${settings[dock-size]}"
   say "Set the dock's icons to ${settings[dock-size]} points"
+fi
+if [[ -n ${settings[dock-previews]:-} ]]; then
+  if ((settings[dock-previews])); then on=true; else on=false; fi
+  shell_set '.dock.previews' "$on"
+  say "Turned the dock's window previews $($on && echo on || echo off)"
 fi
 # The bar follows shell.json itself, so its items move without a reload.
 [[ -n $bar_layout ]] && apply_bar_layout "$bar_layout"

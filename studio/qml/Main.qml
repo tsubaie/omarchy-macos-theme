@@ -178,6 +178,9 @@ Window {
         for (const item of bar.hidden || []) names[item.id] = item.name
         return names
     }
+    // Omdrop, which AirDrop in Control Center works through, isn't among the
+    // bar's items. Unknown until the bar is read: no hint then.
+    readonly property bool omdropMissing: bar.sections !== undefined && !("netmojo.omdrop" in barNames)
     // Left, Center and Right, and the hidden ones (BarModel.groups).
     readonly property var barNow: BarModel.groups(bar)
     property var pendingBar: null
@@ -379,6 +382,25 @@ Window {
         backend.apply(JSON.stringify({ add: ["theme"] }))
     }
 
+    // Updating the theme, asked first. From What's New… the changes lead and
+    // nothing is decided yet; from Update Now, what updating does leads.
+    function askThemeUpdate(lookingFirst) {
+        const what = "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once."
+        const notes = backend.updateNotes ? Labels.whatsNew(backend.updateNotes) : ""
+        confirm = {
+            title: lookingFirst ? "What's new in the macOS theme" : "Update the macOS theme?",
+            text: (lookingFirst ? notes + "\n\n" + what : what + (notes ? "\n\n" + notes : "")) + droppedNote(),
+            button: "Update Now",
+            waitsForIdle: true,
+            action: () => {
+                discard()
+                start("update")
+                backupBeforeApply = backups.length > 0 ? backups[0].id : ""
+                backend.update()
+            }
+        }
+    }
+
     // Remove macOS Theme: every piece off in one Apply, so its progress, Stop
     // and Undo work as Apply's do; or, when there is one, the backup from
     // before the theme, whole.
@@ -524,7 +546,11 @@ Window {
             focusBeforeSheet = null
         }
     }
+    // A sheet that can open while something runs (What's New…) takes its
+    // action only once that is done.
+    readonly property bool sheetWaits: !!confirm && !!confirm.waitsForIdle && backend.busy
     function acceptSheet() {
+        if (sheetWaits) return
         const action = confirm.action
         confirm = null
         action()
@@ -540,13 +566,13 @@ Window {
         { id: "windows", title: "Windows", icon: "windows", section: 1,
           keywords: "window glass reduce motion animation animations accessibility fade spring vestibular translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners title bar titlebar traffic lights buttons close minimize zoom" },
         { id: "dock", title: "Dock", icon: "dock", section: 1,
-          keywords: "dock magnification size icon size bigger smaller resize window previews downloads trash" },
+          keywords: "dock magnification size icon size bigger smaller resize window previews hover thumbnails downloads trash" },
         { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
           keywords: "lock screen password clock account picture preview" },
         { id: "widgets", title: "Widgets", icon: "widgets", section: 1,
           keywords: "desktop widgets clock calendar weather now playing music show hide" },
         { id: "menubar", title: "Menu Bar", icon: "menubar", section: 1,
-          keywords: "menu bar inter font app name control center wifi wi-fi ethernet network bluetooth sound volume display monitor symbols clock time date position left center middle right items icons widgets show hide rearrange order drag tray" },
+          keywords: "menu bar inter font app name control center wifi wi-fi ethernet network bluetooth sound volume display monitor symbols clock time date position left center middle right items icons widgets show hide rearrange order drag tray airdrop omdrop" },
         { id: "backups", title: "Backups", icon: "backups", section: 2,
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
@@ -1121,8 +1147,13 @@ Window {
                 SettingRow {
                     label: "Size"
                     note: "How big the dock's icons are, in points"
-                    last: true
                     SettingSlider { key: "dock-size"; from: 32; to: 80; fallback: 48; decimals: 0; needs: "dock" }
+                }
+                SettingRow {
+                    label: "Window previews"
+                    note: "An app's windows over its icon when the pointer rests on it"
+                    last: true
+                    SettingSwitch { key: "dock-previews"; needs: "dock" }
                 }
             }
 
@@ -1205,8 +1236,19 @@ Window {
                 SettingRow {
                     label: "macOS icons"
                     note: "For Wi-Fi and Ethernet, Bluetooth, sound and displays"
-                    last: true
+                    last: !window.omdropMissing
                     PieceSwitch { piece: "bar-icons" }
+                }
+                // AirDrop in Control Center works through Omdrop, a plugin of its own.
+                SettingRow {
+                    visible: window.omdropMissing
+                    label: "AirDrop"
+                    note: "Needs Omdrop, AirDrop for Omarchy, which isn't installed. Its page says how to install it."
+                    last: true
+                    MacButton {
+                        text: "Get Omdrop"
+                        onClicked: Qt.openUrlExternally("https://github.com/netmojo-systems/omdrop-plugin")
+                    }
                 }
             }
 
@@ -1430,23 +1472,24 @@ Window {
                             // A check that failed (offline, say) is no "Up to date".
                             : backend.updateError !== "" ? "Couldn't reach GitHub to check. Check your connection, then check again."
                             : ("Up to date." + here + " " + window.lastChecked(window.themeCheckedAt)).trim()
+                        mainControl: themeUpdate
 
-                        UpdateButton {
-                            checking: backend.checking
-                            next: backend.updates > 0 ? "Update Now" : "Check Now"
-                            primary: backend.updates > 0
-                            enabled: !backend.busy && !backend.checking
-                            onClicked: if (backend.updates === 0) backend.checkTheme(); else window.confirm = {
-                                title: "Update the macOS theme?",
-                                text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once."
-                                    + (backend.updateNotes ? "\n\n" + Labels.whatsNew(backend.updateNotes) : "") + window.droppedNote(),
-                                button: "Update",
-                                action: () => {
-                                    window.discard()
-                                    window.start("update")
-                                    window.backupBeforeApply = window.backups.length > 0 ? window.backups[0].id : ""
-                                    backend.update()
-                                }
+                        // A look first, as Software Update's More Info…, so the
+                        // update isn't the only thing to press; open while anything runs.
+                        Row {
+                            spacing: 8
+                            MacButton {
+                                visible: backend.updates > 0 && backend.updateNotes !== ""
+                                text: "What's New…"
+                                onClicked: window.askThemeUpdate(true)
+                            }
+                            UpdateButton {
+                                id: themeUpdate
+                                checking: backend.checking
+                                next: backend.updates > 0 ? "Update Now" : "Check Now"
+                                primary: backend.updates > 0
+                                enabled: !backend.busy && !backend.checking
+                                onClicked: if (backend.updates === 0) backend.checkTheme(); else window.askThemeUpdate(false)
                             }
                         }
                     }
@@ -1461,30 +1504,41 @@ Window {
                                 + (window.studioLatest ? " The newest release is " + window.studioLatest + "." : "")
                                 + " " + window.lastChecked(window.studioCheckedAt)).trim()
                             : ("Up to date. " + window.lastChecked(window.studioCheckedAt)).trim()
+                        mainControl: studioUpdateButton
 
-                        UpdateButton {
-                            checking: window.studioChecking
-                            next: window.studioUpdated ? "Reopen" : window.studioUpdate ? "Update Now" : "Check Now"
-                            primary: window.studioUpdate || window.studioUpdated
-                            // Updating runs the downloaded theme's own get.sh. Reopening
-                            // waits for what's running, and for changes waiting, so it
-                            // never quits mid-Apply or leaves two windows open.
-                            enabled: window.studioUpdated ? !backend.busy && window.pendingCount === 0
-                                : !window.studioChecking && !(window.studioUpdate && backend.busy)
-                            reason: window.studioUpdated && enabled === false
-                                ? (backend.busy ? "Wait for what's running to finish" : "Apply or revert your changes first") : ""
-                            onClicked: {
-                                if (window.studioUpdated) {
-                                    if (backend.reopen()) window.close()
-                                } else if (window.studioUpdate) {
-                                    window.confirm = {
-                                        title: "Update Studio to " + window.studioLatest + "?",
-                                        text: "The newest Studio is downloaded from GitHub and put in place of this one. Reopen it afterwards to use it; the theme isn't changed.",
-                                        button: "Update",
-                                        action: () => { window.start("studio", window.studioLatest); backend.updateStudio() }
+                        Row {
+                            spacing: 8
+                            // Its release's notes, on GitHub.
+                            MacButton {
+                                visible: window.studioUpdate && !window.studioUpdated
+                                text: "What's New…"
+                                onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme/releases/tag/" + encodeURIComponent(window.studioLatest))
+                            }
+                            UpdateButton {
+                                id: studioUpdateButton
+                                checking: window.studioChecking
+                                next: window.studioUpdated ? "Reopen" : window.studioUpdate ? "Update Now" : "Check Now"
+                                primary: window.studioUpdate || window.studioUpdated
+                                // Updating runs the downloaded theme's own get.sh. Reopening
+                                // waits for what's running, and for changes waiting, so it
+                                // never quits mid-Apply or leaves two windows open.
+                                enabled: window.studioUpdated ? !backend.busy && window.pendingCount === 0
+                                    : !window.studioChecking && !(window.studioUpdate && backend.busy)
+                                reason: window.studioUpdated && enabled === false
+                                    ? (backend.busy ? "Wait for what's running to finish" : "Apply or revert your changes first") : ""
+                                onClicked: {
+                                    if (window.studioUpdated) {
+                                        if (backend.reopen()) window.close()
+                                    } else if (window.studioUpdate) {
+                                        window.confirm = {
+                                            title: "Update Studio to " + window.studioLatest + "?",
+                                            text: "The newest Studio is downloaded from GitHub and put in place of this one. Reopen it afterwards to use it; the theme isn't changed.",
+                                            button: "Update",
+                                            action: () => { window.start("studio", window.studioLatest); backend.updateStudio() }
+                                        }
+                                    } else {
+                                        window.checkStudio()
                                     }
-                                } else {
-                                    window.checkStudio()
                                 }
                             }
                         }
@@ -1594,7 +1648,7 @@ Window {
                 }
                 Text {
                     width: parent.width
-                    text: window.confirm ? window.confirm.text : ""
+                    text: window.confirm ? window.confirm.text + (window.sheetWaits ? "\n\nUpdate Now waits for what's running to finish." : "") : ""
                     color: Qt.rgba(1, 1, 1, 0.7)
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -1626,6 +1680,8 @@ Window {
                         text: window.confirm ? window.confirm.button : ""
                         primary: !window.confirm || !window.confirm.destructive
                         destructive: !!window.confirm && !!window.confirm.destructive
+                        enabled: !window.sheetWaits
+                        reason: window.sheetWaits ? "Wait for what's running to finish" : ""
                         KeyNavigation.tab: sheetAlternate.visible ? sheetAlternate : sheetCancel
                         KeyNavigation.backtab: sheetCancel
                         onClicked: window.acceptSheet()
@@ -1687,10 +1743,12 @@ Window {
     component SettingSwitch: MacSwitch {
         property string key: ""
         property int fallback: 1
+        // The piece it waits on, as SettingSlider's.
+        property string needs: "theme"
         readonly property bool changed: key in window.pendingSettings
         checked: window.settingValue(key, fallback) === 1
-        enabled: !backend.busy && window.pieceOn("theme") && window.known(key)
-        reason: !window.pieceOn("theme") ? window.why("theme") : window.known(key) ? "" : window.tooOld
+        enabled: !backend.busy && window.pieceOn(needs) && window.known(key)
+        reason: !window.pieceOn(needs) ? window.why(needs) : window.known(key) ? "" : window.tooOld
         onToggled: on => window.markSetting(key, on ? 1 : 0, fallback)
     }
 
