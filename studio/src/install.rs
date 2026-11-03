@@ -643,7 +643,9 @@ pub fn update_studio(dir: &Path) -> Result<Warnings> {
         },
         Some(curl_progress),
     )
-    .map(|ran| ran.warnings)
+    // Its stderr is curl's progress bar, never a warning: get.sh has none,
+    // and a failure still says what went wrong (curl's own last line).
+    .map(|_| Warnings::new())
 }
 
 /// How far curl's download is, from its progress bar ("####   45.2%"):
@@ -1253,6 +1255,11 @@ mod tests {
         // No install.sh here, so the restore fails and the update stays as it was.
         assert!(undo_update(&dir, "20261103-160000").is_err());
         assert!(!needs_install(&dir).exists());
+        // A restore that goes through leaves the update offered again.
+        std::fs::write(dir.join("install.sh"), "exit 0\n").expect("a fake install.sh");
+        undo_update(&dir, "20261103-160000").expect("the restore goes through");
+        assert!(needs_install(&dir).exists());
+        assert_eq!(incoming(&dir), ["The last update, downloaded but not installed yet"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
