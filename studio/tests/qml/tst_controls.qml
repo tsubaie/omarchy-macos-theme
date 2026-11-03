@@ -20,6 +20,11 @@ Item {
             onPicked: v => value = v
         }
         MacSwitch { id: off; enabled: false; reason: "Turn on the theme to change this" }
+        SettingRow {
+            id: row
+            label: "Window glass"
+            MacSwitch { id: marked; property bool changed: false }
+        }
     }
 
     TestCase {
@@ -75,6 +80,12 @@ Item {
         function test_a_disabled_control_says_why() {
             verify(!off.enabled)
             compare(off.Accessible.description, "Turn on the theme to change this")
+        }
+
+        function test_a_row_marks_a_change_its_control_reports() {
+            verify(!row.changed)
+            marked.changed = true
+            verify(row.changed)
         }
     }
 }

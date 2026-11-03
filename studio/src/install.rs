@@ -120,6 +120,10 @@ pub struct Status {
     /// don't report it.
     #[serde(default)]
     pub clock: Option<String>,
+    /// The other Omarchy themes, to switch to before removing this one while
+    /// it is current. Older themes don't report them.
+    #[serde(default)]
+    pub themes: Vec<String>,
     /// The desktop widgets shown. Older themes don't report them.
     #[serde(default)]
     pub widgets: Option<Vec<String>>,
@@ -254,6 +258,7 @@ pub struct Changes {
     places: Vec<(&'static str, &'static str)>,
     bar: Option<BarLayout>,
     widgets: Option<Vec<&'static str>>,
+    switch_to: Option<String>,
 }
 
 /// The changes as the window sends them, before they are checked.
@@ -273,6 +278,19 @@ struct RawChanges {
     bar: Option<BarLayout>,
     #[serde(default)]
     widgets: Option<Vec<String>>,
+    /// The theme to switch to first, when the current one is removed.
+    #[serde(default, rename = "switchTo")]
+    switch_to: Option<String>,
+}
+
+/// Checks a theme's name to switch to: a name as Omarchy lists them, not an
+/// option or anything else for install.sh to read (which checks it exists).
+fn theme_name(name: String) -> Result<String> {
+    let plain = !name.is_empty() && name.len() <= 100 && !name.starts_with('-') && !name.chars().any(char::is_control);
+    if !plain {
+        bail!("not a theme's name: {name:?}");
+    }
+    Ok(name)
 }
 
 impl Changes {
@@ -325,6 +343,7 @@ impl Changes {
                 .collect::<Result<_>>()?,
             bar: raw.bar.map(BarLayout::check).transpose()?,
             widgets: raw.widgets.map(shown_widgets).transpose()?,
+            switch_to: raw.switch_to.map(theme_name).transpose()?,
         };
         if let Some(piece) = changes
             .add
@@ -350,6 +369,9 @@ impl Changes {
     /// The arguments for one `install.sh` call.
     fn args(&self) -> Result<Vec<String>> {
         let mut args = Vec::new();
+        if let Some(theme) = &self.switch_to {
+            args.extend(["--switch-to".to_owned(), theme.clone()]);
+        }
         for piece in &self.remove {
             args.extend(["--remove".to_owned(), piece.to_string()]);
         }
@@ -1063,6 +1085,19 @@ mod tests {
         assert!(Changes::from_json(r#"{"set":{"glass":3}}"#).is_err());
         assert!(Changes::from_json(r#"{"add":["dock"],"remove":["dock"]}"#).is_err());
         assert!(Changes::from_json("not json").is_err());
+        for bad in ["", "--uninstall", "Tokyo\nNight"] {
+            let json = serde_json::json!({"remove": ["theme"], "switchTo": bad}).to_string();
+            assert!(Changes::from_json(&json).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn removing_the_current_theme_switches_first() {
+        let changes = Changes::from_json(r#"{"remove":["theme"],"switchTo":"Tokyo Night"}"#).expect("valid");
+        assert_eq!(changes.args().expect("args")[..4], ["--switch-to", "Tokyo Night", "--remove", "theme"]);
+        let status = parse_status(r#"{"active":true,"features":{},"settings":{},"themes":["Tokyo Night"]}"#).expect("valid");
+        assert_eq!(status.themes, ["Tokyo Night"]);
+        assert!(parse_status(r#"{"active":true,"features":{},"settings":{}}"#).expect("older").themes.is_empty());
     }
 
     #[test]
