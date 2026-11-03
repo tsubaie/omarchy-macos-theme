@@ -54,7 +54,13 @@ snapshot_take() {
   [[ -n $(ls -A "$SNAPSHOTS" 2>/dev/null) ]] || first=true
   mkdir -p "$dir"
 
-  for p in $SNAPSHOT_FILES; do [[ -e $CONFIG/$p ]] && paths+=("$p"); done
+  # The three files by their contents, read through a dotfiles symlink: tar
+  # would keep only the link, and a restore would undo nothing.
+  local files=() copies="$dir/.files"
+  for p in $SNAPSHOT_FILES; do
+    [[ -e $CONFIG/$p ]] || continue
+    mkdir -p "$copies/$(dirname "$p")" && cp -L "$CONFIG/$p" "$copies/$p" && files+=("$p")
+  done
   while read -r p; do [[ -n $p ]] && paths+=("$p"); done < <(managed_plugins)
   [[ -d $THEME_DIR ]] && paths+=("omarchy/themes/macos")
 
@@ -64,8 +70,12 @@ snapshot_take() {
     excludes+=(--exclude="omarchy/themes/macos/backgrounds/$(basename "$p")")
   done
   # Before the theme there may be nothing yet, which is a valid snapshot too.
-  if (( ${#paths[@]} )); then
-    tar -C "$CONFIG" "${excludes[@]}" -czf "$dir/files.tar.gz" "${paths[@]}"
+  local from=()
+  (( ${#files[@]} )) && from+=(-C "$copies" "${files[@]}")
+  (( ${#paths[@]} )) && from+=(-C "$CONFIG" "${paths[@]}")
+  if (( ${#from[@]} )); then
+    tar "${excludes[@]}" -czf "$dir/files.tar.gz" "${from[@]}"
+    rm -rf "${copies:?}"
   else
     tar -czf "$dir/files.tar.gz" -T /dev/null
   fi
@@ -114,11 +124,18 @@ snapshot_unpack() {
   stage=$(mktemp -d "$CONFIG/.macos-theme-restore.XXXXXX") || return 1
   tar -C "$stage" --no-same-owner -xzf "$1" 2>/dev/null || { rm -rf "${stage:?}"; return 1; }
 
-  for p in $SNAPSHOT_FILES; do rm -f "${CONFIG:?}/$p"; done
   while read -r p; do [[ -n $p ]] && rm -rf "${CONFIG:?}/$p"; done < <(managed_plugins)
   rm -rf "${THEME_DIR:?}"
   # Same filesystem, so each move is a rename. Globbed, so names may hold spaces.
-  for p in $SNAPSHOT_FILES; do unpack_move "$stage" "$stage/$p" || moved=false; done
+  # Written into, not replaced: a dotfiles symlink stays one, and its file
+  # gets the contents back. One the snapshot doesn't hold wasn't there then.
+  for p in $SNAPSHOT_FILES; do
+    if [[ -f $stage/$p ]]; then
+      { mkdir -p "$(dirname "$CONFIG/$p")" && cat "$stage/$p" >"$CONFIG/$p"; } || moved=false
+    else
+      rm -f "${CONFIG:?}/$p"
+    fi
+  done
   for p in "$stage"/omarchy/plugins/* "$stage/omarchy/themes/macos"; do unpack_move "$stage" "$p" || moved=false; done
   rm -rf "${stage:?}"
   # The theme's own files, left out of snapshots.
@@ -255,8 +272,11 @@ import_profile() {
     hud=$(jq -r --arg k "$f" '.settings[$k] | strings' "$profile")
     [[ $hud =~ ^(bottom|top)$ ]] && args+=(--set "$f=$hud")
   done
+  # A piece that fails still lets the dock, widgets and wallpapers come in;
+  # the import fails at the end, with what install.sh said about it.
+  local failed=0
   if (( ${#args[@]} )); then
-    MACOS_THEME_NO_SNAPSHOT=1 bash "$REPO/install.sh" "${args[@]}"
+    MACOS_THEME_NO_SNAPSHOT=1 bash "$REPO/install.sh" "${args[@]}" || failed=1
   fi
 
   # The dock's pinned apps and the widgets' place and layout.
@@ -271,5 +291,6 @@ import_profile() {
     for f in "$tmp"/backgrounds/*; do [[ -f $f ]] && cp -n "$f" "$THEME_DIR/backgrounds/"; done
   fi
   rm -rf "${tmp:?}"
+  (( ! failed )) || { echo "Imported $(basename "$file"), but not every piece went in (see above)" >&2; exit 1; }
   say "Imported $(basename "$file")"
 }

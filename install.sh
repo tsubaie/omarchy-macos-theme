@@ -485,7 +485,7 @@ if $status; then
     printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s}\n' \
       "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
-      "$(omarchy theme list 2>/dev/null | grep -vx Macos | jq -Rcs 'split("\n") | map(select(length > 0))' || echo '[]')"
+      "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -765,6 +765,11 @@ if [[ -n ${remove[theme]:-} && -z $switch_to ]] && active; then
   exit 1
 fi
 
+for k in $LOOK_SETTINGS; do
+  [[ -n ${settings[$k]:-} && -z ${add[theme]:-} ]] && ! installed theme &&
+    { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
+done
+
 # Every change can be undone: a snapshot of how things are, first.
 if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]]; then
   take_lock
@@ -823,8 +828,10 @@ if want theme; then
   [[ -n $from && -d $from ]] && cp -rn "${from%/}/." "$THEME_DIR/"
   # So do the settings you chose.
   for k in "${!kept_look[@]}"; do look_set "$k" "${kept_look[$k]}"; done
-  # The copy moved aside is merged in, and this run's snapshot holds it too.
+  # The copy moved aside, or the one kept when the theme was removed, is
+  # merged in now: your files are in the theme folder.
   [[ -n $kept ]] && rm -rf "${kept:?}"
+  [[ ${from%/} == "$BACKUP_DIR"/macos.* ]] && rm -rf "${from:?}"
   printf '@import url("file://%s/default/gtk/glass.css");\n' "$OMARCHY_PATH" > "$THEME_DIR/glass.css"
   say "Installed the theme to $THEME_DIR"
 fi
@@ -1062,7 +1069,6 @@ fi
 look_changed=false
 for k in $LOOK_SETTINGS; do
   [[ -n ${settings[$k]:-} ]] || continue
-  installed theme || { echo "Install the theme first (--add theme), then set its $k." >&2; exit 1; }
   look_set "$k" "${settings[$k]}"
   look_changed=true
   say "Set $k to ${settings[$k]}"

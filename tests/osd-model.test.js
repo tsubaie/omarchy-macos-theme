@@ -2,6 +2,26 @@
 const assert = require("assert")
 const m = require("../plugins/macos-theme.osd/OsdModel.js")
 const icons = require("../plugins/macos-theme.osd/HudIcons.js")
+const fs = require("fs")
+const path = require("path")
+
+const root = path.join(__dirname, "..")
+const read = (p) => fs.readFileSync(path.join(root, p), "utf8")
+// Each plugin installs on its own, so each carries the file; they must not drift apart.
+assert.strictEqual(read("plugins/macos-theme.dictation-hud/HudIcons.js"), read("plugins/macos-theme.osd/HudIcons.js"),
+  "plugins/macos-theme.dictation-hud/HudIcons.js differs from the volume HUD's copy; copy that one over it")
+
+// The plugins that follow the Glass setting each find it in look.lua; their
+// pattern must still find the theme's line, and read its second number.
+const look = read("theme/look.lua")
+for (const qml of ["control-center/ControlCenter.qml", "osd/Osd.qml", "dictation-hud/Hud.qml"]) {
+  const source = read(`plugins/macos-theme.${qml}`)
+  const found = /var m = \/(.+)\/\.exec\(text\(\)\)/.exec(source)
+  assert.ok(found, `${qml} no longer reads the glass from look.lua`)
+  const m = new RegExp(found[1]).exec(look)
+  assert.ok(m, `${qml}'s glass pattern doesn't match theme/look.lua`)
+  assert.strictEqual(m[1], "0.85", `${qml} reads the wrong number from look.lua`)
+}
 
 // The speaker by volume, muted at 0 or when muted.
 assert.strictEqual(m.hudIconName("volume", 0), "volume-muted")
