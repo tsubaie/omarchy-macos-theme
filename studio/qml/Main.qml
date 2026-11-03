@@ -36,11 +36,15 @@ Window {
     property string studioLatest: ""
     property bool studioCheckFailed: false
     property bool studioChecking: false
-    // When each was last asked, shown after its answer so a check that finds
+    // When each was last asked, shown under its answer so a check that finds
     // nothing new still visibly did something.
-    property string themeCheckedAt: ""
-    property string studioCheckedAt: ""
-    function now() { return Qt.formatTime(new Date(), "hh:mm") }
+    property var themeCheckedAt: null
+    property var studioCheckedAt: null
+    function lastChecked(at) {
+        if (!at) return ""
+        const day = at.toDateString() === new Date().toDateString() ? "today" : Qt.formatDate(at, "d MMM")
+        return "Last checked " + day + " at " + Qt.formatTime(at, "hh:mm") + "."
+    }
     // Updated, but this window still runs the old one until it reopens.
     property bool studioUpdated: false
     readonly property bool studioUpdate: releaseBuild && !studioUpdated && studioLatest !== "" && studioLatest !== backend.appVersion
@@ -55,7 +59,7 @@ Window {
             try { latest = xhr.status === 200 ? JSON.parse(xhr.responseText).tag_name || "" : "" } catch (e) {}
             studioCheckFailed = latest === ""
             if (latest !== "") studioLatest = latest
-            studioCheckedAt = now()
+            studioCheckedAt = new Date()
             studioChecking = false
         }
         xhr.open("GET", "https://api.github.com/repos/tsubaie/omarchy-macos-theme/releases/latest")
@@ -65,7 +69,7 @@ Window {
     Component.onCompleted: checkStudio()
     Connections {
         target: backend
-        function onCheckingChanged() { if (!backend.checking) window.themeCheckedAt = window.now() }
+        function onCheckingChanged() { if (!backend.checking) window.themeCheckedAt = new Date() }
     }
 
     readonly property var backups: {
@@ -1287,130 +1291,119 @@ Window {
                 }
             }
 
-            // Overview, as About This Mac: who made it, for what, and that it is
-            // safe to use.
+            // Overview, as About This Mac and Software Update together: what it
+            // is, whether it and Studio are up to date, and the way out. All of
+            // it fits the window as it opens, without scrolling.
             Column {
                 visible: backend.downloaded && window.page === "overview"
                 width: parent.width
-                spacing: 6
+                spacing: 18
                 topPadding: 4
 
                 HomeScene { width: parent.width }
 
-                Item { width: 1; height: 14 }
+                // What it is, and, when the desktop isn't showing it, the one
+                // button that makes it so.
+                Item {
+                    width: parent.width
+                    height: Math.max(appIcon.height, identity.height, useTheme.visible ? useTheme.height : 0)
 
-                AppIcon {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    size: 96
-                }
-
-                Item { width: 1; height: 8 }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "macOS Theme for Omarchy"
-                    color: "white"
-                    font.pixelSize: 26
-                    font.weight: Font.Bold
-                }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Version " + backend.appVersion
-                    color: Qt.rgba(1, 1, 1, 0.55)
-                    font.pixelSize: 13
-                }
-
-                // Downloaded, or switched away from in Omarchy, the theme isn't
-                // what the desktop shows: one button makes it so.
-                Column {
-                    readonly property bool shown: window.status.active === false && window.knownPiece("theme")
-                        && Object.keys(window.status.features || {}).length > 0
-                    visible: shown
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    topPadding: 16
-                    spacing: 10
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: window.installed("theme") ? "The macOS theme is installed, but Omarchy is showing another theme."
-                            : "The macOS theme isn't installed yet."
-                        color: Qt.rgba(1, 1, 1, 0.7)
-                        font.pixelSize: 13
+                    AppIcon {
+                        id: appIcon
+                        size: 64
+                        anchors.verticalCenter: parent.verticalCenter
                     }
-                    MacButton {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        large: true
-                        primary: true
-                        text: window.installed("theme") ? "Use macOS Theme" : "Install macOS Theme"
-                        enabled: !backend.busy
-                        reason: "Wait for what's running to finish"
-                        onClicked: window.useTheme()
-                    }
-                }
+                    Column {
+                        id: identity
+                        anchors.left: appIcon.right
+                        anchors.leftMargin: 16
+                        anchors.right: useTheme.visible ? useTheme.left : parent.right
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 5
 
-                Item { width: 1; height: 18 }
-
-
-                // The facts, labels right-aligned against their values, as macOS lists them.
-                Grid {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    columns: 2
-                    columnSpacing: 12
-                    rowSpacing: 8
-
-                    Fact { text: "Made for" }
-                    Row {
-                        spacing: 8
-                        height: 18
-
-                        Image {
-                            id: omarchyLogo
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: status === Image.Ready
-                            source: backend.omarchyLogo
-                            sourceSize.height: 36
-                            height: 14
-                            fillMode: Image.PreserveAspectFit
+                        Text {
+                            text: "macOS Theme for Omarchy"
+                            color: "white"
+                            font.pixelSize: 22
+                            font.weight: Font.Bold
                         }
-                        Value {
-                            // The Omarchy versions the theme supports, not this computer's.
-                            text: omarchyLogo.status === Image.Ready ? "4+" : "Omarchy 4+"
+                        Row {
+                            spacing: 6
+                            height: 18
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Made for"
+                                color: Qt.rgba(1, 1, 1, 0.6)
+                                font.pixelSize: 13
+                            }
+                            Image {
+                                id: omarchyLogo
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: status === Image.Ready
+                                source: backend.omarchyLogo
+                                sourceSize.height: 36
+                                height: 13
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                // The Omarchy versions the theme supports, not this computer's.
+                                text: (omarchyLogo.status === Image.Ready ? "" : "Omarchy ") + "4 and later. Open source, MIT."
+                                color: Qt.rgba(1, 1, 1, 0.6)
+                                font.pixelSize: 13
+                            }
                         }
                     }
-
-                    Fact { text: "Theme" }
-                    Row {
-                        spacing: 10
-                        height: 18
-
-                        Value {
-                            anchors.verticalCenter: parent.verticalCenter
-                            // A check that failed (offline, say) is no "Up to date".
-                            text: backend.checking ? "Checking…"
-                                : backend.updates > 0 ? "Update available"
-                                : (backend.updateError !== "" ? "Couldn't check for updates" : "Up to date")
-                                    + (window.themeCheckedAt ? ", checked " + window.themeCheckedAt : "")
-                            color: backend.updates > 0 && !backend.checking ? "#0a84ff" : "white"
-                            Accessible.description: backend.updateError
-                        }
+                    Column {
+                        id: useTheme
+                        // Downloaded, or switched away from in Omarchy.
+                        visible: window.status.active === false && window.knownPiece("theme")
+                            && Object.keys(window.status.features || {}).length > 0
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
 
                         MacButton {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: backend.updates === 0
-                            text: "Check"
-                            enabled: !backend.busy && !backend.checking
-                            reason: backend.checking ? "Checking now" : "Wait for what's running to finish"
-                            onClicked: backend.checkTheme()
-                        }
-
-                        MacButton {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: backend.updates > 0
-                            text: "Update"
+                            anchors.right: parent.right
+                            large: true
                             primary: true
+                            text: window.installed("theme") ? "Use macOS Theme" : "Install macOS Theme"
                             enabled: !backend.busy
-                            onClicked: window.confirm = {
+                            reason: "Wait for what's running to finish"
+                            onClicked: window.useTheme()
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            text: window.installed("theme") ? "Omarchy is showing another theme" : "Not installed yet"
+                            color: Qt.rgba(1, 1, 1, 0.6)
+                            font.pixelSize: 12
+                        }
+                    }
+                }
+
+                // Each one on its own row, as Software Update has it: where it
+                // stands, when it was last asked, and the one thing to do next.
+                Group {
+                    title: "Software Update"
+
+                    SettingRow {
+                        label: "Theme"
+                        // Its version, the commit and its date, says which one is here.
+                        readonly property string here: backend.themeVersion ? " You have " + backend.themeVersion + "." : ""
+                        note: backend.checking ? "Checking GitHub for new changes…"
+                            : backend.updates > 0 ? (backend.updates === 1 ? "1 new change is ready." : backend.updates + " new changes are ready.")
+                                + " " + window.lastChecked(window.themeCheckedAt)
+                            // A check that failed (offline, say) is no "Up to date".
+                            : backend.updateError !== "" ? "Couldn't reach GitHub to check. Check your connection, then check again."
+                            : ("Up to date." + here + " " + window.lastChecked(window.themeCheckedAt)).trim()
+
+                        UpdateButton {
+                            checking: backend.checking
+                            next: backend.updates > 0 ? "Update Now" : "Check Now"
+                            primary: backend.updates > 0
+                            enabled: !backend.busy && !backend.checking
+                            onClicked: if (backend.updates === 0) backend.checkTheme(); else window.confirm = {
                                 title: "Update the macOS theme?",
                                 text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once."
                                     + (backend.updateNotes ? "\n\n" + Labels.whatsNew(backend.updateNotes) : "") + window.droppedNote(),
@@ -1419,103 +1412,69 @@ Window {
                             }
                         }
                     }
+                    SettingRow {
+                        last: true
+                        label: "Studio " + backend.appVersion
+                        note: window.studioChecking ? "Checking GitHub for a new release…"
+                            : window.studioUpdated ? "Updated to " + window.studioLatest + ". Reopen Studio to use it."
+                            : window.studioUpdate ? "Version " + window.studioLatest + " is ready. " + window.lastChecked(window.studioCheckedAt)
+                            : window.studioCheckFailed ? "Couldn't reach GitHub to check. Check your connection, then check again."
+                            : !window.releaseBuild ? ("Built from source, so it updates with your checkout."
+                                + (window.studioLatest ? " The newest release is " + window.studioLatest + "." : "")
+                                + " " + window.lastChecked(window.studioCheckedAt)).trim()
+                            : ("Up to date. " + window.lastChecked(window.studioCheckedAt)).trim()
 
-                    Fact { text: "Studio" }
-                    Row {
-                        spacing: 10
-                        height: 18
-
-                        Value {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: window.studioChecking ? "Checking…"
-                                : window.studioUpdated ? "Updated; reopen to use it"
-                                : window.studioUpdate ? window.studioLatest + " available"
-                                : (window.studioCheckFailed ? "Couldn't check for updates"
-                                    : !window.releaseBuild ? "Built from source" + (window.studioLatest ? "; newest release " + window.studioLatest : "")
-                                    : "Up to date") + (window.studioCheckedAt ? ", checked " + window.studioCheckedAt : "")
-                            color: (window.studioUpdate || window.studioUpdated) && !window.studioChecking ? "#0a84ff" : "white"
-                        }
-
-                        MacButton {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: !window.studioUpdate && !window.studioUpdated
-                            text: "Check"
-                            enabled: !window.studioChecking
-                            reason: "Checking now"
-                            onClicked: window.checkStudio()
-                        }
-
-                        MacButton {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: window.studioUpdate
-                            text: "Update"
-                            primary: true
-                            enabled: !backend.busy && backend.downloaded
-                            reason: backend.downloaded ? "Wait for what's running to finish" : "Download the theme first"
-                            onClicked: window.confirm = {
-                                title: "Update Studio to " + window.studioLatest + "?",
-                                text: "The newest Studio is downloaded from GitHub and put in place of this one. Reopen it afterwards to use it; the theme isn't changed.",
-                                button: "Update",
-                                action: () => { window.start("studio", window.studioLatest); backend.updateStudio() }
+                        UpdateButton {
+                            checking: window.studioChecking
+                            next: window.studioUpdated ? "Reopen" : window.studioUpdate ? "Update Now" : "Check Now"
+                            primary: window.studioUpdate || window.studioUpdated
+                            // Updating runs the downloaded theme's own get.sh.
+                            enabled: !window.studioChecking && !(window.studioUpdate && backend.busy)
+                            onClicked: {
+                                if (window.studioUpdated) {
+                                    // Asks first when changes wait, as closing does.
+                                    if (backend.reopen()) window.close()
+                                } else if (window.studioUpdate) {
+                                    window.confirm = {
+                                        title: "Update Studio to " + window.studioLatest + "?",
+                                        text: "The newest Studio is downloaded from GitHub and put in place of this one. Reopen it afterwards to use it; the theme isn't changed.",
+                                        button: "Update",
+                                        action: () => { window.start("studio", window.studioLatest); backend.updateStudio() }
+                                    }
+                                } else {
+                                    window.checkStudio()
+                                }
                             }
                         }
-
-                        MacButton {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: window.studioUpdated
-                            text: "Reopen"
-                            primary: true
-                            // Asks first when changes wait, as closing does.
-                            onClicked: if (backend.reopen()) window.close()
-                        }
                     }
-
-                    Fact { text: "License" }
-                    Value { text: "Open source, MIT" }
                 }
 
+                // Where it comes from, and the way out.
+                Item {
+                    width: parent.width
+                    height: 24
 
-                Item { width: 1; height: 22 }
+                    Row {
+                        spacing: 10
+                        MacButton { text: "Theme on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme") }
+                        MacButton { text: "Studio on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme/tree/main/studio") }
+                    }
+                    MacButton {
+                        anchors.right: parent.right
+                        visible: Object.values(window.status.features || {}).some(on => on)
+                        // Gray, as System Settings draws its Delete… buttons: the
+                        // question it opens is the red one.
+                        text: "Remove macOS Theme…"
+                        enabled: !backend.busy
+                        reason: "Wait for what's running to finish"
+                        onClicked: window.askRemove()
+                    }
+                }
 
                 Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.min(parent.width, 440)
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    text: "Every change is made by the theme's own installer, after a backup you can restore."
-                    color: Qt.rgba(1, 1, 1, 0.7)
-                    font.pixelSize: 13
-                    lineHeight: 1.2
-                }
-
-                Item { width: 1; height: 14 }
-
-                Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 10
-
-                    MacButton { text: "Theme on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-theme") }
-                    MacButton { text: "App on GitHub"; onClicked: Qt.openUrlExternally("https://github.com/tsubaie/omarchy-macos-studio") }
-                }
-
-                Item { width: 1; height: 14 }
-
-                MacButton {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: Object.values(window.status.features || {}).some(on => on)
-                    text: "Remove macOS Theme…"
-                    destructive: true
-                    enabled: !backend.busy
-                    reason: "Wait for what's running to finish"
-                    onClicked: window.askRemove()
-                }
-
-                Item { width: 1; height: 28 }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
                     text: "Not affiliated with Apple or Omarchy. macOS is a trademark of Apple Inc."
-                    color: Qt.rgba(1, 1, 1, 0.55)
+                    color: Qt.rgba(1, 1, 1, 0.45)
                     font.pixelSize: 11
                 }
             }
@@ -1659,18 +1618,6 @@ Window {
     }
 
     // A label in the Overview's facts, right-aligned.
-    component Fact: Text {
-        width: 90
-        horizontalAlignment: Text.AlignRight
-        color: Qt.rgba(1, 1, 1, 0.55)
-        font.pixelSize: 13
-    }
-
-    component Value: Text {
-        color: "white"
-        font.pixelSize: 13
-    }
-
     // A switch that marks one piece of the theme to install or remove.
     component PieceSwitch: MacSwitch {
         property string piece: ""
@@ -2439,6 +2386,24 @@ Window {
                 font.pixelSize: 11
                 wrapMode: TextEdit.Wrap
             }
+        }
+    }
+
+    // An update row's button: the next step's name, and while it asks,
+    // "Checking…" with a spinner, at a width that holds the row still.
+    component UpdateButton: MacButton {
+        id: update
+        property bool checking: false
+        // The label when it isn't checking.
+        property string next: ""
+        text: checking ? "Checking…" : next
+        reason: ""
+        width: Math.max(112, measure.width + 24 + (checking ? 36 : 0))
+        Text { id: measure; visible: false; text: update.text; font.pixelSize: 13 }
+        Spinner {
+            visible: update.checking
+            x: 10
+            anchors.verticalCenter: parent.verticalCenter
         }
     }
 

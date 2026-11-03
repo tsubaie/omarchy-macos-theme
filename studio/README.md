@@ -26,7 +26,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 
 | Page | What's on it |
 |---|---|
-| **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, whether the theme and Studio are up to date, each with **Check** to ask again and **Update** when it isn't, **Use macOS Theme** when it's installed but another theme is current (after a download, say; **Install macOS Theme** when it isn't installed), **Remove macOS Theme…**, and links to both projects |
+| **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, a **Software Update** group with a row for the theme and one for Studio (where each stands, when it was last checked, **Check Now** or **Update Now**), **Use macOS Theme** when it's installed but another theme is current (after a download, say; **Install macOS Theme** when it isn't installed), **Remove macOS Theme…**, and links to both projects |
 | **General** | The theme itself, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, and the dictation pill |
 | **Windows** | How see-through the windows you aren't using are, the same for browsers and Electron apps (Claude, VS Code, Slack…), how strong the frosted blur behind them is, Reduce motion, the title bars and their traffic lights' size, and snapping windows to halves and corners |
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash), how far its icons grow and how big they are |
@@ -42,8 +42,8 @@ Made for Omarchy 4 and later. Open source, MIT.
 - **The keyboard does it all.** Tab moves between the sidebar and each control, with the blue ring macOS draws; ↑ and ↓ go through the sidebar's pages, Space or Return flips a switch or presses a button, the arrows move a slider (Page Up and Down, Home and End too) or pick a segment, and ↑ and ↓ on a menu bar item's handle move it, into the next group at either end. Ctrl+S applies. A question sheet holds the focus until it is answered: Esc cancels, and when the action would replace something, Cancel is the default. A control that can't be used says why under its row.
 - **Updates.** The theme and Studio update separately, as they ship separately:
   - **The theme** follows `main`: when the app opens it asks GitHub whether the theme has new commits (ones that only change Studio don't count). If it has, the theme card in the sidebar and the About page say **Update available**, and **Update** brings the theme up to date.
-  - **Studio** follows its [releases](https://github.com/tsubaie/omarchy-macos-theme/releases): when the app opens it asks for the newest one, and About shows it beside **Studio** with **Update**, which runs the theme's own `studio/get.sh` to put it in place. **Reopen** then opens the new one. A build from source says so and is never offered one.
-  - **Check**, beside each on About, asks again about that one alone: it says "Checking…", then the answer and when it was checked.
+  - **Studio** follows its [releases](https://github.com/tsubaie/omarchy-macos-theme/releases): when the app opens it asks for the newest one, and About's Studio row offers **Update Now**, which runs the theme's own `studio/get.sh` to put it in place. **Reopen** then opens the new one. A build from source says so and is never offered one.
+  - **Check Now**, on each one's row under Software Update, asks again about that one alone: the button says "Checking…" with a spinner, then the row says what it found and when.
 - **Before the theme is downloaded**, only About can be opened: the other pages, and search, wait for it.
 - **It reopens on the page you last used**, and the window's title follows the page, as in macOS.
 
