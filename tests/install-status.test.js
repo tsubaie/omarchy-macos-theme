@@ -46,6 +46,8 @@ echo "  WARN scene: QML Thing at $P/someone.else/Thing.qml[1:1]: Binding loop de
 `, { mode: 0o755 })
 // Inter installed, whatever this machine has, so a warning about it can't show up.
 fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
+// Hyprland's workspaces, as $HOME/workspaces.json says; every other call succeeds quietly.
+fs.writeFileSync(path.join(bin, "hyprctl"), '#!/bin/sh\n[ "$1" = workspaces ] && cat "$HOME/workspaces.json" 2>/dev/null\nexit 0\n', { mode: 0o755 })
 
 const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
@@ -322,6 +324,16 @@ try {
   assert.strictEqual(status()["widget-workspaces"], "all")
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).widgets.workspaces, undefined)
   for (const bad of ["", "0", "1,", "1;2", "one", "-1"]) assert.strictEqual(run("--widget-workspaces", bad).status, 1, bad)
+  // The ones to choose from: Hyprland's, on the widgets' screen when one is named.
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [])
+  fs.writeFileSync(path.join(home, "workspaces.json"), JSON.stringify([
+    { id: 4, monitor: "DP-2" }, { id: 1, monitor: "DP-2" }, { id: 5, monitor: "HDMI-A-1" }, { id: -98, monitor: "DP-2" }]))
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [1, 4, 5])
+  const withScreen = JSON.parse(fs.readFileSync(shellJson, "utf8"))
+  withScreen.widgets.screen = "HDMI-A-1"
+  fs.writeFileSync(shellJson, JSON.stringify(withScreen))
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [5])
+  fs.rmSync(path.join(home, "workspaces.json"))
   // Its folder gone, it's no longer shown; the theme's own stay.
   fs.rmSync(path.join(own, "uptime"), { recursive: true })
   assert.deepStrictEqual(status().widgets, ["clock"])

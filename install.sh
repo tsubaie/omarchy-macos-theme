@@ -524,6 +524,16 @@ shown_widgets() {
 widget_workspaces() {
   jq -c '.widgets.workspaces | if type == "array" and length > 0 then . else "all" end' "$SHELL_JSON" 2>/dev/null || echo '"all"'
 }
+# The workspaces there are to choose from, by number: those Hyprland has on the
+# widgets' screen (shell.json's widgets.screen), or on every screen when none
+# is named. Hyprland not answering: none.
+widget_workspaces_there() {
+  local screen list
+  screen=$(jq -r '.widgets.screen // empty | strings' "$SHELL_JSON" 2>/dev/null) || screen=""
+  list=$(hyprctl workspaces -j 2>/dev/null | jq -c --arg screen "$screen" \
+    '[.[] | select(.id > 0 and ($screen == "" or .monitor == $screen)) | .id] | unique' 2>/dev/null) || list=""
+  echo "${list:-[]}"
+}
 # Your own widgets, as [{id, name}]: the name from its manifest.json, else its id.
 custom_widgets() {
   local d id name
@@ -638,8 +648,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"custom-widgets":%s,"widget-workspaces":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(custom_widgets)" "$(widget_workspaces)" \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"custom-widgets":%s,"widget-workspaces":%s,"widget-workspaces-there":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(custom_widgets)" "$(widget_workspaces)" "$(widget_workspaces_there)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
       "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
       "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"

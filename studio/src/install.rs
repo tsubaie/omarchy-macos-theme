@@ -141,6 +141,10 @@ pub struct Status {
     /// Older themes don't report it.
     #[serde(default, rename = "widget-workspaces")]
     pub widget_workspaces: Option<serde_json::Value>,
+    /// The workspaces on the widgets' screen, to choose from. Older themes
+    /// don't report them.
+    #[serde(default, rename = "widget-workspaces-there")]
+    pub widget_workspaces_there: Vec<u64>,
     /// Where the volume panel shows: "bottom" or "top". Older themes don't
     /// report it.
     #[serde(default, rename = "volume-hud")]

@@ -246,6 +246,13 @@ Window {
     function markWorkspaces(next) {
         pendingWorkspaces = JSON.stringify(next) === JSON.stringify(workspacesNow) ? null : next
     }
+    // The workspaces to choose from: those on the widgets' screen, and any
+    // already chosen (so it can be taken off), in order.
+    readonly property var workspaceChoices: {
+        const there = status["widget-workspaces-there"] || []
+        const chosen = Array.isArray(workspacesShown) ? workspacesShown : []
+        return there.concat(chosen.filter(n => !there.includes(n))).sort((a, b) => a - b)
+    }
     // One workspace in or out of the list, kept in order, never down to none.
     function toggleWorkspace(n) {
         const list = Array.isArray(workspacesShown) ? workspacesShown : []
@@ -1380,27 +1387,30 @@ Window {
                         note: "The widgets show behind your windows on every workspace, or only on the ones you choose"
                         last: !Array.isArray(window.workspacesShown)
                         MacSegmented {
+                            // Choosing needs two workspaces on the widgets' screen.
+                            readonly property bool oneThere: window.workspaceChoices.length < 2 && !Array.isArray(window.workspacesShown)
                             readonly property bool changed: window.pendingWorkspaces !== null
                             options: [{ value: "all", label: "All Workspaces" }, { value: "some", label: "Some" }]
                             value: Array.isArray(window.workspacesShown) ? "some" : "all"
-                            enabled: !backend.busy && window.pieceOn("widgets")
-                            reason: window.pieceOn("widgets") ? "" : window.why("widgets")
+                            enabled: !backend.busy && window.pieceOn("widgets") && !oneThere
+                            reason: !window.pieceOn("widgets") ? window.why("widgets")
+                                : oneThere ? "The widgets' screen has " + (window.workspaceChoices.length === 1 ? "only workspace " + window.workspaceChoices[0] : "no workspaces Hyprland reports") : ""
                             onPicked: v => window.markWorkspaces(v === "all" ? "all"
-                                : Array.isArray(window.workspacesNow) ? window.workspacesNow : [1])
+                                : Array.isArray(window.workspacesNow) ? window.workspacesNow : [window.workspaceChoices[0] || 1])
                         }
                     }
                     SettingRow {
                         visible: Array.isArray(window.workspacesShown)
                         label: "Workspaces"
-                        note: "Click to add or take one away; one always stays"
+                        note: "The workspaces on the widgets' screen. Click to add or take one away; one always stays"
                         last: true
                         Row {
                             spacing: 4
                             Repeater {
-                                model: 10
+                                model: window.workspaceChoices
                                 MacButton {
-                                    required property int index
-                                    readonly property int number: index + 1
+                                    required property var modelData
+                                    readonly property int number: modelData
                                     text: String(number)
                                     primary: Array.isArray(window.workspacesShown) && window.workspacesShown.includes(number)
                                     enabled: !backend.busy && window.pieceOn("widgets")
