@@ -129,12 +129,12 @@ Item {
   }
   readonly property var homeScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
     || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
-  // With chosen workspaces ("workspaces": [1, 5]), the widgets follow them:
-  // they show on the screen showing one, the one being worked on when both
-  // are; else on their own screen, as with every workspace.
+  // The widgets follow the workspaces they show on, every one unless some are
+  // chosen ("workspaces": [1, 5]): they show on the screen showing one, the
+  // one being worked on when both are. Their own screen (widgets.screen, else
+  // the first) when Hyprland doesn't say.
   readonly property var targetScreen: {
     var chosen = root.config.workspaces
-    if (!Array.isArray(chosen) || chosen.length === 0) return root.homeScreen
     var showing = function(screen) {
       var monitor = Hyprland.monitorFor(screen)
       return !!monitor && !!monitor.activeWorkspace && Model.showsOn(chosen, monitor.activeWorkspace.id)
