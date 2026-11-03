@@ -16,7 +16,8 @@ function makeHome() {
   fs.mkdirSync(bin)
   fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
 [ "$1 $2" = "theme current" ] && { cat "$HOME/current" 2>/dev/null || echo "Tokyo Night"; }
-[ "$1 $2" = "theme list" ] && printf 'Macos\\nTokyo Night\\n'
+[ "$1 $2" = "theme list" ] && { [ -f "$HOME/only-macos" ] && echo Macos || printf 'Macos\\nTokyo Night\\n'; }
+[ "$1 $2" = "plugin enable" ] && [ -f "$HOME/fail-enable" ] && exit 1
 [ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
 exit 0
 `, { mode: 0o755 })
@@ -222,6 +223,75 @@ try {
   assert.strictEqual(fs.readFileSync(d.config("omarchy/themes/macos/look.lua"), "utf8"), lookBefore)
   assert.match(fs.readFileSync(path.join(shown, "look.lua"), "utf8"), /opacity = "1 0\.9"/)
   assert.strictEqual(d.json("--backups", "--json").length, count)
+
+  // shell.json kept in dotfiles, behind a symlink: a restore gives its file
+  // back the contents it had, and the link stays a link.
+  const g = makeHome()
+  const dotfile = path.join(g.home, "dotfiles-shell.json")
+  fs.writeFileSync(dotfile, JSON.stringify({ dock: { magnification: 1.2 } }))
+  fs.mkdirSync(g.config("omarchy"), { recursive: true })
+  fs.symlinkSync(dotfile, g.config("omarchy/shell.json"))
+  assert.strictEqual(g.run("--backup").status, 0)
+  const linkedSnap = g.json("--backups", "--json")[0].id
+  assert.strictEqual(g.run("--set", "magnification=1.6").status, 0)
+  assert.strictEqual(JSON.parse(fs.readFileSync(dotfile, "utf8")).dock.magnification, 1.6)
+  const linkRestore = g.run("--restore", linkedSnap)
+  assert.strictEqual(linkRestore.status, 0, linkRestore.out)
+  assert.ok(fs.lstatSync(g.config("omarchy/shell.json")).isSymbolicLink())
+  assert.strictEqual(JSON.parse(fs.readFileSync(dotfile, "utf8")).dock.magnification, 1.2)
+
+  // A snapshot from an older version holds the link itself, by its full
+  // path: restoring it puts the link back and leaves the dotfile whole.
+  const oldSnap = g.config("omarchy/macos-theme-backups/snapshots/20200101-000000")
+  const oldFiles = path.join(g.home, "old-snapshot")
+  fs.mkdirSync(path.join(oldFiles, "omarchy"), { recursive: true })
+  fs.symlinkSync(dotfile, path.join(oldFiles, "omarchy/shell.json"))
+  fs.mkdirSync(oldSnap)
+  spawnSync("tar", ["-C", oldFiles, "-czf", path.join(oldSnap, "files.tar.gz"), "omarchy/shell.json"])
+  fs.writeFileSync(path.join(oldSnap, "meta.json"), JSON.stringify({ id: "20200101-000000", created: "2020-01-01T00:00:00+00:00", note: "old", theme: "", pinned: false, original: false }))
+  const oldRestore = g.run("--restore", "20200101-000000")
+  assert.strictEqual(oldRestore.status, 0, oldRestore.out)
+  assert.ok(fs.lstatSync(g.config("omarchy/shell.json")).isSymbolicLink())
+  assert.strictEqual(JSON.parse(fs.readFileSync(dotfile, "utf8")).dock.magnification, 1.2)
+
+  // A setting for a theme that isn't installed is refused before its snapshot.
+  const before = g.json("--backups", "--json").length
+  const noTheme = g.run("--set", "glass=0.9")
+  assert.strictEqual(noTheme.status, 1)
+  assert.match(noTheme.out, /Install the theme first/)
+  assert.strictEqual(g.json("--backups", "--json").length, before)
+
+  // With no other theme to switch to, the status is still JSON.
+  fs.writeFileSync(path.join(g.home, "only-macos"), "")
+  assert.deepStrictEqual(g.json("--status", "--json").themes, [])
+
+  // The theme removed and added again keeps your files, and the copy kept
+  // when it was removed goes once they are back in the theme folder.
+  assert.strictEqual(g.run("--add", "theme").status, 0)
+  fs.writeFileSync(g.config("omarchy/themes/macos/backgrounds/mine.jpg"), "photo")
+  assert.strictEqual(g.run("--remove", "theme").status, 0)
+  const keptCopies = () => fs.readdirSync(g.config("omarchy/macos-theme-backups")).filter((f) => f.startsWith("macos."))
+  assert.strictEqual(keptCopies().length, 1)
+  assert.strictEqual(g.run("--add", "theme").status, 0)
+  assert.strictEqual(fs.readFileSync(g.config("omarchy/themes/macos/backgrounds/mine.jpg"), "utf8"), "photo")
+  assert.deepStrictEqual(keptCopies(), [])
+
+  // An import where a piece won't turn on still brings in the dock setup and
+  // the wallpapers, then fails, saying so.
+  const h = makeHome()
+  const partial = path.join(h.home, "partial")
+  fs.mkdirSync(path.join(partial, "backgrounds"), { recursive: true })
+  fs.writeFileSync(path.join(partial, "profile.json"),
+    JSON.stringify({ format: 1, pieces: ["theme", "dock"], shell: { dock: { pinned: ["firefox.desktop"] } } }))
+  fs.writeFileSync(path.join(partial, "backgrounds/mine.jpg"), "photo")
+  spawnSync("tar", ["-C", partial, "-czf", path.join(h.home, "partial.tar.gz"), "profile.json", "backgrounds"])
+  fs.writeFileSync(path.join(h.home, "fail-enable"), "")
+  const half = h.run("--import", path.join(h.home, "partial.tar.gz"))
+  assert.strictEqual(half.status, 1, half.out)
+  assert.match(half.out, /Could not install macos-theme\.dock/)
+  assert.match(half.out, /not every piece went in/)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(h.config("omarchy/shell.json"), "utf8")).dock.pinned, ["firefox.desktop"])
+  assert.strictEqual(fs.readFileSync(h.config("omarchy/themes/macos/backgrounds/mine.jpg"), "utf8"), "photo")
 } finally {
   for (const home of homes) fs.rmSync(home, { recursive: true, force: true })
 }
