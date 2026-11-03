@@ -780,6 +780,7 @@ PanelWindow {
   readonly property int previewHeight: Math.round(120 * Style.fontScale)
 
   function hoverPreview(slot, on) {
+    if (on && dock && !dock.previews) return
     if (on) {
       previewLeave.stop()
       var has = !!slot.previewItem && slot.previewItem.windows.length > 0

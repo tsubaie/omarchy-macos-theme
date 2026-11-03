@@ -46,6 +46,7 @@ cd omarchy-macos-theme
 | `--set blur=<0-20>` | How strong the frosted blur is behind see-through windows, menus, the bar and the dock; 0 turns it off (they stay see-through), the theme's own is 10 |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
 | `--set dock-size=<32-80>` | How big the dock's icons are, in points; 48 by default |
+| `--set dock-previews=0` | No window previews over dock icons on hover; 1 (on) is the default |
 | `--set title-bars=<0\|1>` | Turn the title bars with traffic lights off (0) or on (1, the theme's) |
 | `--set traffic-lights=<10-20>` | How big the traffic lights are, in points; the bar grows to fit; 14 by default |
 | `--show-widgets <list>` | Which desktop widgets show, comma-separated: `clock`, `calendar`, `weather`, `playing`; at least one |
@@ -114,7 +115,7 @@ On floating workspaces, windows behave like a Mac's:
 Omarchy's dock, which appears on floating workspaces, reworked to behave like the macOS Dock:
 
 - A borderless frosted platter with 48px icons, and the app's name on hover.
-- **Window previews**: hover an open app for a moment and live pictures of its windows appear above it, each with its title (dimmed when minimized). Moving to another app switches to its windows; click one to bring it forward.
+- **Window previews**: hover an open app for a moment and live pictures of its windows appear above it, each with its title (dimmed when minimized). Moving to another app switches to its windows; click one to bring it forward. Turn them off with `--set dock-previews=0`, or on Studio's Dock page.
 - **Magnification** like macOS: icons near the pointer grow (up to 1.75×) and their neighbors slide aside, with the platter stretching to fit. Set how far with `--set magnification=<1-2>` (1 turns it off) and the icons' size with `--set dock-size=<32-80>`, or on Studio's Dock page.
 - **Pinned apps on the left.** Running apps that aren't pinned sit to the right of a divider, minimized or not.
 - **A dot under every running app.** Pins survive restarts.

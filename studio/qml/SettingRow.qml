@@ -12,9 +12,11 @@ Item {
     // Why the control can't be used now, from the control itself (its
     // reason), shown under the label while it can't.
     readonly property Item firstControl: slot.children.length > 0 ? slot.children[0] : null
-    readonly property string reason: firstControl && !firstControl.enabled && firstControl.reason ? firstControl.reason : ""
+    // The control that speaks for the row, when several sit side by side.
+    property Item mainControl: firstControl
+    readonly property string reason: mainControl && !mainControl.enabled && mainControl.reason ? mainControl.reason : ""
     // Changed and not applied yet, from the control itself: a blue dot by the label.
-    readonly property bool changed: firstControl ? firstControl.changed === true : false
+    readonly property bool changed: mainControl ? mainControl.changed === true : false
 
     width: parent ? parent.width : 0
 

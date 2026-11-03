@@ -10,11 +10,11 @@ var PIECES = {
 var SETTINGS = {
     glass: "Window glass", "web-glass": "Browser and Electron app glass", blur: "Frosted blur", "reduce-motion": "Reduce motion",
     "title-bars": "Title bars", "traffic-lights": "Traffic light size", snapping: "Snapping", "drop-follow": "Going along with a dropped window",
-    magnification: "Dock magnification", "dock-size": "Dock size", clock: "Clock",
+    magnification: "Dock magnification", "dock-size": "Dock size", "dock-previews": "Dock window previews", clock: "Clock",
     "volume-hud": "Volume and brightness capsule", "dictation-hud": "Dictation pill"
 }
 // Settings that are on (1) or off (0).
-var SWITCHES = ["reduce-motion", "title-bars", "snapping", "drop-follow"]
+var SWITCHES = ["reduce-motion", "title-bars", "snapping", "drop-follow", "dock-previews"]
 
 function piece(id) { return PIECES[id] || id }
 
