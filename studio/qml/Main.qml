@@ -256,7 +256,7 @@ Window {
     readonly property var workingText: ({
         apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
         export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…",
-        remove: "Removing the macOS theme…"
+        remove: "Removing the macOS theme…", use: "Switching to the macOS theme…"
     })
 
     function doneText() {
@@ -271,6 +271,7 @@ Window {
         case "download": return "Downloaded the theme."
         case "undo": return "Undid the changes. How they were is backed up too, should you want them back."
         case "remove": return "Removed the macOS theme, and what it replaced is back."
+        case "use": return "The macOS theme is in use."
         }
         return ""
     }
@@ -284,11 +285,24 @@ Window {
         case "restore":
         case "undo":
         case "remove":
+        case "use":
         case "import": return "If it got as far as changing anything, Backups has how things were before it."
         case "backup":
         case "export": return "Nothing was changed; try again."
         }
         return ""
+    }
+
+    // The actions whose done note offers Undo: the backup each took first.
+    readonly property var undoable: ["apply", "remove", "use"]
+
+    // Install macOS Theme, or Use macOS Theme when it is installed but another
+    // theme is current: install.sh puts the theme in (your settings kept)
+    // and makes it current, as turning it off and on again would.
+    function useTheme() {
+        start(installed("theme") ? "use" : "apply", 1)
+        backupBeforeApply = backups.length > 0 ? backups[0].id : ""
+        backend.apply(JSON.stringify({ add: ["theme"] }))
     }
 
     // Remove macOS Theme: every piece off in one Apply, so its progress, Stop
@@ -355,7 +369,7 @@ Window {
             }
             if (backend.error === "" && !window.stopping) window.notice = window.doneText()
             // Undo restores the backup this Apply took, the one new since it started.
-            window.undoBackup = (window.action === "apply" || window.action === "remove") && backend.error === "" && window.backups.length > 0
+            window.undoBackup = window.undoable.includes(window.action) && backend.error === "" && window.backups.length > 0
                 && window.backups[0].id !== window.backupBeforeApply ? window.backups[0].id : ""
             if (!window.applying) return
             window.applying = false
@@ -781,22 +795,17 @@ Window {
             // What the last action did, for a few seconds.
             Banner {
                 visible: window.notice !== ""
-                tint: Qt.rgba(0.19, 0.82, 0.35, 1)
-                ink: "#30d158"
+                tint: "#30d158"
+                glyph: "✓"
+                timeout: 8000
                 text: window.notice
-                actionText: window.undoBackup !== "" && (window.action === "apply" || window.action === "remove") ? "Undo" : ""
+                actionText: window.undoBackup !== "" && window.undoable.includes(window.action) ? "Undo" : ""
                 onActed: {
                     const id = window.undoBackup
                     window.start("undo")
                     backend.restore(id)
                 }
                 onDismissed: window.notice = ""
-                // Each new notice starts it again: start() clears the last one first.
-                Timer {
-                    running: window.notice !== ""
-                    interval: 8000
-                    onTriggered: window.notice = ""
-                }
             }
 
             // Why the last action failed, in install.sh's own words, what to
@@ -804,8 +813,8 @@ Window {
             Banner {
                 id: errorBanner
                 visible: backend.error !== ""
-                tint: Qt.rgba(1, 0.27, 0.23, 1)
-                ink: "#ff6961"
+                tint: "#ff453a"
+                glyph: "!"
                 text: backend.error
                 more: window.nextStep()
                 details: backend.errorDetails !== backend.error ? backend.errorDetails : ""
@@ -816,8 +825,8 @@ Window {
             // it skipped, a font that's missing), in install.sh's own words.
             Banner {
                 visible: backend.error === "" && backend.warning !== ""
-                tint: Qt.rgba(1, 0.62, 0.04, 1)
-                ink: "#ffb340"
+                tint: "#ff9f0a"
+                glyph: "!"
                 text: backend.warning
                 onDismissed: backend.warning = ""
             }
@@ -1260,6 +1269,34 @@ Window {
                     text: "Version " + backend.appVersion
                     color: Qt.rgba(1, 1, 1, 0.55)
                     font.pixelSize: 13
+                }
+
+                // Downloaded, or switched away from in Omarchy, the theme isn't
+                // what the desktop shows: one button makes it so.
+                Column {
+                    readonly property bool shown: window.status.active === false && window.knownPiece("theme")
+                        && Object.keys(window.status.features || {}).length > 0
+                    visible: shown
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    topPadding: 16
+                    spacing: 10
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: window.installed("theme") ? "The macOS theme is installed, but Omarchy is showing another theme."
+                            : "The macOS theme isn't installed yet."
+                        color: Qt.rgba(1, 1, 1, 0.7)
+                        font.pixelSize: 13
+                    }
+                    MacButton {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        large: true
+                        primary: true
+                        text: window.installed("theme") ? "Use macOS Theme" : "Install macOS Theme"
+                        enabled: !backend.busy
+                        reason: "Wait for what's running to finish"
+                        onClicked: window.useTheme()
+                    }
                 }
 
                 Item { width: 1; height: 18 }
@@ -2122,73 +2159,168 @@ Window {
 
     // A message across the page: what happened, an optional next step, all
     // of it behind Show Details when there is more, and a way to put it away.
+    // A dark card, as macOS draws its notifications, its kind told by a small
+    // colored badge rather than colored text. A timed one (timeout > 0) says
+    // so with a ring draining around its close button, and holds still while
+    // the pointer or the keyboard is on it, so Undo stays in reach.
     // An alert, so a screen reader reads it as one.
     component Banner: Rectangle {
         id: banner
         property color tint
-        property color ink
+        property string glyph: ""
         property string text: ""
         property string more: ""
         property string details: ""
         // A button for what to do next, such as Undo.
         property string actionText: ""
+        // How long it stays, in ms; 0 until dismissed.
+        property int timeout: 0
+        // The share of the time left, 1 down to 0.
+        property real timeLeft: 1
         signal dismissed()
         signal acted()
 
         width: parent ? parent.width : 0
-        height: bannerColumn.height + 20
-        radius: 8
-        color: Qt.rgba(tint.r, tint.g, tint.b, 0.15)
+        height: bannerColumn.height + 24
+        radius: 10
+        color: "#2a2a2c"
         border.width: 1
-        border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.4)
+        border.color: Qt.rgba(1, 1, 1, 0.1)
         Accessible.role: Accessible.AlertMessage
         Accessible.name: text + (more ? " " + more : "")
 
+        // Each new message starts the time again.
+        onTextChanged: if (visible) countdown.restart()
+        onVisibleChanged: if (visible) countdown.restart(); else countdown.stop()
+        NumberAnimation {
+            id: countdown
+            target: banner
+            property: "timeLeft"
+            from: 1
+            to: 0
+            duration: banner.timeout
+            paused: running && (hover.hovered || banner.activeFocus || bannerButtons.activeFocusInside)
+            onFinished: if (banner.timeout > 0 && banner.visible) banner.dismissed()
+        }
+        HoverHandler { id: hover }
+
         Column {
             id: bannerColumn
-            x: 12
-            y: 10
-            width: parent.width - 24
+            x: 14
+            y: 12
+            width: parent.width - 28
             spacing: 6
 
             Item {
                 width: parent.width
                 height: Math.max(bannerText.height, bannerButtons.height)
 
+                // The kind at a glance: ✓ done, ! wrong or worth knowing.
+                Rectangle {
+                    id: badge
+                    y: (Math.min(bannerText.height, 20) - height) / 2 + 1
+                    width: 18
+                    height: 18
+                    radius: 9
+                    color: banner.tint
+                    Text {
+                        anchors.centerIn: parent
+                        text: banner.glyph
+                        color: "#1c1c1e"
+                        font.pixelSize: 11
+                        font.weight: Font.Bold
+                    }
+                }
                 Text {
                     id: bannerText
-                    width: parent.width - bannerButtons.width - 12
+                    x: badge.width + 10
+                    width: parent.width - x - bannerButtons.width - 12
                     text: banner.text
-                    color: banner.ink
-                    font.pixelSize: 12
+                    color: Qt.rgba(1, 1, 1, 0.92)
+                    font.pixelSize: 13
+                    lineHeight: 1.15
                     wrapMode: Text.WordWrap
                     textFormat: Text.PlainText
                 }
                 Row {
                     id: bannerButtons
+                    // Any of its buttons focused, so the countdown waits.
+                    readonly property bool activeFocusInside: detailsButton.activeFocus || actButton.activeFocus || closeButton.activeFocus
                     anchors.right: parent.right
                     spacing: 8
                     MacButton {
+                        id: detailsButton
                         visible: banner.details !== ""
                         text: window.showDetails ? "Hide Details" : "Show Details"
                         onClicked: window.showDetails = !window.showDetails
                     }
                     MacButton {
+                        id: actButton
                         visible: banner.actionText !== ""
                         text: banner.actionText
                         onClicked: banner.acted()
                     }
-                    MacButton {
-                        text: "Dismiss"
-                        onClicked: banner.dismissed()
+                    // ×, with the time left drawn around it when it goes by itself.
+                    Item {
+                        id: closeButton
+                        width: 24
+                        height: 24
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Dismiss"
+                        Accessible.onPressAction: banner.dismissed()
+                        Keys.onSpacePressed: banner.dismissed()
+                        Keys.onReturnPressed: banner.dismissed()
+                        Keys.onEnterPressed: banner.dismissed()
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: closePress.pressed ? Qt.rgba(1, 1, 1, 0.16) : closeHover.hovered ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                        }
+                        Canvas {
+                            id: ring
+                            anchors.fill: parent
+                            visible: banner.timeout > 0
+                            readonly property real timeLeft: banner.timeLeft
+                            onTimeLeftChanged: requestPaint()
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.lineWidth = 2
+                                ctx.lineCap = "round"
+                                const c = width / 2, rad = c - 1.5
+                                ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12)
+                                ctx.beginPath(); ctx.arc(c, c, rad, 0, 2 * Math.PI); ctx.stroke()
+                                // From twelve o'clock, emptying clockwise.
+                                ctx.strokeStyle = banner.tint
+                                ctx.beginPath()
+                                ctx.arc(c, c, rad, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * timeLeft)
+                                ctx.stroke()
+                            }
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "×"
+                            color: Qt.rgba(1, 1, 1, 0.75)
+                            font.pixelSize: 15
+                        }
+                        FocusRing { controlRadius: 12 }
+                        HoverHandler { id: closeHover }
+                        MouseArea {
+                            id: closePress
+                            anchors.fill: parent
+                            onClicked: banner.dismissed()
+                        }
                     }
                 }
             }
             Text {
                 visible: banner.more !== ""
-                width: parent.width
+                x: badge.width + 10
+                width: parent.width - x
                 text: banner.more
-                color: Qt.rgba(1, 1, 1, 0.75)
+                color: Qt.rgba(1, 1, 1, 0.6)
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
             }
@@ -2214,6 +2346,8 @@ Window {
         property string text: ""
         property bool primary: false
         property bool destructive: false
+        // The one thing a page asks for, bigger.
+        property bool large: false
         property string reason: ""
         Accessible.role: Accessible.Button
         Accessible.name: text
@@ -2225,9 +2359,9 @@ Window {
         Keys.onSpacePressed: clicked()
         Keys.onReturnPressed: clicked()
         Keys.onEnterPressed: clicked()
-        width: label.width + 24
-        height: 24
-        radius: 6
+        width: label.width + (large ? 40 : 24)
+        height: large ? 34 : 24
+        radius: large ? 8 : 6
         opacity: enabled ? 1 : 0.4
         // Blues and reds dark enough for white text to read (4.5:1 and up).
         color: destructive ? (press.pressed ? "#b00012" : "#d70015")
@@ -2241,7 +2375,8 @@ Window {
             anchors.centerIn: parent
             text: parent.text
             color: "white"
-            font.pixelSize: 13
+            font.pixelSize: button.large ? 14 : 13
+            font.weight: button.large ? Font.DemiBold : Font.Normal
         }
 
         MouseArea {

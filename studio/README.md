@@ -26,7 +26,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 
 | Page | What's on it |
 |---|---|
-| **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, whether the theme is up to date with an **Update** button when it isn't, and links to both projects |
+| **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, whether the theme is up to date with an **Update** button when it isn't, **Use macOS Theme** when it's installed but another theme is current (after a download, say; **Install macOS Theme** when it isn't installed), **Remove macOS Theme…**, and links to both projects |
 | **General** | The theme itself, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, and the dictation pill |
 | **Windows** | How see-through the windows you aren't using are, the same for browsers and Electron apps (Claude, VS Code, Slack…), how strong the frosted blur behind them is, Reduce motion, the title bars and their traffic lights' size, and snapping windows to halves and corners |
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash), how far its icons grow and how big they are |
@@ -81,7 +81,7 @@ An Arch package (AUR) is planned.
 
 ### Turning parts on and off
 
-Each switch is one part ("piece") of the theme. Flip the ones you want, then press **Apply** in the toolbar at the top. While it works, the toolbar shows a spinner, what the installer or git says it is doing (the piece it is on, how much of a download has come) and, after a few seconds, how long it has taken, with **Stop** to end it. Once it is done, the switches show what is really installed and a green note says what was done, with **Undo**, which restores the backup the installer took just before. If the installer refuses something, its message appears in red at the top with what to do next and **Show Details** for all it said, and your changes stay marked so you can fix them and apply again.
+Each switch is one part ("piece") of the theme. Flip the ones you want, then press **Apply** in the toolbar at the top. While it works, the toolbar shows a spinner, what the installer or git says it is doing (the piece it is on, how much of a download has come) and, after a few seconds, how long it has taken, with **Stop** to end it. Once it is done, the switches show what is really installed and a note at the top, marked with a green ✓, says what was done, with **Undo**, which restores the backup the installer took just before. That note goes by itself after 8 seconds: a ring around its × empties as the time runs out, and holds while the pointer or the keyboard is on the note. If the installer refuses something, its message stays at the top, marked with a red !, with what to do next and **Show Details** for all it said, and your changes stay marked so you can fix them and apply again.
 
 Turning off **macOS theme** while it's your current Omarchy theme shows a **Switch to** row of your other themes: pick one, and Apply switches to it before the macOS theme goes.
 
@@ -89,7 +89,7 @@ Turning off **macOS theme** while it's your current Omarchy theme shows a **Swit
 
 **Remove macOS Theme…** at the bottom of About takes it all away in one step, after asking:
 
-- **Remove** turns every piece off in one Apply, the MacTahoe icons too, and gives back what each one replaced: Omarchy's dock, bar, menu and lock screen, or your own. While the macOS theme is current, Omarchy switches first to the theme you had before it, which the question names. Your other changes since stay. **Undo** in the green note puts it all back but the icons, which backups don't hold; turn **MacTahoe icons** on again in General for those.
+- **Remove** turns every piece off in one Apply, the MacTahoe icons too, and gives back what each one replaced: Omarchy's dock, bar, menu and lock screen, or your own. While the macOS theme is current, Omarchy switches first to the theme you had before it, which the question names. Your other changes since stay. **Undo** in the note puts it all back but the icons, which backups don't hold; turn **MacTahoe icons** on again in General for those.
 - **Go Back**, offered when there is a backup from before the theme, restores that backup instead: everything as it was that day, whole, so edits to `shell.json`, `looknfeel.lua` and `gtk.css` since go too.
 
 Studio itself stays installed, so you can install the theme again from General.
