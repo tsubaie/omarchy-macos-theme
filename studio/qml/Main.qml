@@ -999,9 +999,20 @@ Window {
 
                         Value {
                             anchors.verticalCenter: parent.verticalCenter
+                            // A check that failed (offline, say) is no "Up to date".
                             text: !backend.downloaded ? "Not downloaded yet"
-                                : backend.updates > 0 ? "Update available" : "Up to date"
+                                : backend.updates > 0 ? "Update available"
+                                : backend.updateError !== "" ? "Couldn't check for updates" : "Up to date"
                             color: backend.updates > 0 ? "#0a84ff" : "white"
+                            Accessible.description: backend.updateError
+                        }
+
+                        MacButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: backend.downloaded && backend.updates === 0 && backend.updateError !== ""
+                            text: "Check Again"
+                            enabled: !backend.busy
+                            onClicked: backend.refresh()
                         }
 
                         MacButton {
