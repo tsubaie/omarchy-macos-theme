@@ -87,7 +87,10 @@ STAMP="$(date +%s)"
 LOADER_COMMENT="-- macOS theme: per-theme look overrides (look.lua). Added by omarchy-macos-theme."
 LOADER_LINE='require("default.hypr.require_optional").module("omarchy.current.theme.look")'
 GTK_COMMENT="/* macOS theme: blur behind see-through GTK windows. Added by omarchy-macos-theme. */"
-GTK_LINE="@import url(\"file://$OMARCHY_PATH/default/gtk/glass.css\");"
+# From the current theme's folder, so the blur goes when you switch to another theme.
+GTK_LINE="@import url(\"file://$HOME/.local/state/omarchy/current/theme/glass.css\");"
+# Installs before that imported Omarchy's glass.css for every theme.
+GTK_OLD_LINE="@import url(\"file://$OMARCHY_PATH/default/gtk/glass.css\");"
 ROWS_COMMENT="/* macOS theme: Finder-style list rows while the theme is active. Added by omarchy-macos-theme. */"
 ROWS_LINE="@import url(\"file://$HOME/.local/state/omarchy/current/theme/gtk.css\");"
 
@@ -106,6 +109,9 @@ DESKTOP_WIDGETS="clock calendar weather playing"
 # It gives Omarchy's own widgets macOS icons from the bar, unseen there, so
 # the arrangement leaves it out.
 BAR_ICONS_ID="macos-theme.bar-icons"
+# The MacTahoe commit --add icons installs (its 2026-09-10 tag), whose
+# install.sh was read before pinning it; git checks the files against it.
+MACTAHOE_COMMIT=839848b9a8a38a92a6936e30c4abe35cc6f2546d
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
@@ -224,6 +230,8 @@ workspaces_clones() { theme_clones omarchy.workspaces Workspaces.qml "$WORKSPACE
 
 # The lock screen is a clone of Omarchy's lock with the macOS LockView.qml.
 LOCK_MARK="The macOS lock screen"
+# Brings Omarchy's lock code into the clone after each omarchy-update.
+LOCK_HOOK="$HOME/.config/omarchy/hooks/post-update.d/macos-theme-lock"
 macos_locks() { theme_clones omarchy.lock LockView.qml "$LOCK_MARK"; }
 
 # A MacTahoe folder the theme installed: marked, or (installed before the
@@ -485,13 +493,16 @@ refresh() {
   omarchy restart shell >/dev/null 2>&1 || true
 }
 
-# Remove a line and the comment line above it, keeping a backup.
+# Remove a line and the comment line above it (the run's snapshot has the file as it was).
 remove_lines() {
-  local file="$1" comment="$2" line="$3"
+  local file="$1" comment="$2" line="$3" tmp
   [[ -f $file ]] && grep -qF "$line" "$file" || return 0
-  cp "$file" "$file.bak.$STAMP"
+  tmp=$(mktemp)
   # grep exits 1 when no lines are left, which is fine here.
-  grep -vxF -e "$comment" -e "$line" "$file.bak.$STAMP" > "$file" || true
+  grep -vxF -e "$comment" -e "$line" "$file" > "$tmp" || true
+  # cat, not mv: the file keeps its mode, and a dotfiles symlink stays one.
+  cat "$tmp" > "$file"
+  rm -f "$tmp"
 }
 
 # give_back <omarchy id> [placement]: turns on again what stood where the theme's
@@ -590,6 +601,7 @@ remove_lock() {
     give_back omarchy.lock
     rm -rf "${dir:?}"
   done
+  rm -f "$LOCK_HOOK"
   # Omarchy's lock stays loaded on purpose, so only a restart hands it back the lock command.
   omarchy restart shell >/dev/null 2>&1 || true
   say "Removed the macOS lock screen and restored Omarchy's own"
@@ -626,6 +638,7 @@ keep_theme() {
 remove_theme() {
   remove_lines "$LOOKNFEEL" "$LOADER_COMMENT" "$LOADER_LINE"
   remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_LINE"
+  remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_OLD_LINE"
   # Kept, not deleted: it may hold wallpapers and files of your own.
   keep_theme
   say "Removed the theme (kept in $kept)"
@@ -662,6 +675,30 @@ doctor() {
 # shellcheck source=backup.sh
 source "$REPO/backup.sh"
 
+# One run that changes things at a time (Studio and a terminal, say), or their
+# writes interleave. The lock is a folder holding the run's pid, moved into
+# place in one rename; not flock, whose open file the processes this starts
+# (a wallpaper, the shell) would inherit and hold. An import runs this script
+# again inside its own lock.
+take_lock() {
+  [[ -n ${MACOS_THEME_LOCKED:-} ]] && return
+  local lock="$BACKUP_DIR/.lock" new
+  mkdir -p "$BACKUP_DIR"
+  new=$(mktemp -d "$BACKUP_DIR/.lock.XXXXXX")
+  echo $$ >"$new/pid"
+  # A lock left by a run that was killed is taken over; its pid may belong to
+  # another program by now (after a reboot), so it must still be install.sh.
+  # shortcut: two runs taking over the same dead run's lock at once can both get it; needs a crash and a race together.
+  if ! mv -T "$new" "$lock" 2>/dev/null &&
+    { grep -qs install.sh "/proc/$(cat "$lock/pid" 2>/dev/null)/cmdline" || ! { rm -rf "$lock" && mv -T "$new" "$lock" 2>/dev/null; }; }; then
+    rm -rf "$new"
+    echo "Another run of install.sh is changing the theme; try again when it has finished (its lock: $lock)." >&2
+    exit 1
+  fi
+  trap 'rm -rf "$BACKUP_DIR/.lock"' EXIT
+  export MACOS_THEME_LOCKED=1
+}
+
 # A preview shows the settings, and that is all: it edits only the copy of the
 # theme Omarchy is showing, never the theme folder, so it needs no snapshot and
 # the next theme refresh (or Apply) replaces it.
@@ -692,6 +729,9 @@ case $mode in
   doctor) doctor ;;
   bar) if $json; then bar_json; else bar_text; fi; exit 0 ;;
   backups) if $json; then snapshot_list_json; else snapshot_list_text; fi; exit 0 ;;
+  backup|restore|import) take_lock ;;
+esac
+case $mode in
   backup) say "Backed up as $(snapshot_take "Backed up by hand")"; exit 0 ;;
   restore) snapshot_restore "$mode_arg"; exit 0 ;;
   export) export_profile "$mode_arg"; exit 0 ;;
@@ -709,6 +749,7 @@ fi
 
 # Every change can be undone: a snapshot of how things are, first.
 if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]]; then
+  take_lock
   [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snapshot_take "$(describe_changes)" >/dev/null
 fi
 
@@ -731,7 +772,6 @@ if (( ${#remove[@]} )); then
   for f in widgets lock osd dock wide-menu switcher bar-icons menubar dictation-hud rows icons theme; do
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
-  say "Done. Backups of edited files end in .bak.$STAMP"
   # All of it gone: the next install records afresh what is on then.
   none_installed && rm -f "$BEFORE_THEME"
   if [[ -n ${remove[icons]:-} ]] && ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]]; then
@@ -740,7 +780,7 @@ if (( ${#remove[@]} )); then
   if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
     echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons" >&2
   fi
-  (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout ]] || exit 0
+  (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]] || exit 0
 fi
 
 want() { [[ -n ${add[$1]:-} ]]; }
@@ -757,7 +797,6 @@ if want theme; then
   fi
   if [[ -d $THEME_DIR ]]; then
     keep_theme
-    say "Backed up your existing macos theme to $kept"
     from=$kept
   fi
   mkdir -p "$THEME_DIR"
@@ -766,6 +805,9 @@ if want theme; then
   [[ -n $from && -d $from ]] && cp -rn "${from%/}/." "$THEME_DIR/"
   # So do the settings you chose.
   for k in "${!kept_look[@]}"; do look_set "$k" "${kept_look[$k]}"; done
+  # The copy moved aside is merged in, and this run's snapshot holds it too.
+  [[ -n $kept ]] && rm -rf "${kept:?}"
+  printf '@import url("file://%s/default/gtk/glass.css");\n' "$OMARCHY_PATH" > "$THEME_DIR/glass.css"
   say "Installed the theme to $THEME_DIR"
 fi
 
@@ -775,7 +817,10 @@ if want icons && ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-da
   say "MacTahoe icons are already installed, not by the theme; it uses them as they are"
 elif want icons; then
   tmp=$(mktemp -d)
-  if git clone -q --depth 1 https://github.com/vinceliuice/MacTahoe-icon-theme.git "$tmp/MacTahoe" &&
+  if git init -q "$tmp/MacTahoe" &&
+    git -C "$tmp/MacTahoe" fetch -q --depth 1 https://github.com/vinceliuice/MacTahoe-icon-theme.git "$MACTAHOE_COMMIT" &&
+    git -C "$tmp/MacTahoe" -c advice.detachedHead=false checkout -q FETCH_HEAD &&
+    [[ $(git -C "$tmp/MacTahoe" rev-parse HEAD) == "$MACTAHOE_COMMIT" ]] &&
     bash "$tmp/MacTahoe/install.sh" -t default >/dev/null; then
     say "Installed the MacTahoe icon theme to ~/.local/share/icons"
     # Finder lists folders and files with small color icons (blue folders, paper
@@ -811,50 +856,52 @@ fi
 mkdir -p "$(dirname "$LOOKNFEEL")" "$(dirname "$GTK_CSS")"
 touch "$LOOKNFEEL" "$GTK_CSS"
 if want theme && ! grep -qF 'omarchy.current.theme.look' "$LOOKNFEEL"; then
-  cp "$LOOKNFEEL" "$LOOKNFEEL.bak.$STAMP"
   printf '\n%s\n%s\n' "$LOADER_COMMENT" "$LOADER_LINE" >> "$LOOKNFEEL"
   say "Added the look.lua loader to $LOOKNFEEL"
 fi
 
 # 3. Let GTK apps such as Files ask Hyprland for blur, and stripe Files lists.
-if want theme && ! grep -qF 'default/gtk/glass.css' "$GTK_CSS"; then
-  cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
+want theme && remove_lines "$GTK_CSS" "$GTK_COMMENT" "$GTK_OLD_LINE"
+if want theme && ! grep -qF "$GTK_LINE" "$GTK_CSS"; then
   printf '%s\n%s\n' "$GTK_COMMENT" "$GTK_LINE" >> "$GTK_CSS"
   say "Added GTK blur to $GTK_CSS (reopen GTK apps to see it)"
 fi
 # Striped rows in Files, from the theme's gtk.css, so only while it is active.
 if want rows && ! grep -qF "$ROWS_LINE" "$GTK_CSS"; then
-  cp "$GTK_CSS" "$GTK_CSS.bak.$STAMP"
   printf '%s\n%s\n' "$ROWS_COMMENT" "$ROWS_LINE" >> "$GTK_CSS"
   say "Added striped Files rows to $GTK_CSS (reopen Files to see them)"
 fi
 
-# 4. Optional plugins.
+# 4. Optional plugins. One that won't enable is taken out again, the rest go
+# on, and the run fails at the end, naming it.
+failed=()
 install_plugin() {
   rm -rf "${PLUGINS_DIR:?}/$1"
-  mkdir -p "$PLUGINS_DIR"
-  cp -r "$REPO/plugins/$1" "$PLUGINS_DIR/$1"
+  # Called as a condition, so set -e is off here: each step checks itself.
+  mkdir -p "$PLUGINS_DIR" && cp -r "$REPO/plugins/$1" "$PLUGINS_DIR/$1" || { failed+=("$1"); return 1; }
   # The shell only knows plugins it has scanned, and the rescan finishes in the
   # background, so retry the enable for a few seconds.
   omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
   local tries=0
   until omarchy plugin enable "$1" >/dev/null 2>&1; do
-    (( ++tries < 20 )) || { echo "Could not enable $1; try: omarchy plugin enable $1" >&2; return 1; }
+    if (( ++tries >= 20 )); then
+      rm -rf "${PLUGINS_DIR:?}/$1"
+      omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+      failed+=("$1")
+      return 1
+    fi
     sleep 0.25
   done
 }
-if want osd; then
-  install_plugin "$OSD_ID"
+if want osd && install_plugin "$OSD_ID"; then
   omarchy plugin disable omarchy.osd >/dev/null 2>&1 || true
   say "Installed the frosted volume capsule (replaces Omarchy's own popup)"
 fi
-if want dock; then
-  install_plugin "$DOCK_ID"
+if want dock && install_plugin "$DOCK_ID"; then
   omarchy plugin disable omarchy.dock >/dev/null 2>&1 || true
   say "Installed the macOS dock (minimized windows sit after a divider at its end)"
 fi
-if want switcher; then
-  install_plugin "$SWITCHER_ID"
+if want switcher && install_plugin "$SWITCHER_ID"; then
   say "Installed the switchers (Alt+Tab apps, Super+Tab workspaces, while this theme is active)"
 fi
 if want menubar; then
@@ -867,7 +914,24 @@ if want menubar; then
     mkdir -p "$BACKUP_DIR"
     jq -c '.bar.layout // null' "$SHELL_JSON" >"$BAR_BEFORE" 2>/dev/null || echo null >"$BAR_BEFORE"
   fi
-  for id in $MENUBAR_IDS; do install_plugin "$id"; done
+  menubar_ok=true
+  for id in $MENUBAR_IDS; do install_plugin "$id" || menubar_ok=false; done
+  # Half a menu bar is no menu bar: it all goes. An update puts the bar back as
+  # it was before it; a first install hasn't touched the bar, and must leave the
+  # arrangement remembered from an earlier removal alone.
+  if ! $menubar_ok; then
+    if $fresh; then
+      for id in $MENUBAR_IDS; do
+        omarchy plugin disable "$id" >/dev/null 2>&1 || true
+        rm -rf "${PLUGINS_DIR:?}/$id"
+      done
+      rm -f "$BAR_BEFORE"
+    else
+      remove_menubar
+    fi
+  fi
+fi
+if want menubar && $menubar_ok; then
   # The workspaces: a click goes there, a right-click picks the layout, as a
   # macOS menu-bar item's menu does (Omarchy's cycles the shown one's layout
   # on a click). A clone of this Omarchy's widget, patched; none yet means
@@ -936,13 +1000,11 @@ if want wide-menu; then
     echo "    Could not clone Omarchy's menu; it keeps its own width." >&2
   fi
 fi
-if want bar-icons; then
-  install_plugin "$BAR_ICONS_ID"
+if want bar-icons && install_plugin "$BAR_ICONS_ID"; then
   omarchy bar put "$BAR_ICONS_ID" --section left >/dev/null 2>&1 || true
   say "Installed the macOS bar icons (Omarchy's Network, Bluetooth, Audio and Display widgets keep their updates)"
 fi
-if want widgets; then
-  install_plugin "$WIDGETS_ID"
+if want widgets && install_plugin "$WIDGETS_ID"; then
   say "Installed the desktop widgets (top left: clock, calendar, weather, now playing)"
 fi
 if want lock; then
@@ -953,6 +1015,8 @@ if want lock; then
   if [[ -n $lock_dir ]]; then
     for f in "$lock_src"/*; do [[ -e $f && ${f##*/} != manifest.json ]] && cp -r "$f" "$lock_dir/"; done
     cp "$REPO/lock/LockView.qml" "$lock_dir/LockView.qml"
+    mkdir -p "$(dirname "$LOCK_HOOK")"
+    cp "$REPO/lock/post-update.sh" "$LOCK_HOOK"
     omarchy plugin enable "$(basename "$lock_dir")" >/dev/null 2>&1 || true
     # The shell caches loaded QML, and Omarchy's lock keeps the lock command
     # until a restart; the refresh below restarts it when the theme is current.
@@ -965,9 +1029,8 @@ fi
 if want dictation-hud; then
   # The Voxtype tips once, when the HUD is new, not on every reinstall (each Update).
   hud_fresh=true; installed dictation-hud && hud_fresh=false
-  install_plugin "$HUD_ID"
-  say "Installed the dictation HUD"
-  if $hud_fresh; then
+  install_plugin "$HUD_ID" && say "Installed the dictation HUD"
+  if $hud_fresh && installed dictation-hud; then
     if command -v voxtype >/dev/null; then
       echo "    Voxtype draws its own overlay too. To show only the HUD, run:" >&2
       echo "      voxtype config set osd.enabled false && systemctl --user restart voxtype" >&2
@@ -1017,5 +1080,9 @@ if active && { (( ${#add[@]} )) || $look_changed; }; then
   refresh
 elif want theme; then
   omarchy theme set macos
+fi
+if (( ${#failed[@]} )); then
+  for id in "${failed[@]}"; do echo "Could not install $id (Omarchy wouldn't enable it), so it was left out. Try adding it again." >&2; done
+  exit 1
 fi
 say "Done. The bar, menus and popups pick up the theme now; restart the shell if they don't: omarchy restart shell"
