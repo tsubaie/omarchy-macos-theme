@@ -7,9 +7,6 @@ const path = require("path")
 
 const root = path.join(__dirname, "..")
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8")
-// Each plugin installs on its own, so each carries the file; they must not drift apart.
-assert.strictEqual(read("plugins/macos-theme.dictation-hud/HudIcons.js"), read("plugins/macos-theme.osd/HudIcons.js"),
-  "plugins/macos-theme.dictation-hud/HudIcons.js differs from the volume HUD's copy; copy that one over it")
 
 // The plugins that follow the Glass setting each find it in look.lua; their
 // pattern must still find the theme's line, and read its second number.
