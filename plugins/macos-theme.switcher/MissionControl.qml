@@ -171,9 +171,11 @@ Item {
       opacity: root.spreadOut
       clip: true
       // The whole wallpaper, blurred, lined up with the one beneath, so the
-      // blur has no edge of its own at the strip's bottom.
+      // blur has no edge of its own at the strip's bottom; drawn a little
+      // larger, so the blur's faded rim at the screen's edges is off screen.
       Image {
         y: -band.y
+        scale: 1.06
         width: overlay.width
         height: overlay.height
         source: wallpaperImage.source
@@ -183,6 +185,7 @@ Item {
         visible: root.blur > 0
         layer.enabled: visible && root.opened
         layer.effect: MultiEffect {
+          autoPaddingEnabled: false
           blurEnabled: true
           // Blur 10, the theme's own, blurs as strongly as the lock screen does.
           blurMax: Math.round(6.4 * root.blur)
