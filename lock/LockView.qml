@@ -183,10 +183,14 @@ Item {
     Rectangle {
       anchors.fill: parent
       gradient: Gradient {
-        GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.28) }
-        GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.04) }
+        // At least 0.42 behind the clock (the top quarter) and the account
+        // (the bottom fifth): 3:1 for their large white text on a white wallpaper.
+        GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.5) }
+        GradientStop { position: 0.25; color: Qt.rgba(0, 0, 0, 0.42) }
+        GradientStop { position: 0.4; color: Qt.rgba(0, 0, 0, 0.04) }
         GradientStop { position: 0.7; color: Qt.rgba(0, 0, 0, 0.04) }
-        GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.32) }
+        GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.42) }
+        GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.5) }
       }
     }
 
@@ -207,7 +211,7 @@ Item {
       layer.enabled: true
       layer.effect: MultiEffect {
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.35)
+        shadowColor: Qt.rgba(0, 0, 0, 0.6)
         shadowBlur: 0.8
         shadowVerticalOffset: 2
       }
@@ -325,7 +329,8 @@ Item {
           width: parent.width
           height: parent.height
           radius: height / 2
-          color: Qt.rgba(1, 1, 1, passwordInput.activeFocus ? 0.22 : 0.16)
+          // Dark glass, so the white text and dots read on a white wallpaper too.
+          color: Qt.rgba(0, 0, 0, passwordInput.activeFocus ? 0.62 : 0.55)
           border.width: 1
           border.color: root.errorState ? Commons.Color.lock.textError : Qt.rgba(1, 1, 1, 0.28)
           clip: true
@@ -397,7 +402,7 @@ Item {
             anchors.fill: passwordInput
             text: root.authenticatingPassword ? Commons.I18n.t("lock.checking") : root.placeholderText
             visible: passwordInput.text.length === 0
-            color: Qt.rgba(1, 1, 1, root.authenticatingPassword ? 0.9 : 0.6)
+            color: Qt.rgba(1, 1, 1, root.authenticatingPassword ? 0.9 : 0.8)
             font.family: "Inter"
             font.pixelSize: root.fieldFontSize
             horizontalAlignment: Text.AlignHCenter

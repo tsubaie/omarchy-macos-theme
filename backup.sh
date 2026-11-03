@@ -243,6 +243,8 @@ import_profile() {
   for f in $LOOK_SETTINGS magnification; do
     local v
     v=$(jq -r --arg k "$f" '.settings[$k] | numbers' "$profile")
+    # An export from a version that let glass go lower.
+    [[ $f == glass && -n $v ]] && v=$(glass_floor "$v")
     [[ -n $v ]] && args+=(--set "$f=$v")
   done
   local clock

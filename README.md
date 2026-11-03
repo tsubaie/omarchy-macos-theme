@@ -31,7 +31,7 @@ cd omarchy-macos-theme
 | `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `bar-icons`, `lock` or `widgets` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
-| `--set glass=<0.5-1>` | How solid windows are; 1 is solid, the theme's own is 0.7. Kept when the theme is updated |
+| `--set glass=<0.75-1>` | How solid the windows you aren't using are; 1 is solid, the theme's own is 0.85. The window you are using is always solid. The menus, launcher, notifications and popups take the same glass. Kept when the theme is updated |
 | `--switch-to <theme>` | Switch to that Omarchy theme first if the macOS theme is current, so it can be removed: `--switch-to "Tokyo Night" --uninstall --remove icons` removes all of it |
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
@@ -63,7 +63,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
 
 - **Apple colors**: the macOS dark grays (`#1c1c1e`, `#2c2c2e`) and system colors, with Apple's blue `#0a84ff` as the accent.
 - **Frosted glass where it belongs**: a clear, blurred top bar; a frosted dock, menus, launcher, notifications and popups, all in the same borderless tinted glass.
-  - App windows are 70% frosted glass, on floating workspaces too.
+  - App windows you aren't using are 85% frosted glass, on floating workspaces too; the one you are using stays solid, so its text reads.
   - Browsers stay solid so their menus stay readable.
   - Ghostty keeps a glass background with solid text. Files, like Finder, has a see-through sidebar and a nearly solid file list.
 - **Window title bars** with red, yellow and green circles on the left and the app's name centered, on Apple's dark title-bar gray. Double-click a title bar to maximize. They stay on floating workspaces too.
@@ -250,7 +250,7 @@ This removes the theme and plugins, turns Omarchy's dock, on-screen display and 
 
 The window look lives in `~/.config/omarchy/themes/macos/look.lua`. Edit it, then run `hyprctl reload`.
 
-- **Window glass**: `o.window(".*", { opacity = "0.7 0.7" })`. Use `1 1` for solid windows, or add an app's class to the solid list below that line (find it with `hyprctl clients`).
+- **Window glass**: `o.window(".*", { opacity = "1 0.85" })`, the window you are using and the others. Use `1 1` for solid windows, or add an app's class to the solid list below that line (find it with `hyprctl clients`).
 - **Gaps, corners, blur**: in the `hl.config` block at the top.
 - **Title bars**: in the `hyprbars` block.
 - **Snapping**: `SNAP_EDGE` is how close to an edge (in pixels) a drag must come, and `SNAP_CORNER` how much of each edge counts as a corner (a third by default).

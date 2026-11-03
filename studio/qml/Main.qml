@@ -675,8 +675,8 @@ Window {
 
                     SettingRow {
                         label: "Window glass"
-                        note: "How see-through windows are; 1 is solid"
-                        SettingSlider { key: "glass"; from: 0.5; to: 1; fallback: 0.7 }
+                        note: "How see-through the windows you aren't using are; 1 is solid. The one you are using is always solid, so its text reads."
+                        SettingSlider { key: "glass"; from: 0.75; to: 1; fallback: 0.85 }
                     }
                     SettingRow {
                         label: "Browser and Electron app glass"
@@ -1280,7 +1280,7 @@ Window {
 
         MockWindow {
             x: parent.width * 0.06; y: 22; width: parent.width * 0.5; height: 128
-            glass: window.settingValue("glass", 0.7); title: "Files"
+            glass: window.settingValue("glass", 0.85); title: "Files"
             backdrop: preview.wallpaper; blurAmount: preview.blurAmount
         }
         MockWindow {
@@ -1563,7 +1563,7 @@ Window {
         }
         MockWindow {
             x: parent.width * 0.08; y: 34; width: parent.width * 0.5; height: 96
-            glass: window.settingValue("glass", 0.7); title: "Files"; rows: window.pieceOn("rows")
+            glass: window.settingValue("glass", 0.85); title: "Files"; rows: window.pieceOn("rows")
             backdrop: home.wallpaper; blurAmount: window.settingValue("blur", 10)
         }
         // The clock widget.

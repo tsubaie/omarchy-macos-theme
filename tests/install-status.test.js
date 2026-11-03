@@ -85,7 +85,7 @@ try {
   assert.deepStrictEqual(Object.keys(s.features), pieces)
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(s.active, false)
-  assert.deepStrictEqual(s.settings, { glass: 0.7, "web-glass": 1, snapping: 1, "drop-follow": 1, blur: 10, "title-bars": 1, "traffic-lights": 14, magnification: 1.75, "dock-size": 48 })
+  assert.deepStrictEqual(s.settings, { glass: 0.85, "web-glass": 1, snapping: 1, "drop-follow": 1, blur: 10, "title-bars": 1, "traffic-lights": 14, magnification: 1.75, "dock-size": 48 })
 
   // --add installs only what it names.
   assert.strictEqual(run("--add", "rows", "--add", "dock").status, 0)
@@ -130,10 +130,15 @@ try {
   // goes into the dock's section of shell.json, next to what was there.
   const shellJson = path.join(home, ".config/omarchy/shell.json")
   fs.writeFileSync(shellJson, JSON.stringify({ dock: { position: "left" } }))
-  assert.strictEqual(run("--set", "glass=0.85", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "drop-follow=0", "--set", "blur=15", "--set", "magnification=1.2", "--set", "dock-size=60", "--set", "title-bars=0", "--set", "traffic-lights=18").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
+  assert.strictEqual(run("--set", "glass=0.9", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "drop-follow=0", "--set", "blur=15", "--set", "magnification=1.2", "--set", "dock-size=60", "--set", "title-bars=0", "--set", "traffic-lights=18").status, 0)
+  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
   const look = fs.readFileSync(path.join(themeDir, "look.lua"), "utf8")
-  assert.match(look, /o\.window\("\.\*", \{ opacity = "0\.85 0\.85" \}\)/)
+  // Glass is for the windows you aren't using: the active one stays solid.
+  assert.match(look, /o\.window\("\.\*", \{ opacity = "1 0\.9" \}\)/)
+  // The shell's panels, menus, launcher and notifications take the same glass.
+  const shellToml = fs.readFileSync(path.join(themeDir, "shell.toml"), "utf8")
+  for (const section of ["popups", "launcher", "menu", "notifications"])
+    assert.match(shellToml, new RegExp(`^\\[${section}\\][^]*?^background-alpha *= *0\\.9$`, "m"), section)
   assert.match(look, /brave-browser\|.*", \{ opacity = "0\.9 0\.9" \}\)/)
   assert.match(look, /^local SNAPPING = 0$/m)
   assert.match(look, /^local BLUR = 15$/m)
@@ -141,8 +146,17 @@ try {
   assert.match(look, /^local LIGHTS = 18$/m)
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).dock.position, "left")
   assert.strictEqual(run("--add", "theme").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
-  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "blur=0.5", "blur=21", "blur=-1", "web-glass=0.1", "dock-size=31", "dock-size=81", "dock-size=50.5", "title-bars=2", "drop-follow=2", "drop-follow=0.5", "traffic-lights=9", "traffic-lights=21", "traffic-lights=14.5"]) {
+  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
+  // A look.lua from before (the same glass for every window, as low as 0.5) is
+  // kept through a reinstall in the new form, raised to the least glass now takes.
+  const lookPath = path.join(themeDir, "look.lua")
+  fs.writeFileSync(lookPath, fs.readFileSync(lookPath, "utf8").replace('opacity = "1 0.9"', 'opacity = "0.7 0.7"'))
+  assert.strictEqual(status().settings.glass, 0.7)
+  assert.strictEqual(run("--add", "theme").status, 0)
+  assert.strictEqual(status().settings.glass, 0.75)
+  assert.match(fs.readFileSync(lookPath, "utf8"), /o\.window\("\.\*", \{ opacity = "1 0\.75" \}\)/)
+  assert.strictEqual(run("--set", "glass=0.9").status, 0)
+  for (const bad of ["glass=0.2", "glass=0.7","glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "blur=0.5", "blur=21", "blur=-1", "web-glass=0.1", "dock-size=31", "dock-size=81", "dock-size=50.5", "title-bars=2", "drop-follow=2", "drop-follow=0.5", "traffic-lights=9", "traffic-lights=21", "traffic-lights=14.5"]) {
     assert.strictEqual(run("--set", bad).status, 1, bad)
   }
   // A preview writes the settings as --set does, for a slider being dragged;
