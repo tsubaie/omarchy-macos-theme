@@ -31,6 +31,8 @@ fi
 exit 0
 `, { mode: 0o755 })
   fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
+  // A restore reloads Hyprland; nothing here may reach the real one.
+  fs.writeFileSync(path.join(bin, "hyprctl"), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
 
   const current = path.join(home, ".local/state/omarchy/current")
   fs.mkdirSync(path.join(current, "theme/backgrounds"), { recursive: true })
@@ -46,7 +48,7 @@ exit 0
     fs.writeFileSync(path.join(home, ".local/state/omarchy/theme-backgrounds/macos"), remembered(home) + "\n")
   }
 
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, USER: "me" }
+  const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, USER: "me" }
   const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
   const installed = run("--add", "theme")
   assert.strictEqual(installed.status, 0, installed.stderr)

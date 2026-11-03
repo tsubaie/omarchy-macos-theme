@@ -47,7 +47,7 @@ echo "  WARN scene: QML Thing at $P/someone.else/Thing.qml[1:1]: Binding loop de
 // Inter installed, whatever this machine has, so a warning about it can't show up.
 fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
 
-const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
+const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
 const status = () => JSON.parse(execFileSync("bash", [script, "--status", "--json"], { env, encoding: "utf8" }))
 const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "bar-icons", "lock", "widgets"]

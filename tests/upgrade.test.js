@@ -44,7 +44,7 @@ exit 0
 `, { mode: 0o755 })
 for (const quiet of ["hyprctl", "omarchy-shell", "qs"]) fs.writeFileSync(path.join(bin, quiet), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
 fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
-const env = { ...process.env, HOME: home, USER: user, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}` }
+const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, USER: user, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}` }
 delete env.MACOS_THEME_NO_SNAPSHOT
 // Without Omarchy (CI), the one file of it installers read: its default shell.json.
 if (!fs.existsSync(path.join(env.OMARCHY_PATH || "/usr/share/omarchy", "config/omarchy/shell.json"))) {

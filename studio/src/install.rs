@@ -1557,6 +1557,10 @@ mod contract {
                 .env("PATH", path)
                 .env("USER", "studio")
                 .env("OMARCHY_PATH", self.0.join("omarchy"))
+                // Away from the real desktop: gsettings and hyprctl find it through these.
+                .env("DBUS_SESSION_BUS_ADDRESS", "")
+                .env("HYPRLAND_INSTANCE_SIGNATURE", "")
+                .env("XDG_RUNTIME_DIR", &self.0)
                 .env_remove("MACOS_THEME_NO_SNAPSHOT")
                 .output()
                 .expect("bash runs install.sh")
