@@ -7,6 +7,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons
 import qs.Commons as Commons
@@ -49,6 +50,149 @@ Item {
 
   // A video wallpaper shows its still poster: nothing plays behind the lock.
   readonly property bool video: Util.isVideoPath(root.backgroundPath)
+
+  // Signing in, as macOS has it: the wallpaper sharp while locked, blurred
+  // once the pointer is on the password field, and while there is something
+  // typed, being checked or refused.
+  readonly property bool signingIn: fieldHover.hovered || passwordInput.text.length > 0 || authenticatingPassword || errorState
+  property real blurAmount: signingIn ? 1 : 0
+  Behavior on blurAmount { enabled: !root.reduceMotion; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+
+  // Motion kept still: Omarchy's animations off, or the theme's Reduce
+  // motion (install.sh --set reduce-motion=1), read from the look Hyprland has loaded.
+  property bool lookReducesMotion: false
+  readonly property bool reduceMotion: Style.reduceMotion || lookReducesMotion
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.lookReducesMotion = /^local REDUCE_MOTION = 1$/m.test(text())
+    onLoadFailed: root.lookReducesMotion = false
+    onFileChanged: reload()
+  }
+
+  // The keyboard: its layouts, which one is on and Caps Lock, as Hyprland
+  // reports its main one ({ keymap, index, layouts, variants, caps }).
+  property var keyboard: null
+  readonly property var layouts: keyboard ? String(keyboard.layouts || "").split(",").filter(function(l) { return l !== "" }) : []
+  readonly property bool capsLock: !!(keyboard && keyboard.caps)
+  // As Omarchy's bar labels it: Arabic as AR, English (US) as EN.
+  property var layoutBriefs: ({})
+  readonly property string layoutLabel: keyboard ? shortLabel(keyboard.keymap, layoutBriefs) : ""
+
+  // Locked, Hyprland runs only the bindings marked to run while locked, so
+  // the user's own layout bindings are caught here: the ones Hyprland
+  // describes as switching the keyboard layout or input language, or that
+  // run a layout switch ([{ key, mods, back }]). Without this a password
+  // could only be typed in the layout the screen locked in.
+  property var layoutBindings: []
+
+  function checkKeyboard() {
+    if (keyboardCheck.running) keyboardCheck.again = true
+    else keyboardCheck.running = true
+  }
+
+  // To the next layout (the one before for a "back" binding), and fcitx5
+  // (Omarchy's input method) to the same one when it types plain keyboard
+  // layouts, so the two can't disagree.
+  function switchLayout(step) {
+    if (layouts.length < 2 || layoutSwitch.running) return
+    var next = (keyboard.index + step + layouts.length) % layouts.length
+    var variant = String(keyboard.variants || "").split(",")[next] || ""
+    layoutSwitch.command = ["sh", "-c",
+      'hyprctl switchxkblayout all "$1" >/dev/null; '
+      + 'command -v fcitx5-remote >/dev/null && fcitx5-remote >/dev/null 2>&1 && '
+      + 'case $(fcitx5-remote -n) in keyboard-*) fcitx5-remote -s "$2" ;; esac; true',
+      "sh", String(next), "keyboard-" + layouts[next] + (variant ? "-" + variant : "")]
+    layoutSwitch.running = true
+  }
+
+  // A Hyprland key name as Qt reports the key: Shift_L as Shift, i as I.
+  function qtKey(name) {
+    var named = { space: Qt.Key_Space, Tab: Qt.Key_Tab, Caps_Lock: Qt.Key_CapsLock,
+      Shift_L: Qt.Key_Shift, Shift_R: Qt.Key_Shift, Control_L: Qt.Key_Control, Control_R: Qt.Key_Control,
+      Alt_L: Qt.Key_Alt, Alt_R: Qt.Key_Alt, Super_L: Qt.Key_Meta, Super_R: Qt.Key_Meta }
+    name = String(name)
+    if (Object.prototype.hasOwnProperty.call(named, name)) return named[name]
+    return name.length === 1 ? name.toUpperCase().charCodeAt(0) : -1
+  }
+
+  // The binding a key press is, if any: its key, with exactly its Shift,
+  // Ctrl, Alt and Super (Hyprland's 1, 4, 8 and 64), leaving out the one the
+  // key itself is, which Qt may or may not count as held.
+  // shortcut: keys named in qtKey only (letters, digits, space, Tab, modifiers); add a name when a binding uses another.
+  function layoutBindingFor(key, modifiers, bindings) {
+    var mods = [[1, Qt.ShiftModifier, Qt.Key_Shift], [4, Qt.ControlModifier, Qt.Key_Control],
+      [8, Qt.AltModifier, Qt.Key_Alt], [64, Qt.MetaModifier, Qt.Key_Meta]]
+    if (key === Qt.Key_Super_L || key === Qt.Key_Super_R) key = Qt.Key_Meta
+    return (bindings || []).find(function(binding) {
+      return qtKey(binding.key) === key && mods.every(function(m) {
+        return m[2] === key || !!(binding.mods & m[0]) === !!(modifiers & m[1])
+      })
+    }) || null
+  }
+
+  // Omarchy's own labels (its bar's KeyboardLayoutModel.js): xkbcli pairs each
+  // layout's description, the keymap hyprctl reports, with a short language
+  // code; one it doesn't list reads as its description's first word.
+  function parseBriefs(text) {
+    var briefs = {}
+    var brief = ""
+    String(text || "").split("\n").forEach(function(line) {
+      if (/^\s*- /.test(line)) brief = ""
+      var field = line.match(/^  (brief|description): (.*)$/)
+      if (!field) return
+      if (field[1] === "brief") brief = field[2].replace(/^'|'$/g, "")
+      else if (brief) { briefs[field[2]] = brief; brief = "" }
+    })
+    return briefs
+  }
+  function shortLabel(description, briefs) {
+    if (!description) return ""
+    var brief = Object.prototype.hasOwnProperty.call(briefs || {}, description) ? briefs[description] : ""
+    return String(brief ? brief.split("-")[0] : description.split(/\s+/)[0]).substring(0, 3).toUpperCase()
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) { if (event.name === "activelayout") root.checkKeyboard() }
+  }
+  Process {
+    id: keyboardCheck
+    property bool again: false
+    running: true
+    onExited: if (again) { again = false; running = true }
+    // The main keyboard, leaving out the virtual ones dictation types
+    // through, as the volume panel picks it.
+    command: ["sh", "-c", "hyprctl devices -j | jq -c '[.keyboards[] | select(.main)"
+      + " | select((.name | test(\"^hl-virtual-keyboard-|wtype|dotool|ydotool|eitype\") | not) or (.name | test(\"fcitx|ibus\")))][0]"
+      + " // empty | {keymap: .active_keymap, index: .active_layout_index, layouts: .layout, variants: .variant, caps: .capsLock}'"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        try { root.keyboard = JSON.parse(line) } catch (e) {}
+      }
+    }
+  }
+  Process {
+    id: bindingsRead
+    running: true
+    command: ["sh", "-c", "hyprctl binds -j | jq -c '[.[] | select(.locked | not)"
+      + " | select(((.description // \"\") | test(\"(keyboard|input).*(layout|language)\"; \"i\"))"
+      + " or ((.arg // \"\") | test(\"switchxkblayout|kb-layout\")))"
+      + " | {key, mods: .modmask, back: ((.description // \"\") | test(\"\\\\b(back|previous)\\\\b\"; \"i\"))}]'"]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.layoutBindings = JSON.parse(text) } catch (e) {} }
+    }
+  }
+  Process {
+    running: true
+    command: ["xkbcli", "list", "--load-exotic"]
+    stdout: StdioCollector { onStreamFinished: root.layoutBriefs = root.parseBriefs(text) }
+  }
+  Process {
+    id: layoutSwitch
+    onExited: root.checkKeyboard()
+  }
 
   readonly property var formatLocale: Qt.locale(Commons.I18n.formatLocale)
   // 12- or 24-hour as the bar's clock shows it, and like macOS without AM/PM.
@@ -125,7 +269,10 @@ Item {
 
   onPasswordTextChanged: syncPasswordText()
   onInputEnabledChanged: {
-    if (inputEnabled) Qt.callLater(forcePasswordFocus)
+    if (inputEnabled) {
+      Qt.callLater(forcePasswordFocus)
+      checkKeyboard()
+    }
   }
   // A wrong password shakes the field, as on macOS.
   property int shownAttempts: 0
@@ -176,10 +323,21 @@ Item {
       cached: true
       constrainDecode: true
       decodeSize: Qt.size(width, height)
+
+      // Blurred while signing in, and drawn a little larger so the blur's
+      // soft rim stays off the screen.
+      scale: 1 + 0.04 * root.blurAmount
+      layer.enabled: root.blurAmount > 0
+      layer.effect: MultiEffect {
+        autoPaddingEnabled: false
+        blurEnabled: true
+        blurMax: 64
+        blur: root.blurAmount
+      }
     }
 
-    // macOS keeps the wallpaper sharp; a soft shade at the top and bottom keeps
-    // the clock and the field readable on a bright one.
+    // macOS keeps the wallpaper sharp while locked; a soft shade at the top and
+    // bottom keeps the clock and the field readable on a bright one.
     Rectangle {
       anchors.fill: parent
       gradient: Gradient {
@@ -199,6 +357,44 @@ Item {
       hoverEnabled: true
       onClicked: { root.wakeRequested(); root.forcePasswordFocus() }
       onPositionChanged: root.wakeRequested()
+    }
+
+    // The keyboard layout, at the top right as macOS shows it on its lock
+    // screen; a click goes to the next. Only with more than one.
+    Rectangle {
+      id: layoutBadge
+      visible: root.layouts.length > 1
+      anchors.top: parent.top
+      anchors.right: parent.right
+      anchors.margins: Math.round(18 * root.s)
+      height: Math.round(26 * root.s)
+      width: Math.max(height, layoutText.implicitWidth + Math.round(18 * root.s))
+      radius: Math.round(7 * root.s)
+      color: Qt.rgba(0, 0, 0, badgeMouse.pressed ? 0.6 : badgeMouse.containsMouse ? 0.5 : 0.38)
+      border.width: 1
+      border.color: Qt.rgba(1, 1, 1, 0.28)
+
+      Text {
+        id: layoutText
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: root.layoutLabel
+        color: "white"
+        font.family: "Inter"
+        font.weight: Font.DemiBold
+        font.pixelSize: Math.round(12 * root.s)
+      }
+
+      MouseArea {
+        id: badgeMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: { root.switchLayout(1); root.forcePasswordFocus() }
+        Accessible.role: Accessible.Button
+        Accessible.name: "Keyboard: " + (root.keyboard ? root.keyboard.keymap : "") + ". Switch to the next layout"
+        Accessible.onPressAction: root.switchLayout(1)
+      }
     }
 
     // The date over a large clock.
@@ -336,6 +532,7 @@ Item {
           clip: true
 
           transform: Translate { id: shakeShift }
+          HoverHandler { id: fieldHover }
 
           SequentialAnimation {
             id: shake
@@ -350,7 +547,8 @@ Item {
           TextInput {
             id: passwordInput
             Accessible.name: "Password"
-            Accessible.description: root.fingerprintConfigured ? "Or touch the fingerprint reader" : ""
+            Accessible.description: (root.capsLock ? "Caps Lock is on. " : "")
+              + (root.fingerprintConfigured ? "Or touch the fingerprint reader" : "")
             anchors.fill: parent
             anchors.leftMargin: root.sideReserve
             anchors.rightMargin: root.sideReserve
@@ -392,11 +590,36 @@ Item {
                 event.accepted = true
                 return
               }
+              var binding = root.layoutBindingFor(event.key, event.modifiers, root.layoutBindings)
+              if (binding) {
+                root.switchLayout(binding.back ? -1 : 1)
+                event.accepted = true
+                return
+              }
               if (event.key === Qt.Key_Escape || (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_U)) {
                 root.passwordTextEdited("")
                 event.accepted = true
               }
             }
+            // Caps Lock is a key of its own, or both Shifts with
+            // shift:both_capslock_cancel: looked at again once they're let go.
+            Keys.onReleased: function(event) {
+              if (event.key === Qt.Key_CapsLock || event.key === Qt.Key_Shift) root.checkKeyboard()
+            }
+          }
+
+          // Caps Lock on, marked in the field as macOS does.
+          Text {
+            objectName: "capsLockIndicator"
+            textFormat: Text.PlainText
+            anchors.left: parent.left
+            anchors.leftMargin: Math.round(parent.height * 0.3)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.capsLock
+            text: "⇪"
+            color: Qt.rgba(1, 1, 1, 0.8)
+            font.family: "Inter"
+            font.pixelSize: Math.round(root.fieldFontSize * 1.15)
           }
 
           Text {

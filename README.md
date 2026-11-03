@@ -196,9 +196,12 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 - They show on your first screen. To pick another, add `"widgets": { "screen": "HDMI-A-1" }` to `~/.config/omarchy/shell.json`, with a name from `hyprctl monitors`; they move right away.
 
 ### Lock screen (`--lock`)
-- The date and a large clock at the top, in 12- or 24-hour time as your bar's clock shows it, over the sharp wallpaper.
+- The date and a large clock at the top, in 12- or 24-hour time as your bar's clock shows it, over the wallpaper.
 - Your account picture (`~/.face`, or your initial on a gray disc), your name and a glass password pill at the bottom, with an arrow to submit and the fingerprint icon when one is enrolled.
 - A wrong password shakes the field, as on macOS.
+- With the pointer on the password field, or once you type, the wallpaper blurs behind it, and comes back sharp when the field is cleared and the pointer leaves (no animation with Reduce motion).
+- With more than one keyboard layout, the one in use shows at the top right, labelled as Omarchy's bar labels it (`EN`, `AR`…); click it for the next. Your own layout shortcuts work too: Hyprland doesn't run them while the screen is locked, so the lock takes the ones Hyprland describes as switching the keyboard layout or input language (Omarchy's Super+I, say) and does the switch itself. That's how an English password gets typed when the screen locked in Arabic. An xkb `grp:` switch option keeps working by itself. fcitx5, when it types plain layouts, follows along.
+- ⇪ in the field while Caps Lock is on.
 - Only the look changes: it is a clone of Omarchy's lock (`omarchy plugin clone omarchy.lock`), and the installer copies this Omarchy's own locking, password and fingerprint code into it each time, then adds the macOS `LockView.qml`. After each `omarchy-update`, a hook (`~/.config/omarchy/hooks/post-update.d/macos-theme-lock`) copies in Omarchy's latest lock code, keeping the macOS view.
 - See it without locking: `omarchy-shell lock preview` (click to close).
 
