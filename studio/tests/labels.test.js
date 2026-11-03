@@ -14,6 +14,21 @@ assert.strictEqual(m.backup(""), "")
 assert.strictEqual(m.setting("reduce-motion", 1), "Reduce motion on")
 assert.strictEqual(m.setting("dock-size", 56), "Dock size 56")
 
+// Studio's releases, as the release workflow names them, against a build
+// from source, which is never offered one.
+for (const v of ["2026.11.03", "2026.11.03.2", "2026.11.03.12"]) assert.ok(m.isRelease(v), v)
+for (const v of ["0.1.0", "", "2026.11.3", "v2026.11.03", "2026.11.03-rc1"]) assert.ok(!m.isRelease(v), v)
+assert.strictEqual(m.studioUpdate("2026.11.03.2", "2026.11.03"), true)
+assert.strictEqual(m.studioUpdate("2026.11.03", "2026.11.03"), false)
+assert.strictEqual(m.studioUpdate("", "2026.11.03"), false)
+assert.strictEqual(m.studioUpdate("2026.11.03.2", "0.1.0"), false)
+
+// When each was last checked: today by the clock, another day by its date.
+const now = new Date(2026, 10, 3, 16, 44)
+assert.strictEqual(m.lastChecked(null, now), "")
+assert.strictEqual(m.lastChecked(new Date(2026, 10, 3, 9, 5), now), "Last checked today at 09:05.")
+assert.strictEqual(m.lastChecked(new Date(2026, 10, 2, 23, 59), now), "Last checked 2 Nov at 23:59.")
+
 // An update's commits, as a short list.
 assert.strictEqual(m.whatsNew(""), "")
 assert.strictEqual(m.whatsNew("A better dock\nFix the clock"), "What's new:\n• A better dock\n• Fix the clock")

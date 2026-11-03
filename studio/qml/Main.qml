@@ -32,7 +32,7 @@ Window {
     // Studio's own updates: its newest release on GitHub, against this one's
     // name. A build from source isn't a release (its version is Cargo's), so
     // it's never offered one.
-    readonly property bool releaseBuild: /^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$/.test(backend.appVersion)
+    readonly property bool releaseBuild: Labels.isRelease(backend.appVersion)
     property string studioLatest: ""
     property bool studioCheckFailed: false
     property bool studioChecking: false
@@ -40,14 +40,10 @@ Window {
     // nothing new still visibly did something.
     property var themeCheckedAt: null
     property var studioCheckedAt: null
-    function lastChecked(at) {
-        if (!at) return ""
-        const day = at.toDateString() === new Date().toDateString() ? "today" : Qt.formatDate(at, "d MMM")
-        return "Last checked " + day + " at " + Qt.formatTime(at, "hh:mm") + "."
-    }
+    function lastChecked(at) { return Labels.lastChecked(at, new Date()) }
     // Updated, but this window still runs the old one until it reopens.
     property bool studioUpdated: false
-    readonly property bool studioUpdate: releaseBuild && !studioUpdated && studioLatest !== "" && studioLatest !== backend.appVersion
+    readonly property bool studioUpdate: !studioUpdated && Labels.studioUpdate(studioLatest, backend.appVersion)
     // A build from source asks too, to say what the newest release is.
     function checkStudio() {
         if (studioChecking) return
@@ -1428,11 +1424,15 @@ Window {
                             checking: window.studioChecking
                             next: window.studioUpdated ? "Reopen" : window.studioUpdate ? "Update Now" : "Check Now"
                             primary: window.studioUpdate || window.studioUpdated
-                            // Updating runs the downloaded theme's own get.sh.
-                            enabled: !window.studioChecking && !(window.studioUpdate && backend.busy)
+                            // Updating runs the downloaded theme's own get.sh. Reopening
+                            // waits for what's running, and for changes waiting, so it
+                            // never quits mid-Apply or leaves two windows open.
+                            enabled: window.studioUpdated ? !backend.busy && window.pendingCount === 0
+                                : !window.studioChecking && !(window.studioUpdate && backend.busy)
+                            reason: window.studioUpdated && enabled === false
+                                ? (backend.busy ? "Wait for what's running to finish" : "Apply or revert your changes first") : ""
                             onClicked: {
                                 if (window.studioUpdated) {
-                                    // Asks first when changes wait, as closing does.
                                     if (backend.reopen()) window.close()
                                 } else if (window.studioUpdate) {
                                     window.confirm = {
