@@ -47,4 +47,26 @@ function whatsNew(notes) {
     return "What's new:\n" + shown.join("\n")
 }
 
-if (typeof module !== "undefined") module.exports = { piece: piece, setting: setting, backup: backup, whatsNew: whatsNew }
+// Studio's releases are named for the day they're made, as the release
+// workflow names them: 2026.11.03, then 2026.11.03.2. A build from source
+// has Cargo's version (0.1.0) and is never a release.
+function isRelease(version) { return /^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$/.test(version) }
+
+// Whether GitHub's newest release is one to offer this build: a release
+// build, and another name than its own.
+function studioUpdate(latest, version) { return isRelease(version) && !!latest && latest !== version }
+
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+// "Last checked today at 16:44.", or "… 3 Nov at 09:05." on another day;
+// empty before the first check.
+function lastChecked(at, now) {
+    if (!at) return ""
+    var two = function(n) { return (n < 10 ? "0" : "") + n }
+    var day = at.toDateString() === now.toDateString() ? "today" : at.getDate() + " " + MONTHS[at.getMonth()]
+    return "Last checked " + day + " at " + two(at.getHours()) + ":" + two(at.getMinutes()) + "."
+}
+
+if (typeof module !== "undefined") module.exports = {
+    piece: piece, setting: setting, backup: backup, whatsNew: whatsNew,
+    isRelease: isRelease, studioUpdate: studioUpdate, lastChecked: lastChecked
+}
