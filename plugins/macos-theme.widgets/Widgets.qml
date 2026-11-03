@@ -150,6 +150,8 @@ Item {
   property bool shownFloating: false
   readonly property bool desktopSeen: !shownWorkspace || shownWorkspace.toplevels.values.length === 0 || shownFloating
   onShownWorkspaceChanged: readMode()
+  // A first value sends no change, so the workspace shown at login is read here.
+  Component.onCompleted: readMode()
   // shortcut: a workspace's layout changed while it stays shown is seen on the next switch; the dock's refresh IPC would cover it.
   function readMode() {
     if (!shownWorkspace || !(shownWorkspace.id >= 1)) return
