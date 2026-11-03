@@ -83,16 +83,17 @@ bar_glass()
 -- the bar's rule is set again once the whole config has loaded.
 package.loaded["default.hypr.glass"] = function() end
 hl.on("config.reloaded", bar_glass)
-hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher|widgets)$" }, blur = true, ignore_alpha = 0.3 })
--- The volume and dictation HUDs are light glass, as Control Center is: blur
--- under all but their clear pixels.
-hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud)$" }, blur = true, ignore_alpha = 0.01 })
+hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher)$" }, blur = true, ignore_alpha = 0.3 })
+-- The volume and dictation HUDs and the desktop widgets are light glass, as
+-- Control Center is: blur under all but their clear pixels.
+hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud|widgets)$" }, blur = true, ignore_alpha = 0.01 })
 -- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
 -- Mission Control flies the windows out itself; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-mission-control$" }, no_anim = true })
--- The strip a dragged window drops onto slides down itself, on frosted glass.
-hl.layer_rule({ match = { namespace = "^omarchy-drop-spaces$" }, no_anim = true, blur = true, ignore_alpha = 0.3 })
+-- The strip a dragged window drops onto slides down itself, on light frosted
+-- glass, as Mission Control's: blur under all but its clear pixels.
+hl.layer_rule({ match = { namespace = "^omarchy-drop-spaces$" }, no_anim = true, blur = true, ignore_alpha = 0.01 })
 -- The shade behind the menu bar is just there, never animated in.
 hl.layer_rule({ match = { namespace = "^omarchy-menubar-shade$" }, no_anim = true })
 -- The snap outline is frosted glass and animates itself.

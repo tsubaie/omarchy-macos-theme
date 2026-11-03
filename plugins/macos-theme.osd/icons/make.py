@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Builds HudIcons.js from the Icons8 SVGs here (see ../icons8.json) for the
-volume and dictation HUDs, and LayoutIcons.js from workspaces/icons/ (see
+volume HUD, and LayoutIcons.js from workspaces/icons/ (see
 workspaces/icons8.json) for the bar's workspace layouts: each icon's path,
 drawn in the color asked for.
 Run it after changing an SVG: python3 plugins/macos-theme.osd/icons/make.py"""
@@ -43,8 +43,7 @@ function icon(name, color) {
 if (typeof module !== "undefined") module.exports = { icon: icon, base64: base64, PATHS: PATHS }
 ''' % json.dumps(paths, indent=2)
 
-for plugin in ("macos-theme.osd", "macos-theme.dictation-hud"):
-    (here.parent.parent / plugin / "HudIcons.js").write_text(js)
+(here.parent.parent / "macos-theme.osd" / "HudIcons.js").write_text(js)
 print("HudIcons.js:", ", ".join(paths))
 
 # The same for the workspace layouts, from workspaces/icons/, as

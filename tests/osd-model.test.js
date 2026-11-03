@@ -7,9 +7,6 @@ const path = require("path")
 
 const root = path.join(__dirname, "..")
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8")
-// Each plugin installs on its own, so each carries the file; they must not drift apart.
-assert.strictEqual(read("plugins/macos-theme.dictation-hud/HudIcons.js"), read("plugins/macos-theme.osd/HudIcons.js"),
-  "plugins/macos-theme.dictation-hud/HudIcons.js differs from the volume HUD's copy; copy that one over it")
 
 // The plugins that follow the Glass setting each find it in look.lua; their
 // pattern must still find the theme's line, and read its second number.
@@ -21,6 +18,15 @@ for (const qml of ["control-center/ControlCenter.qml", "osd/Osd.qml", "dictation
   const m = new RegExp(found[1]).exec(look)
   assert.ok(m, `${qml}'s glass pattern doesn't match theme/look.lua`)
   assert.strictEqual(m[1], "0.85", `${qml} reads the wrong number from look.lua`)
+}
+// Mission Control follows the Blur setting the same way.
+{
+  const source = read("plugins/macos-theme.switcher/MissionControl.qml")
+  const found = /var m = \/(.+)\/m\.exec\(text\(\)\)/.exec(source)
+  assert.ok(found, "MissionControl.qml no longer reads the blur from look.lua")
+  const m = new RegExp(found[1], "m").exec(look)
+  assert.ok(m, "MissionControl.qml's blur pattern doesn't match theme/look.lua")
+  assert.strictEqual(m[1], "10", "MissionControl.qml reads the wrong number from look.lua")
 }
 
 // The speaker by volume, muted at 0 or when muted.

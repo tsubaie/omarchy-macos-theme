@@ -65,8 +65,11 @@ Item {
     maskSpreadAtMin: 1
   }
 
+  // The sky, see-through as the other widgets' glass is, so the frosted
+  // wallpaper shows through it; the sun, clouds and rain stay solid.
   Rectangle {
     anchors.fill: parent
+    opacity: 0.25
     gradient: Gradient {
       GradientStop { position: 0; color: root.fill[0] }
       GradientStop { position: 1; color: root.fill[1] }

@@ -161,16 +161,17 @@ Item {
       }
     }
 
-    // A glass shelf the strip sits on, sliding down from the top.
+    // The frosted strip across the top that the workspaces sit on, sliding
+    // down: Mission Control's (MissionControl.qml). Hyprland blurs the
+    // windows behind it (theme/look.lua's light-glass rule).
     Rectangle {
       id: shelf
-      x: strip.x - Style.space(18)
-      width: strip.width + Style.space(36)
+      width: parent.width
       height: strip.height + Style.space(28)
-      y: overlay.live ? overlay.barClear + Style.space(8) : -height
-      radius: Style.space(20)
-      color: Qt.rgba(0.11, 0.11, 0.12, 0.72)
+      y: overlay.live ? overlay.barClear : -height
+      color: Qt.rgba(0.11, 0.11, 0.12, 0.35)
       Behavior on y { NumberAnimation { duration: Style.duration(220); easing.type: Easing.OutCubic } }
+      Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.12) }
     }
 
     Row {

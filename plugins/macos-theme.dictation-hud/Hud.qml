@@ -5,11 +5,10 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
-import "HudIcons.js" as HudIcons
 
 // macOS-style dictation HUD: the volume HUD's glass panel, where the
 // dictation-hud setting puts it (bottom middle or top right), while Voxtype records (the
-// mic and moving level bars) or transcribes (pulsing dots).
+// red recording light and moving level bars) or transcribes (the light and pulsing dots).
 Item {
   id: root
 
@@ -92,7 +91,7 @@ Item {
       ? root.shell.bar.barSizeFor(screen ? screen.name : "") : 0
 
     // The same capsule as the volume HUD (macOS 27.2), in its place,
-    // the microphone on the left where the speaker is. Its glass and rim
+    // the red light on the left where the speaker is. Its glass and rim
     // are Osd.qml's; see there for why.
     BorderSurface {
       id: card
@@ -123,18 +122,31 @@ Item {
       transform: Translate { y: card.live ? 0 : (root.atTop ? -1 : 1) * Style.space(10); Behavior on y { NumberAnimation { duration: Style.duration(220); easing.type: Easing.OutBack; easing.overshoot: 1.2 } } }
       Behavior on opacity { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
 
-      // Icons8's microphone, drawn at three times its size and scaled down
-      // smoothly, so it stays crisp at any display scale.
-      Image {
-        id: mic
+      // A red recording light where the volume HUD has its speaker, breathing
+      // slowly so it reads as live, recording or transcribing; still when
+      // animations are off.
+      Item {
+        id: light
         x: Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(32)
         height: width
-        source: HudIcons.icon("microphone", Commons.Color.popups.text.toString())
-        sourceSize: Qt.size(width * 3, height * 3)
-        smooth: true
-        mipmap: true
+      }
+      Rectangle {
+        id: recordingLight
+        anchors.centerIn: light
+        width: Style.space(16)
+        height: width
+        radius: width / 2
+        color: "#ff453a"
+        SequentialAnimation on opacity {
+          running: root.shown && Style.duration(1) > 0
+          loops: Animation.Infinite
+          NumberAnimation { to: 0.45; duration: 700; easing.type: Easing.InOutSine }
+          NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+          // Stopped mid-breath, it shows whole.
+          onRunningChanged: if (!running) recordingLight.opacity = 1
+        }
       }
 
       // Recording: a waveform where the volume HUD has its steps, drawn as
@@ -145,7 +157,7 @@ Item {
       Item {
         id: levels
         visible: root.recording
-        anchors.left: mic.right
+        anchors.left: light.right
         anchors.leftMargin: Style.space(14)
         anchors.right: parent.right
         anchors.rightMargin: Style.space(22)
@@ -186,7 +198,7 @@ Item {
       // Transcribing: label and three pulsing dots.
       Row {
         visible: !root.recording
-        anchors.left: mic.right
+        anchors.left: light.right
         anchors.leftMargin: Style.space(14)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(6)
