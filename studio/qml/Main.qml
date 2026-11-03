@@ -1385,7 +1385,7 @@ Window {
                     visible: window.widgetsNow !== null && window.status["widget-workspaces"] !== undefined
                     SettingRow {
                         label: "Show On"
-                        note: "Every workspace, or only the ones you choose; they follow you to the screen showing one"
+                        note: "Every workspace, or only the ones you choose; they show on every screen showing one"
                         last: !Array.isArray(window.workspacesShown)
                         MacSegmented {
                             // Choosing needs two workspaces.

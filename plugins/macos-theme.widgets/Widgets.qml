@@ -129,10 +129,10 @@ Item {
   }
   readonly property var homeScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
     || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
-  // The widgets follow the workspaces they show on, every one unless some are
-  // chosen ("workspaces": [1, 5]): they show on the screen showing one, the
-  // one being worked on when both are. Their own screen (widgets.screen, else
-  // the first) when Hyprland doesn't say.
+  // The widgets show on every screen showing a workspace they show on (each
+  // window decides). This is the one whose desktop the weather watches to
+  // rest when covered: the one being worked on, else the first showing them,
+  // else their own screen (widgets.screen, else the first).
   readonly property var targetScreen: {
     var chosen = root.config.workspaces
     var showing = function(screen) {
@@ -149,8 +149,6 @@ Item {
   // another swaps them. Where each sits is saved in shell.json.
   readonly property int cell: size + gap
   readonly property var layout: Model.normalizeLayout(config.layout, known)
-  readonly property int cols: activeWindow ? Math.max(1, Math.floor((activeWindow.width - activeWindow.areaItem.x + gap) / cell)) : 1
-  readonly property int rows: activeWindow ? Math.max(1, Math.floor((activeWindow.height - activeWindow.areaItem.y + gap) / cell)) : 1
   // Motion kept still: Omarchy's animations off, or the theme's Reduce
   // motion (install.sh --set reduce-motion=1), read from the look Hyprland has
   // loaded and followed as it changes.
@@ -166,7 +164,6 @@ Item {
   }
 
   // The layout as this screen shows it, every widget on it.
-  readonly property var shown: Model.fitLayout(layout, cols, rows)
 
   // The desktop under the widgets is in sight when the workspace on their
   // screen is empty or floating; tiled windows cover it, and the weather's
@@ -278,7 +275,6 @@ Item {
   // that's already there, where a fresh window wouldn't be drawn until the
   // pointer moved over it. Only the target screen's builds the widgets; while
   // hidden, a window takes no clicks.
-  property var activeWindow: null
   Variants {
     model: Quickshell.screens
 
@@ -286,12 +282,16 @@ Item {
       id: window
       required property var modelData
       screen: modelData
-      readonly property bool here: modelData === root.targetScreen
-      readonly property bool showing: here && root.onThisWorkspace
-      // The grid's size comes from the window the widgets are in.
-      readonly property Item areaItem: area
-      onHereChanged: if (here) root.activeWindow = window
-      Component.onCompleted: if (here) root.activeWindow = window
+      // Shown on every screen showing a workspace they show on, each screen
+      // laying them out on its own grid; their own screen when Hyprland
+      // doesn't say which workspace a screen shows.
+      readonly property var monitor: Hyprland.monitorFor(modelData)
+      readonly property bool showing: monitor && monitor.activeWorkspace
+        ? Model.showsOn(root.config.workspaces, monitor.activeWorkspace.id)
+        : modelData === root.homeScreen
+      readonly property int cols: Math.max(1, Math.floor((width - area.x + root.gap) / root.cell))
+      readonly property int rows: Math.max(1, Math.floor((height - area.y + root.gap) / root.cell))
+      readonly property var shown: Model.fitLayout(root.layout, cols, rows)
       color: "transparent"
       WlrLayershell.namespace: "omarchy-widgets"
       WlrLayershell.layer: WlrLayer.Bottom
@@ -324,12 +324,12 @@ Item {
           anchors.fill: parent
   
           Repeater {
-            model: window.here ? root.known : []
+            model: window.showing ? root.known : []
   
             delegate: Glass {
               id: tile
               required property string modelData
-              readonly property var spot: Model.find(root.shown, modelData)
+              readonly property var spot: Model.find(window.shown, modelData)
               readonly property bool dragging: dragArea.drag.active
   
               visible: spot !== null
@@ -359,13 +359,13 @@ Item {
                 }
                 onReleased: {
                   if (!tile.spot) return
-                  var cell = Model.snap(tile.x, tile.y, root.cell, root.cols, root.rows)
+                  var cell = Model.snap(tile.x, tile.y, root.cell, window.cols, window.rows)
                   // Back under the layout's control, then to the cell it snapped to.
                   tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
                   tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
                   if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
                     // From where widgets show, so a swap lands on this screen too.
-                    root.save(Model.moveTo(root.shown, tile.modelData, cell.col, cell.row))
+                    root.save(Model.moveTo(window.shown, tile.modelData, cell.col, cell.row))
                 }
               }
   
@@ -437,7 +437,7 @@ Item {
               delegate: MenuRow {
                 required property string modelData
                 label: "Add " + root.nameOf(modelData)
-                onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows, root.known))
+                onChosen: root.save(Model.add(root.layout, modelData, window.cols, window.rows, root.known))
               }
             }
           }
