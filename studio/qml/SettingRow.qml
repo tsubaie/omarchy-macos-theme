@@ -13,6 +13,8 @@ Item {
     // reason), shown under the label while it can't.
     readonly property Item firstControl: slot.children.length > 0 ? slot.children[0] : null
     readonly property string reason: firstControl && !firstControl.enabled && firstControl.reason ? firstControl.reason : ""
+    // Changed and not applied yet, from the control itself: a blue dot by the label.
+    readonly property bool changed: firstControl ? firstControl.changed === true : false
 
     width: parent ? parent.width : 0
 
@@ -68,6 +70,18 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: childrenRect.width
         height: childrenRect.height
+    }
+
+    Rectangle {
+        visible: root.changed
+        x: 5
+        y: texts.y + 7
+        width: 5
+        height: 5
+        radius: 2.5
+        color: "#0a84ff"
+        Accessible.role: Accessible.StaticText
+        Accessible.name: root.label + ": changed, not applied yet"
     }
 
     Rectangle {

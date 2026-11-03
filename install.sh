@@ -482,9 +482,10 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s}\n' \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s}\n' \
       "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
-      "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)"
+      "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
+      "$(omarchy theme list 2>/dev/null | grep -vx Macos | jq -Rcs 'split("\n") | map(select(length > 0))' || echo '[]')"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do

@@ -5,6 +5,7 @@ import QtQuick.Effects
 import QtQuick.Window
 import org.omarchy.macosstudio
 import "BarModel.js" as BarModel
+import "Labels.js" as Labels
 
 // macOS Theme Studio, shaped like macOS System Settings: a sidebar of
 // sections with colored icons, and grouped rows of switches and sliders.
@@ -41,11 +42,67 @@ Window {
         return decodeURIComponent(url.toString().replace(/^file:\/\//, ""))
     }
 
-    // A question before something that changes the setup: { title, text, button, action }.
+    // A question before something that changes the setup: { title, text,
+    // button, action }, and optionally a third choice: { alternate, alternateAction }.
     property var confirm: null
+
+    // What waits for Apply, one line each, in words.
+    function changeLines() {
+        const lines = []
+        for (const piece in pendingPieces)
+            lines.push((pendingPieces[piece] ? "Turn on " : "Turn off ") + Labels.piece(piece))
+        for (const key in pendingSettings)
+            lines.push(Labels.setting(key, Math.round(pendingSettings[key] * 100) / 100))
+        for (const panel in pendingPlaces)
+            lines.push(Labels.setting(panel, "at the " + pendingPlaces[panel]))
+        if (pendingBar) lines.push("Rearrange the menu bar")
+        if (pendingWidgets) lines.push("Show " + pendingWidgets.map(w => (desktopWidgets.find(d => d.id === w) || { name: w }).name).join(", "))
+        if (pendingSwitchTo) lines.push("Switch to " + pendingSwitchTo + " first")
+        return lines
+    }
+
+    // Unapplied changes a restore, an import or an update would drop: said in
+    // its question rather than dropped silently.
+    function droppedNote() {
+        return pendingCount === 0 ? ""
+            : "\n\nYour " + (pendingCount === 1 ? "change that isn't" : pendingCount + " changes that aren't") + " applied yet will be dropped."
+    }
+
+    // The theme a removal of the current one switches to first (null until picked).
+    property var pendingSwitchTo: null
+    // Turning the current theme off needs another theme to switch to.
+    readonly property bool needsSwitchTo: status.active === true && pendingPieces.theme === false
+    // The newest backup when Apply started, so Undo restores only the one it took.
+    property string backupBeforeApply: ""
+    property string undoBackup: ""
+    property bool closeAfterApply: false
+    property bool closingAnyway: false
 
     function installed(piece) {
         return !!status.features && status.features[piece] === true
+    }
+
+    // A setting the installed theme doesn't report is one it is too old for.
+    // Before the first status comes in, every setting counts as known.
+    function known(key) {
+        return !status.settings || Object.keys(status.settings).length === 0 || key in status.settings
+    }
+    function knownPiece(piece) {
+        return !status.features || Object.keys(status.features).length === 0 || piece in status.features
+    }
+    readonly property string tooOld: "Update the theme to use this (About > Update)"
+
+    // Where install.sh keeps the backups, by the same rule it follows.
+    readonly property string backupsFolder: localPath(StandardPaths.writableLocation(StandardPaths.ConfigLocation)) + "/omarchy/macos-theme-backups"
+
+    // The changes waiting, in a sheet, with Apply.
+    function showChanges() {
+        confirm = {
+            title: pendingCount === 1 ? "1 change, not applied yet" : pendingCount + " changes, not applied yet",
+            text: changeLines().map(line => "·  " + line).join("\n"),
+            button: "Apply",
+            action: () => window.apply()
+        }
     }
 
     function setting(key, fallback) {
@@ -153,11 +210,27 @@ Window {
             if (previewable.includes(key)) backend.preview(key, setting(key, pendingSettings[key]))
         revert()
     }
-    onClosing: discard()
+    // Closing with changes not applied asks first: Apply, Don't Apply or Cancel.
+    onClosing: function(close) {
+        if (pendingCount === 0 || closingAnyway || backend.busy) {
+            discard()
+            return
+        }
+        close.accepted = false
+        confirm = {
+            title: pendingCount === 1 ? "Apply your change before closing?" : "Apply your " + pendingCount + " changes before closing?",
+            text: "If you don't, " + (pendingCount === 1 ? "it is" : "they are") + " dropped.",
+            button: "Apply",
+            action: () => { window.closeAfterApply = true; window.apply() },
+            alternate: "Don't Apply",
+            alternateAction: () => { window.closingAnyway = true; window.close() }
+        }
+    }
 
     function revert() {
         pendingBar = null
         pendingWidgets = null
+        pendingSwitchTo = null
         pendingPieces = {}
         pendingSettings = {}
         pendingPlaces = {}
@@ -182,7 +255,7 @@ Window {
 
     readonly property var workingText: ({
         apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
-        export: "Exporting…", import: "Importing…", download: "Downloading…"
+        export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…"
     })
 
     function doneText() {
@@ -195,6 +268,7 @@ Window {
         case "export": return "Exported your setup to " + actionDetail + "."
         case "import": return "Imported " + actionDetail + ". Your setup before it is backed up."
         case "download": return "Downloaded the theme."
+        case "undo": return "Undid the changes. How they were is backed up too, should you want them back."
         }
         return ""
     }
@@ -206,6 +280,7 @@ Window {
         case "update": return "The theme stays as it was, and Update is still offered to try again."
         case "download": return "Check the network, then Download again."
         case "restore":
+        case "undo":
         case "import": return "If it got as far as changing anything, Backups has how things were before it."
         case "backup":
         case "export": return "Nothing was changed; try again."
@@ -214,8 +289,21 @@ Window {
     }
 
     function apply() {
+        // Every way to Apply waits for a theme to switch to when the current
+        // one is turned off, or install.sh would refuse it after the fact.
+        if (needsSwitchTo && !pendingSwitchTo) {
+            closeAfterApply = false
+            // Apply's own next step, and no details left from an earlier failure.
+            start("apply", pendingCount)
+            backend.errorDetails = ""
+            backend.error = "Pick the theme to switch to first, under macOS theme."
+            open("general")
+            return
+        }
         start("apply", pendingCount)
+        backupBeforeApply = backups.length > 0 ? backups[0].id : ""
         const changes = { add: [], remove: [], set: pendingSettings, places: pendingPlaces }
+        if (needsSwitchTo && pendingSwitchTo) changes.switchTo = pendingSwitchTo
         if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
         if (pendingWidgets) changes.widgets = pendingWidgets
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
@@ -233,9 +321,17 @@ Window {
                 return
             }
             if (backend.error === "" && !window.stopping) window.notice = window.doneText()
+            // Undo restores the backup this Apply took, the one new since it started.
+            window.undoBackup = window.action === "apply" && backend.error === "" && window.backups.length > 0
+                && window.backups[0].id !== window.backupBeforeApply ? window.backups[0].id : ""
             if (!window.applying) return
             window.applying = false
             if (backend.error === "") window.revert()
+            // Asked to apply before closing: closed once it went through, kept open if not.
+            if (window.closeAfterApply) {
+                window.closeAfterApply = false
+                if (backend.error === "") { window.closingAnyway = true; Qt.callLater(window.close) }
+            }
         }
         // Said aloud by a screen reader as it appears, not only shown.
         function onErrorChanged() {
@@ -592,6 +688,13 @@ Window {
                       + (window.elapsed >= 3 ? "  ·  " + window.elapsed + " s" : "")
                     : window.pendingCount === 1 ? "1 change" : window.pendingCount + " changes"
                 color: Qt.rgba(1, 1, 1, 0.6)
+                // Clicked, the changes in words, to apply or look over.
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: !backend.busy && window.pendingCount > 0
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: window.showChanges()
+                }
                 font.pixelSize: 13
                 rightPadding: 4
                 elide: Text.ElideRight
@@ -618,7 +721,8 @@ Window {
                 visible: window.pendingCount > 0 || window.applying
                 text: "Apply"
                 primary: true
-                enabled: !backend.busy
+                enabled: !backend.busy && (!window.needsSwitchTo || !!window.pendingSwitchTo)
+                reason: window.needsSwitchTo && !window.pendingSwitchTo ? "Pick a theme to switch to first, under macOS theme" : ""
                 onClicked: window.apply()
             }
         }
@@ -647,6 +751,12 @@ Window {
                 tint: Qt.rgba(0.19, 0.82, 0.35, 1)
                 ink: "#30d158"
                 text: window.notice
+                actionText: window.undoBackup !== "" && window.action === "apply" ? "Undo" : ""
+                onActed: {
+                    const id = window.undoBackup
+                    window.start("undo")
+                    backend.restore(id)
+                }
                 onDismissed: window.notice = ""
                 // Each new notice starts it again: start() clears the last one first.
                 Timer {
@@ -710,8 +820,33 @@ Window {
                     SettingRow {
                         label: "macOS theme"
                         note: "Colors, glass, title bars, gaps, motion and wallpapers"
-                        last: true
+                        last: !window.needsSwitchTo
                         PieceSwitch { piece: "theme" }
+                    }
+                    // It is the current theme, so Omarchy needs another one
+                    // in its place before it can go.
+                    SettingRow {
+                        visible: window.needsSwitchTo
+                        label: "Switch to"
+                        note: window.status.themes && window.status.themes.length > 0
+                            ? (window.pendingSwitchTo ? "Omarchy switches to " + window.pendingSwitchTo + " before the macOS theme goes"
+                                : "The macOS theme is your current theme: pick the one Omarchy switches to first")
+                            : "Switch to another theme first (Omarchy menu > Style > Theme), then turn this off"
+                        last: true
+                        Flow {
+                            width: 260
+                            spacing: 6
+                            layoutDirection: Qt.RightToLeft
+                            Repeater {
+                                model: window.status.themes || []
+                                MacButton {
+                                    required property string modelData
+                                    text: modelData
+                                    primary: window.pendingSwitchTo === modelData
+                                    onClicked: window.pendingSwitchTo = modelData
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -950,11 +1085,19 @@ Window {
                     SettingRow {
                         label: "Back up now"
                         note: "A backup is also taken by itself before every change. The last 10 are kept, and the first one for good."
-                        last: true
                         MacButton {
                             text: "Back Up Now"
                             enabled: !backend.busy
                             onClicked: { window.start("backup"); backend.backUp() }
+                        }
+                    }
+                    SettingRow {
+                        label: "Where they are"
+                        note: window.backupsFolder
+                        last: true
+                        MacButton {
+                            text: "Open"
+                            onClicked: Qt.openUrlExternally("file://" + window.backupsFolder)
                         }
                     }
                 }
@@ -969,7 +1112,7 @@ Window {
                         delegate: SettingRow {
                             required property var modelData
                             required property int index
-                            label: modelData.original ? "Before macOS theme" : modelData.note
+                            label: modelData.original ? "Before macOS theme" : Labels.backup(modelData.note)
                             note: window.when(modelData.created) + (modelData.pinned ? "  ·  Kept" : "")
                             last: index === window.backups.length - 1
 
@@ -978,7 +1121,10 @@ Window {
                                 enabled: !backend.busy
                                 onClicked: window.confirm = {
                                     title: "Restore the backup from " + window.when(modelData.created) + "?",
-                                    text: "Your theme goes back to how it was then: its plugins and folder, and shell.json, looknfeel.lua and gtk.css whole, so edits you made to those since (a keybinding, a bar change) go too. Your setup now is backed up first, so you can undo this.",
+                                    text: "These go back to how they were then, whole, so edits you made to them since (a keybinding, a bar change) go too:\n"
+                                        + "  ·  ~/.config/omarchy/shell.json\n  ·  ~/.config/hypr/looknfeel.lua\n  ·  ~/.config/gtk-4.0/gtk.css\n"
+                                        + "  ·  ~/.config/omarchy/themes/macos/\n  ·  the theme's plugins in ~/.config/omarchy/plugins/\n\n"
+                                        + "Your setup now is backed up first, so you can undo this." + window.droppedNote(),
                                     button: "Restore",
                                     destructive: true,
                                     action: () => { window.discard(); window.start("restore", window.when(modelData.created)); backend.restore(modelData.id) }
@@ -1109,7 +1255,7 @@ Window {
                             enabled: !backend.busy
                             onClicked: window.confirm = {
                                 title: "Update the macOS theme?",
-                                text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once.",
+                                text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once." + window.droppedNote(),
                                 button: "Update",
                                 action: () => { window.discard(); window.start("update"); backend.update() }
                             }
@@ -1176,7 +1322,7 @@ Window {
             const file = window.localPath(selectedFile)
             window.confirm = {
                 title: "Import " + file.split("/").pop() + "?",
-                text: "Your theme is set up to match it: its pieces, settings, dock, widgets and wallpapers. Your setup now is backed up first, so you can undo this.",
+                text: "Your theme is set up to match it: its pieces, settings, dock, widgets and wallpapers. Your setup now is backed up first, so you can undo this." + window.droppedNote(),
                 button: "Import",
                 destructive: true,
                 action: () => { window.discard(); window.start("import", file.split("/").pop()); backend.importFrom(file) }
@@ -1236,6 +1382,12 @@ Window {
                     anchors.right: parent.right
                     spacing: 10
                     // Tab goes between the two and nowhere else while it asks.
+                    // A third choice, as "Don't Save" is, when the question has one.
+                    MacButton {
+                        visible: !!window.confirm && !!window.confirm.alternate
+                        text: window.confirm && window.confirm.alternate ? window.confirm.alternate : ""
+                        onClicked: { const then = window.confirm.alternateAction; window.confirm = null; then() }
+                    }
                     MacButton {
                         id: sheetCancel
                         text: "Cancel"
@@ -1298,8 +1450,10 @@ Window {
     // A switch that marks one piece of the theme to install or remove.
     component PieceSwitch: MacSwitch {
         property string piece: ""
+        readonly property bool changed: piece in window.pendingPieces
         checked: window.pieceOn(piece)
-        enabled: !backend.busy
+        enabled: !backend.busy && window.knownPiece(piece)
+        reason: window.knownPiece(piece) ? "" : window.tooOld
         onToggled: on => window.markPiece(piece, on)
     }
 
@@ -1308,6 +1462,7 @@ Window {
         property string panel: ""
         property string needs: ""
         options: [{ value: "bottom", label: "Bottom" }, { value: "top", label: "Top" }]
+        readonly property bool changed: panel in window.pendingPlaces
         value: window.placeValue(panel)
         enabled: !backend.busy && window.pieceOn(needs)
         reason: window.pieceOn(needs) ? "" : window.why(needs)
@@ -1319,9 +1474,10 @@ Window {
     component SettingSwitch: MacSwitch {
         property string key: ""
         property int fallback: 1
+        readonly property bool changed: key in window.pendingSettings
         checked: window.settingValue(key, fallback) === 1
-        enabled: !backend.busy && window.pieceOn("theme")
-        reason: window.pieceOn("theme") ? "" : window.why("theme")
+        enabled: !backend.busy && window.pieceOn("theme") && window.known(key)
+        reason: !window.pieceOn("theme") ? window.why("theme") : window.known(key) ? "" : window.tooOld
         onToggled: on => window.markSetting(key, on ? 1 : 0, fallback)
     }
 
@@ -1819,9 +1975,10 @@ Window {
         property string unavailable: ""
         width: 180
         step: decimals === 0 ? 1 : 0.05
+        readonly property bool changed: key in window.pendingSettings
         value: window.settingValue(key, fallback)
-        enabled: !backend.busy && window.pieceOn(needs) && available
-        reason: !window.pieceOn(needs) ? window.why(needs) : available ? "" : unavailable
+        enabled: !backend.busy && window.pieceOn(needs) && available && window.known(key)
+        reason: !window.pieceOn(needs) ? window.why(needs) : !window.known(key) ? window.tooOld : available ? "" : unavailable
         function take(v) {
             window.markSetting(key, decimals === 0 ? Math.round(v) : v, fallback)
             if (window.previewable.includes(key) && !previewSoon.running) previewSoon.start()
@@ -1889,7 +2046,10 @@ Window {
         property string text: ""
         property string more: ""
         property string details: ""
+        // A button for what to do next, such as Undo.
+        property string actionText: ""
         signal dismissed()
+        signal acted()
 
         width: parent ? parent.width : 0
         height: bannerColumn.height + 20
@@ -1928,6 +2088,11 @@ Window {
                         visible: banner.details !== ""
                         text: window.showDetails ? "Hide Details" : "Show Details"
                         onClicked: window.showDetails = !window.showDetails
+                    }
+                    MacButton {
+                        visible: banner.actionText !== ""
+                        text: banner.actionText
+                        onClicked: banner.acted()
                     }
                     MacButton {
                         text: "Dismiss"
