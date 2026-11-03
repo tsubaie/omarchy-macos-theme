@@ -789,20 +789,55 @@ Window {
                 onDismissed: backend.warning = ""
             }
 
-            // Not downloaded yet: one button to fetch it.
-            Group {
+            // First run: one welcome page in place of every page, until the
+            // theme is downloaded (the pages' scenes draw its wallpapers).
+            Column {
                 visible: !backend.downloaded
+                width: parent.width
+                spacing: 10
+                topPadding: 48
 
-                SettingRow {
-                    label: "Download the macOS theme"
-                    note: "From GitHub into " + backend.themeDir
-                    last: true
-
-                    MacButton {
-                        text: "Download"
-                        enabled: !backend.busy
-                        onClicked: { window.start("download"); backend.download() }
-                    }
+                AppIcon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    size: 96
+                }
+                Item { width: 1; height: 4 }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Welcome to macOS Theme"
+                    color: "white"
+                    font.pixelSize: 26
+                    font.weight: Font.Bold
+                    Accessible.role: Accessible.Heading
+                    Accessible.name: text
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width, 440)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    text: "Give Omarchy the macOS look: see-through windows with traffic lights, a dock, a menu bar with Control Center, a lock screen and desktop widgets. Download the theme first. Nothing on your desktop changes until you choose what to turn on."
+                    color: Qt.rgba(1, 1, 1, 0.7)
+                    font.pixelSize: 13
+                    lineHeight: 1.2
+                }
+                Item { width: 1; height: 8 }
+                MacButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    // shortcut: the size of a download of main on 2026-11-03; measure again if the theme grows a lot.
+                    text: "Download (about 20 MB)"
+                    primary: true
+                    enabled: !backend.busy
+                    onClicked: { window.start("download"); backend.download() }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width, 440)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    text: "From GitHub into " + backend.themeDir
+                    color: Qt.rgba(1, 1, 1, 0.5)
+                    font.pixelSize: 11
                 }
             }
 
@@ -1162,7 +1197,7 @@ Window {
             // Overview, as About This Mac: who made it, for what, and that it is
             // safe to use.
             Column {
-                visible: window.page === "overview"
+                visible: backend.downloaded && window.page === "overview"
                 width: parent.width
                 spacing: 6
                 topPadding: 4
@@ -1231,8 +1266,7 @@ Window {
                         Value {
                             anchors.verticalCenter: parent.verticalCenter
                             // A check that failed (offline, say) is no "Up to date".
-                            text: !backend.downloaded ? "Not downloaded yet"
-                                : backend.updates > 0 ? "Update available"
+                            text: backend.updates > 0 ? "Update available"
                                 : backend.updateError !== "" ? "Couldn't check for updates" : "Up to date"
                             color: backend.updates > 0 ? "#0a84ff" : "white"
                             Accessible.description: backend.updateError
@@ -1240,7 +1274,7 @@ Window {
 
                         MacButton {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: backend.downloaded && backend.updates === 0 && backend.updateError !== ""
+                            visible: backend.updates === 0 && backend.updateError !== ""
                             text: "Check Again"
                             enabled: !backend.busy
                             // No action of its own: nothing to confirm, and nothing to stop.
@@ -1255,7 +1289,8 @@ Window {
                             enabled: !backend.busy
                             onClicked: window.confirm = {
                                 title: "Update the macOS theme?",
-                                text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once." + window.droppedNote(),
+                                text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once."
+                                    + (backend.updateNotes ? "\n\n" + Labels.whatsNew(backend.updateNotes) : "") + window.droppedNote(),
                                 button: "Update",
                                 action: () => { window.discard(); window.start("update"); backend.update() }
                             }

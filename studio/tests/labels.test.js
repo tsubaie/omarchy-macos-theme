@@ -14,4 +14,9 @@ assert.strictEqual(m.backup(""), "")
 assert.strictEqual(m.setting("reduce-motion", 1), "Reduce motion on")
 assert.strictEqual(m.setting("dock-size", 56), "Dock size 56")
 
+// An update's commits, as a short list.
+assert.strictEqual(m.whatsNew(""), "")
+assert.strictEqual(m.whatsNew("A better dock\nFix the clock"), "What's new:\n• A better dock\n• Fix the clock")
+assert.strictEqual(m.whatsNew("1\n2\n3\n4\n5\n6\n7\n8").split("\n").slice(-2).join("|"), "• 6|…and 2 more")
+
 console.log("labels: ok")

@@ -450,15 +450,24 @@ pub fn download(dir: &Path) -> Result<Warnings> {
     if only_git {
         std::fs::remove_dir_all(dir).with_context(|| format!("clearing {}", dir.display()))?;
     }
-    git(None, &["clone", "--progress", "--depth", "1", REPO_URL, &partial.to_string_lossy()], 300)
-        .context("downloading the theme")?;
+    // The newest release, or main before the theme had any.
+    let tags = git(None, &["ls-remote", "--tags", "--refs", "--sort=-v:refname", REPO_URL, "v[0-9]*"], 30)
+        .context("asking GitHub for the theme's releases")?;
+    let release = newest(tags.lines().filter_map(|line| line.split("refs/tags/").nth(1)));
+    let partial_dir = partial.to_string_lossy();
+    let mut clone = vec!["clone", "--progress", "--depth", "1"];
+    if let Some(tag) = &release {
+        clone.extend(["--branch", tag.as_str()]);
+    }
+    clone.extend([REPO_URL, &partial_dir]);
+    git(None, &clone, 300).context("downloading the theme")?;
     std::fs::rename(&partial, dir).with_context(|| format!("moving the theme into {}", dir.display()))?;
     Ok(Warnings::new())
 }
 
 /// Runs git, in `dir` when given, for `seconds` at most, and never stopping
 /// to ask for a password (there is no terminal to ask in).
-fn git(dir: Option<&Path>, args: &[&str], seconds: u32) -> Result<()> {
+fn git(dir: Option<&Path>, args: &[&str], seconds: u32) -> Result<String> {
     let mut command = Command::new("timeout");
     command.arg(seconds.to_string()).arg("git");
     if let Some(dir) = dir {
@@ -467,7 +476,7 @@ fn git(dir: Option<&Path>, args: &[&str], seconds: u32) -> Result<()> {
     command.args(args).env("GIT_TERMINAL_PROMPT", "0");
     let output = watched_output(command, None, Some(git_progress)).context("running git")?;
     match output.status.code() {
-        Some(0) => Ok(()),
+        Some(0) => Ok(String::from_utf8_lossy(&output.stdout).into_owned()),
         // What `timeout` exits with when it stopped the command.
         Some(124) => bail!("git took over {seconds} seconds; is the network down?"),
         _ => Err(Failed::new(&output.stderr, "git failed").into()),
@@ -486,7 +495,7 @@ fn git_progress(line: &str) -> Option<String> {
 ///
 /// Fails offline, or when GitHub doesn't answer in time.
 pub fn fetch(dir: &Path) -> Result<()> {
-    git(Some(dir), &["fetch", "--quiet"], 30).context("couldn't check for updates")
+    git(Some(dir), &["fetch", "--quiet", "--tags"], 30).map(drop).context("couldn't check for updates")
 }
 
 /// Left in .git while an update has pulled but not installed yet, so the
@@ -495,22 +504,55 @@ fn needs_install(dir: &Path) -> PathBuf {
     dir.join(".git/studio-needs-install")
 }
 
-/// How many commits the theme on GitHub is ahead of the one here, as last
-/// fetched; 0 when that can't be told. Commits that touch only Studio, which
-/// lives in the same repository, don't count: they change nothing installed.
-pub fn updates_behind(dir: &Path) -> u32 {
-    let behind = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["rev-list", "--count", "HEAD..@{upstream}", "--", ".", ":(exclude)studio"])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .and_then(|count| count.trim().parse().ok())
-        .unwrap_or(0);
+/// The first release among tag names, newest first: a `vX.Y.Z` tag, not a
+/// pre-release such as `v2.0.0-rc1`.
+fn newest<'a>(mut tags: impl Iterator<Item = &'a str>) -> Option<String> {
+    tags.find(|tag| tag.strip_prefix('v').is_some_and(|v| v.split('.').all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))))
+        .map(str::to_owned)
+}
+
+/// The newest release here, as last fetched.
+fn newest_release(dir: &Path) -> Option<String> {
+    let output = Command::new("git").arg("-C").arg(dir).args(["tag", "-l", "v[0-9]*", "--sort=-v:refname"]).output().ok()?;
+    newest(String::from_utf8_lossy(&output.stdout).lines())
+}
+
+/// Where Update goes: the newest release, or, before the theme had any, the
+/// branch it follows.
+fn update_target(dir: &Path) -> String {
+    newest_release(dir).unwrap_or_else(|| "@{upstream}".to_owned())
+}
+
+/// Whether `target` comes after what is here, so going there loses nothing.
+fn is_ahead(dir: &Path, target: &str) -> bool {
+    Command::new("git").arg("-C").arg(dir).args(["merge-base", "--is-ancestor", "HEAD", target])
+        .output().is_ok_and(|output| output.status.success())
+}
+
+/// What Update brings in, as last fetched: its commits' subjects, newest
+/// first. Commits that touch only Studio, which lives in the same repository,
+/// are left out: they change nothing installed. None when the newest release
+/// is older than what is here (a download from before releases, ahead of it).
+pub fn incoming(dir: &Path) -> Vec<String> {
+    let target = update_target(dir);
+    let mut subjects: Vec<String> = if is_ahead(dir, &target) {
+        Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["log", "--format=%s", &format!("HEAD..{target}"), "--", ".", ":(exclude)studio"])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).lines().map(str::to_owned).collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     // Pulled but not installed: the update isn't done, so it is still offered.
-    if needs_install(dir).exists() { behind.max(1) } else { behind }
+    if subjects.is_empty() && needs_install(dir).exists() {
+        subjects.push("The last update, downloaded but not installed yet".to_owned());
+    }
+    subjects
 }
 
 /// Pieces an update reinstalls: what is installed, but not the MacTahoe
@@ -524,17 +566,31 @@ fn reinstall(status: &Status) -> Vec<Piece> {
         .collect()
 }
 
-/// Brings the theme up to date: pulls its new commits, then installs the
-/// pieces in use again, in one `install.sh` call that backs up first and
-/// reloads once.
+/// Brings the theme up to date: goes to its newest release (or, before it had
+/// releases, the newest main), then installs the pieces in use again, in one
+/// `install.sh` call that backs up first and reloads once.
 ///
 /// # Errors
 ///
-/// Fails when git can't pull (such as when the folder has changes of its
-/// own), or with `install.sh`'s own message.
+/// Fails when git can't fetch or move there (such as when the folder has
+/// changes of its own), when the newest release is older than what is here,
+/// or with `install.sh`'s own message.
 pub fn update(dir: &Path) -> Result<Warnings> {
     let installed = reinstall(&status(dir)?);
-    git(Some(dir), &["pull", "--ff-only", "--progress"], 120).context("updating the theme")?;
+    git(Some(dir), &["fetch", "--progress", "--tags"], 120).context("updating the theme")?;
+    // The newest release, never one older than what is here.
+    let target = update_target(dir);
+    if !is_ahead(dir, &target) {
+        bail!("The theme here is newer than its newest release, {target}");
+    }
+    // A release is checked out; before releases, main is fast-forwarded,
+    // staying on the branch so the next update can follow it too.
+    let go = if target.starts_with('v') {
+        ["-c", "advice.detachedHead=false", "checkout", "--quiet", target.as_str()]
+    } else {
+        ["merge", "--ff-only", "--quiet", "--no-stat", target.as_str()]
+    };
+    git(Some(dir), &go, 60).context("updating the theme")?;
     // Until the install goes through, the update stays offered, so a failed
     // one can be tried again rather than vanishing with the pulled commits.
     let marker = needs_install(dir);
@@ -595,8 +651,9 @@ pub fn omarchy_version() -> Option<String> {
     (!version.is_empty()).then(|| version.to_owned())
 }
 
-/// The theme's version: its last commit and that commit's date, such as
-/// "43e4764, 2026-11-01". None when the folder isn't a git checkout.
+/// The theme's version: its release, or else its last commit, and that
+/// commit's date, such as "v1.2.0, 2026-11-01" or "43e4764, 2026-11-01". None
+/// when the folder isn't a git checkout.
 pub fn version(dir: &Path) -> Option<String> {
     let output = Command::new("git")
         .arg("-C")
@@ -605,7 +662,17 @@ pub fn version(dir: &Path) -> Option<String> {
         .output()
         .ok()?;
     let version = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-    (output.status.success() && !version.is_empty()).then_some(version)
+    if !output.status.success() || version.is_empty() {
+        return None;
+    }
+    let release = Command::new("git").arg("-C").arg(dir)
+        .args(["describe", "--tags", "--exact-match", "--match", "v[0-9]*"])
+        .output().ok().filter(|output| output.status.success())
+        .and_then(|output| newest(String::from_utf8_lossy(&output.stdout).lines()));
+    Some(match (release, version.split_once(", ")) {
+        (Some(release), Some((_, date))) => format!("{release}, {date}"),
+        _ => version,
+    })
 }
 
 /// A snapshot `install.sh` took, as `--backups --json` lists it.
@@ -1153,10 +1220,53 @@ mod tests {
         let dir = env::temp_dir().join(format!("studio-marker-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         assert!(Command::new("git").args(["init", "-q"]).arg(&dir).status().expect("git").success());
-        assert_eq!(updates_behind(&dir), 0);
+        assert!(incoming(&dir).is_empty());
         std::fs::write(needs_install(&dir), "").expect("the marker");
-        assert_eq!(updates_behind(&dir), 1);
+        assert_eq!(incoming(&dir).len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn releases_are_tags_and_never_older_than_what_is_here() {
+        assert_eq!(newest(["v2.0.0-rc1", "v1.10.0", "v1.9.0", "latest"].into_iter()), Some("v1.10.0".to_owned()));
+        assert_eq!(newest(["v", "nightly"].into_iter()), None);
+
+        let root = env::temp_dir().join(format!("studio-releases-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (origin, here) = (root.join("origin"), root.join("here"));
+        let run = |dir: &Path, args: &[&str]| {
+            let ok = Command::new("git").arg("-C").arg(dir)
+                .args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"])
+                .args(args).output().expect("git").status.success();
+            assert!(ok, "git {args:?}");
+        };
+        std::fs::create_dir_all(origin.join("studio")).expect("the origin");
+        run(&origin, &["init", "-q", "-b", "main"]);
+        let commit = |file: &str, subject: &str| {
+            std::fs::write(origin.join(file), subject).expect("a file");
+            run(&origin, &["add", "-A"]);
+            run(&origin, &["commit", "-q", "-m", subject]);
+        };
+        commit("theme.txt", "The first theme");
+        run(&origin, &["tag", "v1.0.0"]);
+        let url = format!("file://{}", origin.display());
+        run(&root, &["clone", "-q", "--depth", "1", "--branch", "v1.0.0", &url, "here"]);
+        assert!(incoming(&here).is_empty(), "nothing newer yet");
+        assert!(version(&here).is_some_and(|v| v.starts_with("v1.0.0, ")), "{:?}", version(&here));
+
+        commit("studio/app.txt", "Only Studio");
+        commit("theme.txt", "A better dock");
+        run(&origin, &["tag", "v1.1.0"]);
+        commit("theme.txt", "Not released yet");
+        fetch(&here).expect("the fetch");
+        assert_eq!(incoming(&here), ["A better dock"], "up to the release, without Studio's");
+
+        // A download from before releases, on main past the newest one, isn't
+        // offered an older theme.
+        let _ = std::fs::remove_dir_all(&here);
+        run(&root, &["clone", "-q", &url, "here"]);
+        assert!(incoming(&here).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

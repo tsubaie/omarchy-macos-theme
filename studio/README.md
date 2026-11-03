@@ -65,7 +65,7 @@ To put it in the app launcher, with its name and icon (which the bar, the dock a
 
 The first build compiles CXX-Qt's C++ and takes a few minutes; later builds take seconds. The program is about 2 MB and uses about 70 MB of memory while open, nothing while closed.
 
-On first run, if the theme isn't downloaded yet, the app offers a **Download** button. It clones the theme into `~/.local/share/omarchy-macos-theme`, the same place [Omarchy Sync](https://github.com/tsubaie/OmaSync) keeps it, so the two share one copy.
+On first run, the app shows a welcome page with a **Download** button (about 20 MB). It downloads the theme's newest release (or `main`, until the theme has releases) into `~/.local/share/omarchy-macos-theme`, the same place [Omarchy Sync](https://github.com/tsubaie/OmaSync) keeps it, so the two share one copy.
 
 An Arch package (AUR) is planned.
 
@@ -112,9 +112,9 @@ The theme's installer backs up what it is about to change before every change, s
 
 ### Updating the theme
 
-When **Update available** shows, press **Update**. After you confirm, the app pulls the theme's new commits and installs the pieces you use again, in one installer call that backs up first and reloads the theme once. The MacTahoe icons aren't reinstalled: they come from their own project, not from the theme.
+Updates follow the theme's releases: tags named `vX.Y.Z`, not every commit on `main`. When a newer release is out, **Update available** shows. Press **Update**, and the confirmation lists what's new in it. After you confirm, the app moves the theme to that release and installs the pieces you use again, in one installer call that backs up first and reloads the theme once. The MacTahoe icons aren't reinstalled: they come from their own project, not from the theme.
 
-If the theme folder has changes of its own that can't be fast-forwarded, the update stops with git's message and nothing is installed.
+If the theme folder has changes of its own that would be overwritten, the update stops with git's message and nothing is installed. A copy downloaded from `main` before releases began stays where it is until a release newer than it comes out; it is never moved back to an older one. Until the theme has its first release, updates follow `main` as before.
 
 ## What a change touches
 
@@ -147,7 +147,7 @@ The app keeps one small thing of its own: the last page you viewed (`~/.config/o
 └──────────────────────┬────────────────────────┘
                        │
         install.sh in the theme folder ── changes your setup
-        git ── checks for and pulls theme updates
+        git ── checks for theme releases and moves to them
 ```
 
 - **The installer is the single source of truth.** The app asks it what is installed (`install.sh --status --json`) and has it make every change (`--add`, `--remove`, `--set`, `--backup`, `--restore`, `--export`, `--import`). The app, the terminal and Omarchy Sync therefore always agree.
