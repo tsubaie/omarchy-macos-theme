@@ -19,7 +19,9 @@ Item {
   property real radius: 0
 
   readonly property real w: width
-  readonly property bool moving: visible && !Style.reduceMotion
+  // Tiled windows over the desktop: still, as nobody sees it move.
+  property bool covered: false
+  readonly property bool moving: visible && !covered && !Style.reduceMotion
   readonly property bool sky: scene === "clear" || scene === "partly"
   readonly property bool wet: scene === "rain" || scene === "thunder"
   // Clouds cross in about a minute, in a quarter of that in wind.
