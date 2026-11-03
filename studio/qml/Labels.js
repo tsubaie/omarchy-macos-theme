@@ -37,4 +37,14 @@ function backup(note) {
     }).join("; ")
 }
 
-if (typeof module !== "undefined") module.exports = { piece: piece, setting: setting, backup: backup }
+// What an update brings in, for its confirmation: the commits' subjects (one
+// per line, newest first) as a short list, the rest counted.
+function whatsNew(notes) {
+    var all = String(notes || "").split("\n").filter(function(line) { return line.trim() !== "" })
+    if (all.length === 0) return ""
+    var shown = all.slice(0, 6).map(function(line) { return "• " + line })
+    if (all.length > shown.length) shown.push("…and " + (all.length - shown.length) + " more")
+    return "What's new:\n" + shown.join("\n")
+}
+
+if (typeof module !== "undefined") module.exports = { piece: piece, setting: setting, backup: backup, whatsNew: whatsNew }

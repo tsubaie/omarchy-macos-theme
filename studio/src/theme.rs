@@ -28,6 +28,8 @@ pub mod qobject {
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
         #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
         #[qproperty(i32, updates, cxx_name = "updates")]
+        // What an update brings in: its commits' subjects, one per line.
+        #[qproperty(QString, update_notes, cxx_name = "updateNotes")]
         // Why the last check for updates failed (offline, say); empty when it worked.
         #[qproperty(QString, update_error, cxx_name = "updateError")]
         #[qproperty(QString, app_version, cxx_name = "appVersion")]
@@ -128,6 +130,7 @@ pub struct ThemeBackendRust {
     theme_dir: QString,
     theme_version: QString,
     updates: i32,
+    update_notes: QString,
     update_error: QString,
     app_version: QString,
     omarchy_version: QString,
@@ -162,6 +165,7 @@ impl Default for ThemeBackendRust {
             theme_dir: QString::from(dir.display().to_string().as_str()),
             theme_version: QString::default(),
             updates: 0,
+            update_notes: QString::default(),
             update_error: QString::default(),
             app_version: QString::from(env!("CARGO_PKG_VERSION")),
             omarchy_version: QString::from(install::omarchy_version().unwrap_or_default().as_str()),
@@ -181,7 +185,7 @@ struct Outcome {
     backups: Result<Vec<Backup>>,
     version: Option<String>,
     bar: Option<String>,
-    updates: u32,
+    incoming: Vec<String>,
     error: Option<String>,
     error_details: String,
     warning: String,
@@ -198,10 +202,10 @@ impl qobject::ThemeBackend {
             if !install::is_downloaded(&dir) {
                 return;
             }
-            let checked = install::fetch(&dir).map(|()| install::updates_behind(&dir));
+            let checked = install::fetch(&dir).map(|()| install::incoming(&dir));
             let queued = qt_thread.queue(move |mut backend| match checked {
-                Ok(updates) => {
-                    backend.as_mut().set_updates(i32::try_from(updates).unwrap_or(i32::MAX));
+                Ok(incoming) => {
+                    backend.as_mut().set_incoming(&incoming);
                     backend.as_mut().set_update_error(QString::default());
                 }
                 Err(error) => backend.as_mut().set_update_error(QString::from(format!("{error:#}").as_str())),
@@ -359,11 +363,7 @@ impl qobject::ThemeBackend {
                 backups,
                 version: install::version(&dir),
                 bar: downloaded.then(|| install::bar(&dir).ok()).flatten(),
-                updates: if downloaded {
-                    install::updates_behind(&dir)
-                } else {
-                    0
-                },
+                incoming: if downloaded { install::incoming(&dir) } else { Vec::new() },
                 error,
                 error_details,
                 warning,
@@ -378,9 +378,14 @@ impl qobject::ThemeBackend {
         });
     }
 
+    /// What an update would bring in: how many changes, and what they are.
+    fn set_incoming(mut self: Pin<&mut Self>, incoming: &[String]) {
+        self.as_mut().set_updates(i32::try_from(incoming.len()).unwrap_or(i32::MAX));
+        self.as_mut().set_update_notes(QString::from(incoming.join("\n").as_str()));
+    }
+
     fn finish(mut self: Pin<&mut Self>, outcome: Outcome) {
-        self.as_mut()
-            .set_updates(i32::try_from(outcome.updates).unwrap_or(i32::MAX));
+        self.as_mut().set_incoming(&outcome.incoming);
         self.as_mut()
             .set_theme_version(QString::from(outcome.version.unwrap_or_default().as_str()));
         let mut error = outcome.error;
