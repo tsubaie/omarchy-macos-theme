@@ -26,3 +26,9 @@ unless (/macOS theme: a click goes to a workspace/) {
 unless (/LayoutIcon \{/) {
   s/(\n( +)id: workspaceButton\n)/$1$2labelVisible: !shown\n$2\/\/ macOS theme: the shown workspace lit, its layout's icon on a pill.\n$2Rectangle {\n$2  id: layoutPill\n$2  readonly property int icon: Math.round(Style.bar.iconCanvas * 0.85)\n$2  readonly property int padX: Math.round(icon * 0.45)\n$2  readonly property int padY: Math.round(icon * 0.2)\n$2  visible: workspaceButton.shown\n$2  z: -1\n$2  width: icon + padX * 2\n$2  height: icon + padY * 2\n$2  x: Math.round((workspaceButton.width - width) \/ 2)\n$2  y: Math.round((workspaceButton.height - height) \/ 2)\n$2  radius: height \/ 2\n$2  color: Qt.rgba(1, 1, 1, 0.22)\n$2}\n$2LayoutIcon {\n$2  visible: workspaceButton.shown\n$2  x: layoutPill.x + layoutPill.padX\n$2  y: layoutPill.y + layoutPill.padY\n$2  size: layoutPill.icon\n$2  mode: root.activeMode\n$2  color: workspaceButton.foreground\n$2}\n/;
 }
+
+# The shown workspace's button as wide as its pill, with 4 px each side, so the
+# pill never spills onto the widget beside it (the logo's open pill).
+unless (/macOS theme: room for the pill/) {
+  s/\n( +)fixedWidth: root\.vertical \? root\.barSize : Style\.space\(20\)\n/\n$1\/\/ macOS theme: room for the pill.\n$1fixedWidth: root.vertical ? root.barSize : (shown ? Math.max(Style.space(20), layoutPill.width + Style.space(8)) : Style.space(20))\n/;
+}

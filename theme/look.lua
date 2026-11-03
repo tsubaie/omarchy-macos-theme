@@ -84,6 +84,8 @@ bar_glass()
 package.loaded["default.hypr.glass"] = function() end
 hl.on("config.reloaded", bar_glass)
 hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher)$" }, blur = true, ignore_alpha = 0.3 })
+-- The logo menu's Force Quit and About windows: frosted glass under the card.
+hl.layer_rule({ match = { namespace = "^macos-theme-sheet$" }, blur = true, ignore_alpha = 0.3 })
 -- The volume and dictation HUDs and the desktop widgets are light glass, as
 -- Control Center is: blur under all but their clear pixels.
 hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud|widgets)$" }, blur = true, ignore_alpha = 0.01 })
@@ -622,4 +624,12 @@ if switcher then
   o.rebind("SUPER + SHIFT + TAB", "Workspace switcher (previous)", "omarchy-shell -q macos-spaces prev")
   -- Ctrl+Up opens Mission Control, as on macOS.
   o.rebind("CTRL + UP", "Mission Control", "omarchy-shell -q macos-mission-control toggle")
+end
+-- Alt+Super+Escape opens Force Quit Applications, as ⌥⌘⎋ does on macOS, when
+-- the logo menu is installed.
+local logo_menu = io.open((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/omarchy/plugins/macos-theme.logo-menu/manifest.json", "r")
+if logo_menu then
+  logo_menu:close()
+  o.rebind("ALT + SUPER + ESCAPE", "Force Quit Applications", "omarchy-shell -q macos-logo-menu forceQuit")
+  o.rebind("SHIFT + ALT + SUPER + ESCAPE", "Force Quit by Clicking", "omarchy-shell -q macos-logo-menu forceQuitByClicking")
 end
