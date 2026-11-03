@@ -19,7 +19,7 @@ step() {
   "$@" || failed+=("$name")
 }
 
-step "the scripts parse" bash -n install.sh backup.sh tests/run.sh studio/run.sh studio/dev.sh studio/install-desktop.sh studio/get.sh
+step "the scripts parse" bash -n install.sh backup.sh tests/run.sh studio/run.sh studio/dev.sh studio/install-desktop.sh studio/get.sh studio/package.sh
 for test in tests/*.test.js studio/tests/*.test.js; do
   step "$test" node "$test"
 done
