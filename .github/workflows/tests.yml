@@ -127,7 +127,11 @@ jobs:
           sudo bsdtar -xpf ArchLinuxARM-aarch64-latest.tar.gz -C /alarm
           sudo mount --bind /alarm /alarm
           for d in proc sys dev; do sudo mount --rbind /$d /alarm/$d; done
-          sudo cp -L /etc/resolv.conf /alarm/etc/resolv.conf
+          # The runner's own resolv.conf names a local stub that doesn't answer
+          # from inside; resolved's list has the real servers.
+          sudo rm -f /alarm/etc/resolv.conf
+          sudo cp -L /run/systemd/resolve/resolv.conf /alarm/etc/resolv.conf
+          sudo chroot /alarm getent hosts mirror.archlinuxarm.org || { echo "No DNS inside Arch Linux ARM"; cat /alarm/etc/resolv.conf; exit 1; }
           mkdir -p ~/.cargo/registry ~/.cargo/git
           sudo mkdir -p /alarm/build /alarm/root/.cargo/registry /alarm/root/.cargo/git
           sudo mount --bind "$GITHUB_WORKSPACE" /alarm/build
