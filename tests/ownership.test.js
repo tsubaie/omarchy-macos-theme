@@ -176,6 +176,41 @@ try {
   assert.ok(fs.lstatSync(e.config("omarchy/shell.json")).isSymbolicLink())
   assert.strictEqual(JSON.parse(fs.readFileSync(dotfile, "utf8")).dock.magnification, 1.3)
   assert.strictEqual(fs.statSync(dotfile).mode & 0o777, 0o644)
+
+  // The macOS notifications: added, a marked clone drawn by the theme's card,
+  // with its update hook; removed, both gone and Omarchy's own turned back on,
+  // since one notifications service runs at a time.
+  {
+    const n = makeHome()
+    const clone = n.config(`omarchy/plugins/${user}.notifications`)
+    const hook = path.join(n.home, ".config/omarchy/hooks/post-update.d/macos-theme-notifications")
+    const added = n.run("--add", "notifications")
+    assert.strictEqual(added.status, 0, added.out)
+    assert.match(fs.readFileSync(path.join(clone, "Toast.qml"), "utf8"), /One notification card, as macOS draws one/)
+    assert.ok(fs.existsSync(path.join(clone, ".macos-theme")), "the clone is marked as the theme's")
+    assert.ok(fs.existsSync(hook), "the update hook is in place")
+    assert.strictEqual(n.status().features.notifications, true)
+    fs.rmSync(path.join(n.home, "enabled.log"), { force: true })
+    const removed = n.run("--remove", "notifications")
+    assert.strictEqual(removed.status, 0, removed.out)
+    assert.ok(!fs.existsSync(clone), "the clone is gone")
+    assert.ok(!fs.existsSync(hook), "the update hook is gone")
+    assert.match(fs.readFileSync(path.join(n.home, "enabled.log"), "utf8"), /^omarchy\.notifications$/m)
+    assert.strictEqual(n.status().features.notifications, false)
+  }
+  // A notifications clone of your own is never replaced or removed.
+  {
+    const n = makeHome()
+    const mine = n.config(`omarchy/plugins/${user}.notifications`)
+    fs.mkdirSync(mine, { recursive: true })
+    fs.writeFileSync(path.join(mine, "manifest.json"), '{ "omarchy": { "clonedFrom": "omarchy.notifications" } }')
+    fs.writeFileSync(path.join(mine, "Toast.qml"), "mine")
+    const added = n.run("--add", "notifications")
+    assert.strictEqual(added.status, 0, added.out)
+    assert.match(added.out, /someone\.notifications is a clone of omarchy\.notifications of your own/)
+    assert.strictEqual(n.run("--remove", "notifications").status, 0)
+    assert.strictEqual(fs.readFileSync(path.join(mine, "Toast.qml"), "utf8"), "mine")
+  }
 } finally {
   for (const home of homes) fs.rmSync(home, { recursive: true, force: true })
 }

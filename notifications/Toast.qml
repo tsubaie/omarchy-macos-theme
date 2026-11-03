@@ -52,13 +52,13 @@ Item {
         && localHoverY >= origin.y && localHoverY <= origin.y + item.height
   }
 
-  // "now" while it is fresh, as macOS says it, then minutes, then the clock
+  // "now" while it is fresh (in Omarchy's language), as macOS says it, then minutes, then the clock
   // time, then "yesterday", then the day.
   function ago() {
     var t = Number(row.ts || 0) * 1000
     if (!t) return ""
     var s = Math.max(0, (now - t) / 1000)
-    if (s < 60) return "now"
+    if (s < 60) return I18n.t("agents.durationNow")
     if (s < 3600) return I18n.t("notifications.minutesAgo").arg(I18n.formatNumber(Math.round(s / 60)))
     var then = new Date(t)
     var locale = Qt.locale(I18n.formatLocale)
