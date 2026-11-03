@@ -916,8 +916,20 @@ if want menubar; then
   fi
   menubar_ok=true
   for id in $MENUBAR_IDS; do install_plugin "$id" || menubar_ok=false; done
-  # Half a menu bar is no menu bar: it all goes, and the bar is put back as it was.
-  $menubar_ok || remove_menubar
+  # Half a menu bar is no menu bar: it all goes. An update puts the bar back as
+  # it was before it; a first install hasn't touched the bar, and must leave the
+  # arrangement remembered from an earlier removal alone.
+  if ! $menubar_ok; then
+    if $fresh; then
+      for id in $MENUBAR_IDS; do
+        omarchy plugin disable "$id" >/dev/null 2>&1 || true
+        rm -rf "${PLUGINS_DIR:?}/$id"
+      done
+      rm -f "$BAR_BEFORE"
+    else
+      remove_menubar
+    fi
+  fi
 fi
 if want menubar && $menubar_ok; then
   # The workspaces: a click goes there, a right-click picks the layout, as a

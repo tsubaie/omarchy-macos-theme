@@ -293,6 +293,15 @@ try {
   const afterHalf = JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout
   assert.deepStrictEqual(afterHalf.right, [{ id: "omarchy.network" }])
   assert.deepStrictEqual(afterHalf.tray ?? [], [])
+  // A first install that fails leaves the bar and the arrangement that removal remembered,
+  // so adding it again brings that arrangement back.
+  const remembered = { left: [{ id: "omarchy.workspaces" }], right: [{ id: "macos-theme.control-center" }], tray: [{ id: "omarchy.network" }] }
+  const firstTry = spawnSync("bash", [script, "--add", "menubar"], { env: { ...env, FAIL_ENABLE: "macos-theme.app-name" }, encoding: "utf8" })
+  assert.strictEqual(firstTry.status, 1)
+  assert.strictEqual(status().features.menubar, false)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout, afterHalf)
+  assert.strictEqual(run("--add", "menubar").status, 0)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout, remembered)
 
   // The menu bar removed and added again gets back the bar you arranged.
   const arranged = { left: [{ id: "omarchy.workspaces" }], center: [], right: [{ id: "omarchy.clock" }, { id: "omarchy.network" }] }
