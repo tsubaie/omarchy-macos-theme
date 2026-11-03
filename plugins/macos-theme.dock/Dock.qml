@@ -139,6 +139,20 @@ Item {
   // order.
   property var order: []
 
+  // Motion kept still: Omarchy's animations off, or the theme's Reduce
+  // motion (install.sh --set reduce-motion=1), read from the look Hyprland has
+  // loaded and followed as it changes.
+  property bool lookReducesMotion: false
+  readonly property bool reduceMotion: Style.reduceMotion || lookReducesMotion
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.lookReducesMotion = /^local REDUCE_MOTION = 1$/m.test(text())
+    onLoadFailed: root.lookReducesMotion = false
+    onFileChanged: reload()
+  }
+
   // A reorder shows at once rather than when the saved config comes back.
   property var pendingPins: null
   onDockConfigChanged: pendingPins = null
@@ -331,7 +345,7 @@ Item {
     }) : null
     var overlay = screen ? root.genieOn(screen) : null
     var dock = screen ? root.dockOn(screen) : null
-    if (overlay && dock && overlay.hasPicture(address))
+    if (overlay && dock && overlay.hasPicture(address) && !root.reduceMotion)
       overlay.restore(address, dock.iconRectFor(address), function() { Util.execDetached(command) })
     else
       Util.execDetached(command)
@@ -538,7 +552,7 @@ Item {
     var screen = root.screenNamed(monitor)
     var overlay = screen ? root.genieOn(screen) : null
     var dock = screen ? root.dockOn(screen) : null
-    if (!overlay || !dock) {
+    if (!overlay || !dock || root.reduceMotion) {
       hide()
       return
     }

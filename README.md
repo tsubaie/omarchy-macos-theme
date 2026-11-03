@@ -36,6 +36,7 @@ cd omarchy-macos-theme
 | `--set web-glass=<0.5-1>` | The same for browsers, Omarchy's web apps and Electron apps such as Claude and VS Code; solid by default, since their menus are hard to read on glass |
 | `--set snapping=<0\|1>` | Turn snapping windows to halves and corners off (0) or on (1) |
 | `--set drop-follow=<0\|1>` | Whether dropping a window onto another workspace takes you there too (1, the theme's) or sends it alone (0) |
+| `--set reduce-motion=<0\|1>` | Fade windows, menus and workspaces in and out instead of springing and sliding them, without the genie or moving weather; off by default |
 | `--bar [--json]` | The bar's items by section, and the hidden ones |
 | `--bar-layout '<json>'` | Show, hide and order the bar's items at once: `{"sections":{"right":["omarchy.clock",…],…},"hidden":[…]}`, with sections `left`, `centerBegin`, `center`, `centerEnd`, `right` and `tray`. Only widgets Omarchy knows are taken |
 | `--set clock=<left\|center\|right>` | Where the bar's clock sits; the theme puts it on the right, after Control Center |
@@ -71,7 +72,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
   ![Title bar](docs/screenshots/title-bar.png)
 
 - **Thin glass edges** instead of colored window borders, soft shadows, 16px rounded corners and roomy gaps (6px between windows, 10px at the edges).
-- **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces.
+- **Motion**: windows and menus pop in with a slight spring, and workspaces slide sideways like macOS Spaces. With **Reduce motion** (`--set reduce-motion=1`, or Studio's Windows page) they fade instead, minimizing skips the genie and the weather widget holds still; Omarchy's own `omarchy toggle animations` still turns every animation off.
 - **Striped rows in Files** list view, like Finder, with rounded rows. They come from the theme's `gtk.css`, so they show only while this theme is active.
 - **Notifications** on the same frosted glass.
 

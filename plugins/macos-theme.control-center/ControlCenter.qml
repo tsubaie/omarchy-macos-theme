@@ -357,8 +357,11 @@ BarWidget {
   }
 
   onOpenChanged: {
-    if (open) status.running = true
-    else {
+    if (open) {
+      status.running = true
+      // The card takes the keyboard: Tab moves through it, Esc closes it.
+      Qt.callLater(function() { content.forceActiveFocus() })
+    } else {
       powerOpen = false
       armed = ""
     }
@@ -480,6 +483,9 @@ BarWidget {
     cursorShape: Qt.PointingHandCursor
     onClicked: root.open = !root.open
   }
+  Accessible.role: Accessible.Button
+  Accessible.name: "Control Center"
+  Accessible.onPressAction: root.open = !root.open
 
   // The switches under Wi-Fi and Bluetooth, in order: those whose widgets
   // are here, Focus always. Power opens across the whole row; in the right
@@ -564,6 +570,12 @@ BarWidget {
             readonly property bool armed: root.armed === modelData.action
             width: (content.width - Style.space(24) - Style.space(18)) / 4
             height: Style.space(64)
+            activeFocusOnTab: true
+            Keys.onReturnPressed: root.power(action.modelData.action)
+            Keys.onSpacePressed: root.power(action.modelData.action)
+            Accessible.role: Accessible.Button
+            Accessible.name: action.armed ? "Confirm " + action.modelData.title : action.modelData.title
+            Accessible.onPressAction: root.power(action.modelData.action)
 
             Rectangle {
               id: circle
@@ -573,6 +585,8 @@ BarWidget {
               radius: width / 2
               color: action.armed ? "#ff453a"
               : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, actionMouse.containsMouse ? 0.26 : 0.16)
+              border.width: action.activeFocus ? 2 : 0
+              border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.7)
 
               Text {
                 anchors.centerIn: parent
@@ -677,6 +691,7 @@ BarWidget {
       id: content
       width: parent.width
       spacing: root.gap
+      Keys.onEscapePressed: function(event) { root.open = false; event.accepted = true }
       readonly property real half: (width - root.gap) / 2
 
       // Which apps are using the camera and microphone, at the top as macOS
@@ -844,8 +859,16 @@ BarWidget {
 
     radius: Style.space(18)
     color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, tile.hoverable && tileMouse.containsMouse ? 0.09 : 0.05)
-    border.width: 1
-    border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.07)
+    // A clear ring where the keyboard is, unlike the hover.
+    border.width: activeFocus ? 2 : 1
+    border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, activeFocus ? 0.7 : 0.07)
+
+    activeFocusOnTab: tile.hoverable
+    Keys.onReturnPressed: tile.activated()
+    Keys.onEnterPressed: tile.activated()
+    Accessible.role: Accessible.Button
+    Accessible.focusable: activeFocusOnTab
+    Accessible.onPressAction: tile.activated()
 
     MouseArea {
       id: tileMouse
@@ -917,6 +940,14 @@ BarWidget {
     radius: root.pillHeight / 2
     opacity: unavailable ? 0.55 : 1
     clip: true
+    // Space flips the switch, as its icon does; Return opens its panel.
+    activeFocusOnTab: true
+    Keys.onSpacePressed: pill.toggled()
+    Accessible.checkable: true
+    Accessible.checked: pill.on
+    Accessible.name: pill.title
+    Accessible.description: pill.subtitle
+    Accessible.onToggleAction: pill.toggled()
     Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
     Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
@@ -978,6 +1009,13 @@ BarWidget {
   component NowPlaying: Tile {
     id: playing
     readonly property var player: root.player
+    // Space plays or pauses; Left and Right skip.
+    activeFocusOnTab: true
+    Keys.onSpacePressed: if (playing.player) playing.player.togglePlaying()
+    Keys.onLeftPressed: if (playing.player) playing.player.previous()
+    Keys.onRightPressed: if (playing.player) playing.player.next()
+    Accessible.name: "Now Playing"
+    Accessible.onPressAction: if (playing.player) playing.player.togglePlaying()
 
     Item {
       id: art
@@ -1113,6 +1151,18 @@ BarWidget {
 
     width: parent ? parent.width : 0
     height: Style.space(74)
+    // Left and Right (or Down and Up) move it a step; Return opens its panel.
+    function step(by) { slider.moved(Math.max(0, Math.min(1, slider.value + by))) }
+    activeFocusOnTab: true
+    Keys.onLeftPressed: slider.step(-0.05)
+    Keys.onDownPressed: slider.step(-0.05)
+    Keys.onRightPressed: slider.step(0.05)
+    Keys.onUpPressed: slider.step(0.05)
+    Keys.onReturnPressed: slider.more()
+    Accessible.role: Accessible.Slider
+    Accessible.name: slider.title + " " + Math.round(slider.value * 100) + "%"
+    Accessible.onIncreaseAction: slider.step(0.05)
+    Accessible.onDecreaseAction: slider.step(-0.05)
 
     Text {
       x: Style.space(14)
