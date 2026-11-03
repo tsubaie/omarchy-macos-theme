@@ -698,7 +698,7 @@ Window {
                         label: "Reduce motion"
                         note: "Windows, menus and workspaces fade in and out instead of springing and sliding; no genie when minimizing, and the weather widget holds still"
                         last: true
-                        SettingSwitch { key: "reduce-motion" }
+                        SettingSwitch { key: "reduce-motion"; fallback: 0 }
                     }
                 }
 
@@ -1239,13 +1239,15 @@ Window {
         onPicked: place => window.markPlace(panel, place)
     }
 
-    // A switch for an on/off install.sh setting (1 on, 0 off; on by default).
+    // A switch for an on/off install.sh setting (1 on, 0 off), and what it is
+    // when install.sh doesn't report it: on, unless a setting says otherwise.
     component SettingSwitch: MacSwitch {
         property string key: ""
-        checked: window.settingValue(key, 1) === 1
+        property int fallback: 1
+        checked: window.settingValue(key, fallback) === 1
         enabled: !backend.busy && window.pieceOn("theme")
         reason: window.pieceOn("theme") ? "" : window.why("theme")
-        onToggled: on => window.markSetting(key, on ? 1 : 0, 1)
+        onToggled: on => window.markSetting(key, on ? 1 : 0, fallback)
     }
 
     // The picture at the top of each page: a macOS-like wallpaper in a card,
