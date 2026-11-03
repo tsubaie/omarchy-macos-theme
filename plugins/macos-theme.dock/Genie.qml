@@ -37,6 +37,9 @@ PanelWindow {
   WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
   mask: Region {}
 
+  // Pictures are kept by address without its 0x: Hyprland's events leave it off.
+  function keyOf(address) { return String(address || "").replace(/^0x/, "") }
+
   // rect is the window in this screen's coordinates; hide() hides the real
   // window once its picture covers it.
   function minimize(address, rect, icon, hide) {
@@ -44,9 +47,16 @@ PanelWindow {
       hide()
       return
     }
+    genie.finished = null
     genie.pending = { address: address, rect: rect, icon: icon, hide: hide }
     genie.running = true
     capture.active = true
+    watchdog.restart()
+  }
+
+  // A closed window's picture: nothing will bring it back.
+  function forget(address) {
+    delete genie.stash[genie.keyOf(address)]
   }
 
   // The screen is captured: keep the window's part and start pouring. Lives
@@ -55,7 +65,7 @@ PanelWindow {
     var job = genie.pending
     if (!job) return
     crop.grabToImage(function(result) {
-      genie.stash[job.address] = { grab: result, rect: job.rect }
+      genie.stash[genie.keyOf(job.address)] = { grab: result, rect: job.rect }
       genie.pending = null
       capture.active = false
       genie.finished = function() {
@@ -68,17 +78,17 @@ PanelWindow {
   }
 
   function hasPicture(address) {
-    return !!genie.stash[address]
+    return !!genie.stash[genie.keyOf(address)]
   }
 
   // done() brings the real window back as the picture arrives.
   function restore(address, icon, done) {
-    var picture = genie.stash[address]
+    var picture = genie.stash[genie.keyOf(address)]
     if (genie.running || !picture) {
       done()
       return
     }
-    delete genie.stash[address]
+    genie.forget(address)
     genie.finished = function() {
       done()
       // Gone once the window has had a frame to show itself under it.
@@ -98,6 +108,35 @@ PanelWindow {
     pour.duration = Style.duration(to > from ? 560 : 500)
     // Starts once the picture has loaded, so nothing blinks.
     if (frame.status === Image.Ready) pour.restart()
+    watchdog.restart()
+  }
+
+  // A pour ends by running finished once: from the animation, or from the
+  // watchdog when it never got going.
+  function finish() {
+    watchdog.stop()
+    var then = genie.finished
+    genie.finished = null
+    if (then) then()
+  }
+
+  // A capture that never brings a frame, or a picture that never loads, would
+  // leave the genie running, and every later minimize would skip it: the
+  // window still minimizes or comes back, without the effect.
+  Timer {
+    id: watchdog
+    interval: 3000
+    onTriggered: {
+      var job = genie.pending || hideWhenShown.job
+      genie.pending = null
+      hideWhenShown.job = null
+      capture.active = false
+      pour.stop()
+      if (job) job.hide()
+      genie.finish()
+      genie.running = false
+      frame.source = ""
+    }
   }
 
   Timer {
@@ -174,6 +213,6 @@ PanelWindow {
     target: effect
     property: "progress"
     easing.type: Easing.InOutSine
-    onFinished: if (genie.finished) genie.finished()
+    onFinished: genie.finish()
   }
 }

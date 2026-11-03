@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
+import "AppEntries.js" as AppEntries
 
 // macOS-style app switcher. Alt+Tab opens it on the next most recent app;
 // Tab / Shift+Tab move while Alt is held, releasing Alt switches, Esc cancels.
@@ -28,6 +29,8 @@ Item {
   property bool showWindows: false
   property int windowIndex: 0
   readonly property var selectedApp: root.apps[root.index] || null
+  // Entries that can claim a terminal app's window, as the dock matches them.
+  readonly property var terminalEntries: AppEntries.terminalEntries(DesktopEntries.applications.values)
 
   readonly property int tile: Math.round(104 * Style.fontScale)
   readonly property int iconSize: Math.round(80 * Style.fontScale)
@@ -55,6 +58,9 @@ Item {
       root.opened = true
       root.commitWhenLoaded = false
       root.pendingStep = direction
+      // Opened again before the last query finished: that query fills it.
+      // Starting over would cut its output in half.
+      if (clients.running) return
       root.apps = []
       root.collect = []
       clients.running = true
@@ -100,21 +106,6 @@ Item {
     root.showWindows = false
   }
 
-  // A window without an app id may name its app at the end of its title.
-  function entryForTitle(title) {
-    title = String(title || "")
-    var best = null
-    var values = DesktopEntries.applications.values
-    for (var i = 0; i < values.length; i++) {
-      var name = String(values[i].name || "")
-      if (name.length < 3 || values[i].noDisplay) continue
-      var at = title.length - name.length
-      var bounded = at === 0 || /[\s\-—–|:·]/.test(title.charAt(at - 1))
-      if (at >= 0 && title.substr(at) === name && bounded && (!best || name.length > best.name.length)) best = values[i]
-    }
-    return best
-  }
-
   // One entry per app, ordered by its most recently focused window.
   function load(json) {
     var list = []
@@ -128,7 +119,7 @@ Item {
       // Other special workspaces (scratchpad, console) are not apps you switch to.
       if (!c.mapped || (ws.id <= 0 && !minimized)) continue
       var cls = String(c.class || "")
-      var entry = cls ? DesktopEntries.heuristicLookup(cls) : root.entryForTitle(c.title)
+      var entry = AppEntries.entryFor(cls, c.title, DesktopEntries, root.terminalEntries)
       var key = entry ? entry.id : (cls || "window:" + c.address)
       var rank = typeof c.focusHistoryID === "number" ? c.focusHistoryID : 9999
       var app = byKey[key]
