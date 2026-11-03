@@ -648,8 +648,9 @@ Window {
                 ink: "#30d158"
                 text: window.notice
                 onDismissed: window.notice = ""
+                // Each new notice starts it again: start() clears the last one first.
                 Timer {
-                    running: parent.visible
+                    running: window.notice !== ""
                     interval: 8000
                     onTriggered: window.notice = ""
                 }
@@ -1085,7 +1086,8 @@ Window {
                             visible: backend.downloaded && backend.updates === 0 && backend.updateError !== ""
                             text: "Check Again"
                             enabled: !backend.busy
-                            onClicked: backend.refresh()
+                            // No action of its own: nothing to confirm, and nothing to stop.
+                            onClicked: { window.start(""); backend.refresh() }
                         }
 
                         MacButton {
