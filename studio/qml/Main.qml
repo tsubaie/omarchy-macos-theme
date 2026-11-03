@@ -257,7 +257,7 @@ Window {
         { id: "general", title: "General", icon: "general", section: 1,
           keywords: "theme colors title bars gaps motion wallpapers mactahoe icons striped rows files app workspace switchers alt tab spotlight menu volume brightness capsule osd dictation pill voxtype position place top bottom" },
         { id: "windows", title: "Windows", icon: "windows", section: 1,
-          keywords: "window glass translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners title bar titlebar traffic lights buttons close minimize zoom" },
+          keywords: "window glass reduce motion animation animations accessibility fade spring vestibular translucent transparent see-through opacity solid blur frosted browser apps electron chrome vs code web snap snapping halves corners title bar titlebar traffic lights buttons close minimize zoom" },
         { id: "dock", title: "Dock", icon: "dock", section: 1,
           keywords: "dock magnification size icon size bigger smaller resize window previews downloads trash" },
         { id: "lock", title: "Lock Screen", icon: "lock", section: 1,
@@ -688,6 +688,17 @@ Window {
                         note: "How strongly what is behind see-through windows, menus, the bar and the dock is blurred. 0 turns it off; they stay see-through."
                         last: true
                         SettingSlider { key: "blur"; from: 0; to: 20; fallback: 10; decimals: 0 }
+                    }
+                }
+
+                Group {
+                    title: "Motion"
+
+                    SettingRow {
+                        label: "Reduce motion"
+                        note: "Windows, menus and workspaces fade in and out instead of springing and sliding; no genie when minimizing, and the weather widget holds still"
+                        last: true
+                        SettingSwitch { key: "reduce-motion" }
                     }
                 }
 

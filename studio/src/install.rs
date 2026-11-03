@@ -53,13 +53,14 @@ impl fmt::Display for Piece {
 
 /// The settings Studio sets, each with the range `install.sh --set` accepts
 /// and whether it takes whole numbers only (a switch, a size in points).
-const SETTINGS: [(&str, f64, f64, bool); 8] = [
+const SETTINGS: [(&str, f64, f64, bool); 9] = [
     ("glass", 0.75, 1.0, false),
     ("web-glass", 0.5, 1.0, false),
     ("magnification", 1.0, 2.0, false),
     ("dock-size", 32.0, 80.0, true),
     ("snapping", 0.0, 1.0, true),
     ("title-bars", 0.0, 1.0, true),
+    ("reduce-motion", 0.0, 1.0, true),
     ("traffic-lights", 10.0, 20.0, true),
     ("blur", 0.0, 20.0, true),
 ];

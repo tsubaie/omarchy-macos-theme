@@ -137,6 +137,20 @@ Item {
   readonly property var layout: Model.normalizeLayout(config.layout)
   readonly property int cols: Math.max(1, Math.floor((window.width - area.x + gap) / cell))
   readonly property int rows: Math.max(1, Math.floor((window.height - area.y + gap) / cell))
+  // Motion kept still: Omarchy's animations off, or the theme's Reduce
+  // motion (install.sh --set reduce-motion=1), read from the look Hyprland has
+  // loaded and followed as it changes.
+  property bool lookReducesMotion: false
+  readonly property bool reduceMotion: Style.reduceMotion || lookReducesMotion
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.lookReducesMotion = /^local REDUCE_MOTION = 1$/m.test(text())
+    onLoadFailed: root.lookReducesMotion = false
+    onFileChanged: reload()
+  }
+
   // The layout as this screen shows it, every widget on it.
   readonly property var shown: Model.fitLayout(layout, cols, rows)
 
@@ -259,8 +273,8 @@ Item {
             scale: dragging ? 1.04 : 1
             opacity: dragging ? 0.92 : 1
 
-            Behavior on x { enabled: !tile.dragging && !Style.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
-            Behavior on y { enabled: !tile.dragging && !Style.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on x { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on y { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
             Behavior on scale { NumberAnimation { duration: 120 } }
 
             // Under the content, so the media buttons still take their clicks.
@@ -515,7 +529,7 @@ Item {
         scene: root.weather ? root.weather.scene : "cloudy"
         phase: root.dayPhase
         windy: root.weather ? root.weather.windy : false
-        covered: !root.desktopSeen
+        still: !root.desktopSeen || root.reduceMotion
         radius: root.radius
       }
 

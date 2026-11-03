@@ -349,6 +349,8 @@ Item {
 
           TextInput {
             id: passwordInput
+            Accessible.name: "Password"
+            Accessible.description: root.fingerprintConfigured ? "Or touch the fingerprint reader" : ""
             anchors.fill: parent
             anchors.leftMargin: root.sideReserve
             anchors.rightMargin: root.sideReserve
@@ -437,6 +439,9 @@ Item {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
               onClicked: root.submit()
+              Accessible.role: Accessible.Button
+              Accessible.name: "Unlock"
+              Accessible.onPressAction: root.submit()
             }
           }
 
