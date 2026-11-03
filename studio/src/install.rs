@@ -1,11 +1,16 @@
 //! Drives the theme's own `install.sh`, which stays the one place that changes
 //! the system: this app only asks it what is installed and tells it what to do.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt;
+use std::io::Read;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -422,7 +427,7 @@ pub fn download(dir: &Path) -> Result<Warnings> {
     if only_git {
         std::fs::remove_dir_all(dir).with_context(|| format!("clearing {}", dir.display()))?;
     }
-    git(None, &["clone", "--depth", "1", REPO_URL, &partial.to_string_lossy()], 300)
+    git(None, &["clone", "--progress", "--depth", "1", REPO_URL, &partial.to_string_lossy()], 300)
         .context("downloading the theme")?;
     std::fs::rename(&partial, dir).with_context(|| format!("moving the theme into {}", dir.display()))?;
     Ok(Warnings::new())
@@ -436,17 +441,20 @@ fn git(dir: Option<&Path>, args: &[&str], seconds: u32) -> Result<()> {
     if let Some(dir) = dir {
         command.arg("-C").arg(dir);
     }
-    let output = command
-        .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .output()
-        .context("running git")?;
+    command.args(args).env("GIT_TERMINAL_PROMPT", "0");
+    let output = watched_output(command, None, Some(git_progress)).context("running git")?;
     match output.status.code() {
         Some(0) => Ok(()),
         // What `timeout` exits with when it stopped the command.
         Some(124) => bail!("git took over {seconds} seconds; is the network down?"),
-        _ => bail!("{}", last_line(&output.stderr, "git failed")),
+        _ => Err(Failed::new(&output.stderr, "git failed").into()),
     }
+}
+
+/// How far a download is, from git's progress: "Downloading… 3.20 MiB".
+fn git_progress(line: &str) -> Option<String> {
+    let size = line.strip_prefix("Receiving objects:")?.split(',').nth(1)?.split('|').next()?.trim();
+    (!size.is_empty()).then(|| format!("Downloading… {size}"))
 }
 
 /// Asks GitHub for the theme's new commits.
@@ -503,7 +511,7 @@ fn reinstall(status: &Status) -> Vec<Piece> {
 /// own), or with `install.sh`'s own message.
 pub fn update(dir: &Path) -> Result<Warnings> {
     let installed = reinstall(&status(dir)?);
-    git(Some(dir), &["pull", "--ff-only", "--quiet"], 120).context("updating the theme")?;
+    git(Some(dir), &["pull", "--ff-only", "--progress"], 120).context("updating the theme")?;
     // Until the install goes through, the update stays offered, so a failed
     // one can be tried again rather than vanishing with the pulled commits.
     let marker = needs_install(dir);
@@ -683,18 +691,153 @@ struct Ran {
 /// errors to stderr, so stderr on success is its warnings.
 fn run(dir: &Path, args: &[&str]) -> Result<Ran> {
     let script = dir.join("install.sh");
-    let output = Command::new("bash")
-        .arg(&script)
-        .args(args)
-        .current_dir(dir)
-        .output()
+    let mut command = Command::new("bash");
+    command.arg(&script).args(args).current_dir(dir);
+    let output = watched_output(command, Some(install_step), None)
         .with_context(|| format!("running {}", script.display()))?;
     if !output.status.success() {
-        bail!("{}", last_line(&output.stderr, "install.sh failed"));
+        return Err(Failed::new(&output.stderr, "install.sh failed").into());
     }
     Ok(Ran {
         out: String::from_utf8(output.stdout).context("install.sh printed something that isn't text")?,
         warnings: warnings(&output.stderr),
+    })
+}
+
+/// What install.sh says it is doing: its "==> " lines, without their bold.
+fn install_step(line: &str) -> Option<String> {
+    let step = line.split("==>").nth(1)?.trim_start_matches("\u{1b}[0m").trim();
+    (!step.is_empty()).then(|| step.to_owned())
+}
+
+/// A command that failed: why, in its last line, and all it wrote, for a
+/// "Show details".
+#[derive(Debug)]
+pub struct Failed {
+    why: String,
+    /// Everything the command wrote to stderr.
+    pub output: String,
+}
+
+impl Failed {
+    fn new(stderr: &[u8], fallback: &str) -> Self {
+        Self { why: last_line(stderr, fallback), output: warnings(stderr) }
+    }
+}
+
+impl fmt::Display for Failed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.why)
+    }
+}
+
+impl std::error::Error for Failed {}
+
+/// Why a job ended early: the user stopped it.
+pub const STOPPED: &str = "Stopped";
+
+/// The command a job is running, so Stop can end it, and whether it was stopped.
+#[derive(Debug, Default)]
+pub struct Watch {
+    group: Option<u32>,
+    stopped: bool,
+}
+
+impl Watch {
+    /// Whether the job was stopped.
+    #[must_use]
+    pub fn stopped(&self) -> bool {
+        self.stopped
+    }
+}
+
+/// Where a job's progress goes.
+pub type Report = Arc<dyn Fn(&str) + Send + Sync>;
+
+thread_local! {
+    /// The job this worker thread runs, if any: where its progress goes, and
+    /// its watch. Previews and the update check run on threads without one,
+    /// so they are neither reported nor stopped.
+    static JOB: RefCell<Option<(Report, Arc<Mutex<Watch>>)>> = const { RefCell::new(None) };
+}
+
+/// Runs `job` on this thread with its commands reporting what they do to
+/// `report` and stoppable through `watch`.
+pub fn watched<T>(report: Report, watch: Arc<Mutex<Watch>>, job: impl FnOnce() -> T) -> T {
+    JOB.with(|cell| *cell.borrow_mut() = Some((report, watch)));
+    let result = job();
+    JOB.with(|cell| *cell.borrow_mut() = None);
+    result
+}
+
+/// Stops the job `watch` belongs to: its command and everything it started,
+/// and any command it would start next.
+pub fn stop(watch: &Mutex<Watch>) {
+    let mut watch = watch.lock().unwrap_or_else(PoisonError::into_inner);
+    watch.stopped = true;
+    if let Some(group) = watch.group {
+        let _ = Command::new("kill").args(["-TERM", "--", &format!("-{group}")]).status();
+    }
+}
+
+/// A line-reader: what to report for a line, if anything.
+type Progress = fn(&str) -> Option<String>;
+
+/// Runs a command to the end, as `Command::output` does, in a process group
+/// of its own so a stop ends what it started too. Inside a job, each line of
+/// stdout (or stderr) that `progress_out` (or `progress_err`) makes something
+/// of is reported as it comes, and the job's watch can stop it.
+fn watched_output(mut command: Command, progress_out: Option<Progress>, progress_err: Option<Progress>) -> Result<Output> {
+    let job = JOB.with(|cell| cell.borrow().clone());
+    if let Some((_, watch)) = &job {
+        if watch.lock().unwrap_or_else(PoisonError::into_inner).stopped {
+            bail!(STOPPED);
+        }
+    }
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).process_group(0);
+    let mut child = command.spawn()?;
+    if let Some((_, watch)) = &job {
+        watch.lock().unwrap_or_else(PoisonError::into_inner).group = Some(child.id());
+    }
+    let report = job.as_ref().map(|(report, _)| Arc::clone(report));
+    let out = pump(child.stdout.take(), report.clone().zip(progress_out));
+    let err = pump(child.stderr.take(), report.zip(progress_err));
+    let status = child.wait()?;
+    let (stdout, stderr) = (out.join().unwrap_or_default(), err.join().unwrap_or_default());
+    if let Some((_, watch)) = &job {
+        let mut watch = watch.lock().unwrap_or_else(PoisonError::into_inner);
+        watch.group = None;
+        if watch.stopped {
+            bail!(STOPPED);
+        }
+    }
+    Ok(Output { status, stdout, stderr })
+}
+
+/// Reads a stream to its end on a thread of its own and hands back all of it,
+/// reporting each line (ended by a newline or, as git's progress is, a
+/// carriage return) the progress function makes something of.
+fn pump(stream: Option<impl Read + Send + 'static>, progress: Option<(Report, Progress)>) -> thread::JoinHandle<Vec<u8>> {
+    thread::spawn(move || {
+        let mut all = Vec::new();
+        let Some(mut stream) = stream else { return all };
+        let mut chunk = [0u8; 4096];
+        let mut line_start = 0;
+        while let Ok(read) = stream.read(&mut chunk) {
+            if read == 0 {
+                break;
+            }
+            all.extend_from_slice(&chunk[..read]);
+            let Some((report, progress)) = &progress else { continue };
+            while let Some(end) = all[line_start..].iter().position(|&b| b == b'\n' || b == b'\r') {
+                let line = String::from_utf8_lossy(&all[line_start..line_start + end]).into_owned();
+                if let Some(said) = progress(&line) {
+                    report(&said);
+                }
+                line_start += end + 1;
+            }
+        }
+        all
     })
 }
 
@@ -722,6 +865,58 @@ fn last_line(stderr: &[u8], fallback: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn progress_is_read_from_git_and_install_sh() {
+        assert_eq!(
+            git_progress("Receiving objects:  45% (100/220), 3.20 MiB | 1.20 MiB/s").as_deref(),
+            Some("Downloading… 3.20 MiB")
+        );
+        assert_eq!(git_progress("Resolving deltas: 100% (5/5), done."), None);
+        assert_eq!(install_step("\u{1b}[1m==>\u{1b}[0m Installed the dock").as_deref(), Some("Installed the dock"));
+        assert_eq!(install_step("    MacTahoe icons stay"), None);
+    }
+
+    #[test]
+    fn a_stopped_job_ends_its_command_and_what_it_started() {
+        let watch = Arc::new(Mutex::new(Watch::default()));
+        let said = Arc::new(Mutex::new(Vec::<String>::new()));
+        let heard = Arc::clone(&said);
+        let report: Report = Arc::new(move |stage| heard.lock().expect("the stages").push(stage.to_owned()));
+        let stopper = {
+            let watch = Arc::clone(&watch);
+            thread::spawn(move || {
+                thread::sleep(std::time::Duration::from_millis(400));
+                stop(&watch);
+            })
+        };
+        let started = std::time::Instant::now();
+        // A child that started one of its own, which holds stdout open: only
+        // stopping the whole group lets the read end.
+        let mut command = Command::new("sh");
+        command.args(["-c", "echo '==> Working'; sleep 30 & wait"]);
+        let result = watched(Arc::clone(&report), Arc::clone(&watch), || watched_output(command, Some(install_step), None));
+        stopper.join().expect("the stopper");
+        assert_eq!(result.expect_err("stopped").to_string(), STOPPED);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "the stop ended it");
+        assert_eq!(*said.lock().expect("the stages"), ["Working"]);
+        assert!(watch.lock().expect("the watch").stopped());
+        // Nor does the job start another command once stopped.
+        let next = watched(report, watch, || watched_output(Command::new("true"), None, None));
+        assert_eq!(next.expect_err("stopped").to_string(), STOPPED);
+    }
+
+    #[test]
+    fn a_failure_keeps_all_install_sh_said() {
+        let dir = env::temp_dir().join(format!("studio-failed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the folder");
+        std::fs::write(dir.join("install.sh"), "echo 'first, the detail' >&2\necho 'then why' >&2\nexit 1\n").expect("the script");
+        let error = run(&dir, &["--add", "dock"]).map(drop).expect_err("it fails");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(error.to_string(), "then why");
+        let failed = error.downcast_ref::<Failed>().expect("the whole output");
+        assert_eq!(failed.output, "first, the detail\nthen why");
+    }
 
     #[test]
     fn pieces_are_the_ones_install_sh_knows() {

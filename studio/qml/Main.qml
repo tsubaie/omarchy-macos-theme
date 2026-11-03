@@ -163,7 +163,58 @@ Window {
         pendingPlaces = {}
     }
 
+    // The action running, or the last one: what the busy line, the
+    // confirmation and the error's next step say. detail is what it was about
+    // (how many changes, which file or backup).
+    property string action: ""
+    property string actionDetail: ""
+    property bool stopping: false
+    // What the last action did, for a few seconds once it is done.
+    property string notice: ""
+    property int elapsed: 0
+
+    function start(kind, detail) {
+        action = kind
+        actionDetail = detail === undefined ? "" : String(detail)
+        notice = ""
+        stopping = false
+    }
+
+    readonly property var workingText: ({
+        apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
+        export: "Exporting…", import: "Importing…", download: "Downloading…"
+    })
+
+    function doneText() {
+        const n = Number(actionDetail)
+        switch (action) {
+        case "apply": return n === 1 ? "Applied 1 change." : "Applied " + n + " changes."
+        case "update": return "Updated the theme" + (backend.themeVersion ? " to " + backend.themeVersion : "") + "."
+        case "backup": return "Backed up. It's first in the list below."
+        case "restore": return "Restored the backup from " + actionDetail + ". Your setup before it is backed up too."
+        case "export": return "Exported your setup to " + actionDetail + "."
+        case "import": return "Imported " + actionDetail + ". Your setup before it is backed up."
+        case "download": return "Downloaded the theme."
+        }
+        return ""
+    }
+
+    // What to do about a failure, by what failed.
+    function nextStep() {
+        switch (action) {
+        case "apply": return "Your changes are still marked: fix what it says, then Apply again."
+        case "update": return "The theme stays as it was, and Update is still offered to try again."
+        case "download": return "Check the network, then Download again."
+        case "restore":
+        case "import": return "If it got as far as changing anything, Backups has how things were before it."
+        case "backup":
+        case "export": return "Nothing was changed; try again."
+        }
+        return ""
+    }
+
     function apply() {
+        start("apply", pendingCount)
         const changes = { add: [], remove: [], set: pendingSettings, places: pendingPlaces }
         if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
         if (pendingWidgets) changes.widgets = pendingWidgets
@@ -177,9 +228,20 @@ Window {
     Connections {
         target: backend
         function onBusyChanged() {
-            if (backend.busy || !window.applying) return
+            if (backend.busy) {
+                window.elapsed = 0
+                return
+            }
+            if (backend.error === "" && !window.stopping) window.notice = window.doneText()
+            if (!window.applying) return
             window.applying = false
             if (backend.error === "") window.revert()
+        }
+        // Said aloud by a screen reader as it appears, not only shown.
+        function onErrorChanged() {
+            window.showDetails = false
+            if (backend.error !== "" && typeof errorBanner.Accessible.announce === "function")
+                errorBanner.Accessible.announce(backend.error)
         }
     }
 
@@ -516,14 +578,33 @@ Window {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 10
 
+            Spinner {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: backend.busy
+            }
+            // What it is doing now, in install.sh's or git's words when they
+            // say, and for how long once it takes a while.
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: backend.busy || window.pendingCount > 0
-                text: window.applying ? "Applying…" : backend.busy ? "Working…"
+                text: backend.busy
+                    ? (window.stopping ? "Stopping…" : backend.stage || window.workingText[window.action] || "Working…")
+                      + (window.elapsed >= 3 ? "  ·  " + window.elapsed + " s" : "")
                     : window.pendingCount === 1 ? "1 change" : window.pendingCount + " changes"
                 color: Qt.rgba(1, 1, 1, 0.6)
                 font.pixelSize: 13
                 rightPadding: 4
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, 320)
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+            MacButton {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: backend.busy && window.action !== ""
+                text: "Stop"
+                enabled: !window.stopping
+                onClicked: { window.stopping = true; backend.cancel() }
             }
             MacButton {
                 anchors.verticalCenter: parent.verticalCenter
@@ -560,49 +641,41 @@ Window {
             width: content.width - 56
             spacing: 18
 
-            // Why the last action failed, in install.sh's own words.
-            Rectangle {
-                visible: backend.error !== ""
-                width: parent.width
-                height: errorText.height + 20
-                radius: 8
-                color: Qt.rgba(1, 0.27, 0.23, 0.15)
-                border.width: 1
-                border.color: Qt.rgba(1, 0.27, 0.23, 0.4)
-
-                Text {
-                    id: errorText
-                    x: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - 24
-                    text: backend.error
-                    color: "#ff6961"
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
+            // What the last action did, for a few seconds.
+            Banner {
+                visible: window.notice !== ""
+                tint: Qt.rgba(0.19, 0.82, 0.35, 1)
+                ink: "#30d158"
+                text: window.notice
+                onDismissed: window.notice = ""
+                Timer {
+                    running: parent.visible
+                    interval: 8000
+                    onTriggered: window.notice = ""
                 }
+            }
+
+            // Why the last action failed, in install.sh's own words, what to
+            // do about it, and all it said behind Show Details.
+            Banner {
+                id: errorBanner
+                visible: backend.error !== ""
+                tint: Qt.rgba(1, 0.27, 0.23, 1)
+                ink: "#ff6961"
+                text: backend.error
+                more: window.nextStep()
+                details: backend.errorDetails !== backend.error ? backend.errorDetails : ""
+                onDismissed: { backend.error = ""; backend.errorDetails = "" }
             }
 
             // What the last action warned about though it succeeded (a piece
             // it skipped, a font that's missing), in install.sh's own words.
-            Rectangle {
+            Banner {
                 visible: backend.error === "" && backend.warning !== ""
-                width: parent.width
-                height: warningText.height + 20
-                radius: 8
-                color: Qt.rgba(1, 0.62, 0.04, 0.15)
-                border.width: 1
-                border.color: Qt.rgba(1, 0.62, 0.04, 0.4)
-
-                Text {
-                    id: warningText
-                    x: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - 24
-                    text: backend.warning
-                    color: "#ffb340"
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
+                tint: Qt.rgba(1, 0.62, 0.04, 1)
+                ink: "#ffb340"
+                text: backend.warning
+                onDismissed: backend.warning = ""
             }
 
             // Not downloaded yet: one button to fetch it.
@@ -617,7 +690,7 @@ Window {
                     MacButton {
                         text: "Download"
                         enabled: !backend.busy
-                        onClicked: backend.download()
+                        onClicked: { window.start("download"); backend.download() }
                     }
                 }
             }
@@ -869,7 +942,7 @@ Window {
                         MacButton {
                             text: "Back Up Now"
                             enabled: !backend.busy
-                            onClicked: backend.backUp()
+                            onClicked: { window.start("backup"); backend.backUp() }
                         }
                     }
                 }
@@ -896,7 +969,7 @@ Window {
                                     text: "Your theme goes back to how it was then: its plugins and folder, and shell.json, looknfeel.lua and gtk.css whole, so edits you made to those since (a keybinding, a bar change) go too. Your setup now is backed up first, so you can undo this.",
                                     button: "Restore",
                                     destructive: true,
-                                    action: () => { window.discard(); backend.restore(modelData.id) }
+                                    action: () => { window.discard(); window.start("restore", window.when(modelData.created)); backend.restore(modelData.id) }
                                 }
                             }
                         }
@@ -1025,7 +1098,7 @@ Window {
                                 title: "Update the macOS theme?",
                                 text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once.",
                                 button: "Update",
-                                action: () => { window.discard(); backend.update() }
+                                action: () => { window.discard(); window.start("update"); backend.update() }
                             }
                         }
                     }
@@ -1077,7 +1150,7 @@ Window {
         nameFilters: ["macOS theme export (*.tar.gz)"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         selectedFile: currentFolder + "/macos-theme-" + Qt.formatDate(new Date(), "yyyy-MM-dd") + ".tar.gz"
-        onAccepted: backend.exportTo(window.localPath(selectedFile))
+        onAccepted: { window.start("export", window.localPath(selectedFile)); backend.exportTo(window.localPath(selectedFile)) }
     }
 
     FileDialog {
@@ -1093,7 +1166,7 @@ Window {
                 text: "Your theme is set up to match it: its pieces, settings, dock, widgets and wallpapers. Your setup now is backed up first, so you can undo this.",
                 button: "Import",
                 destructive: true,
-                action: () => { window.discard(); backend.importFrom(file) }
+                action: () => { window.discard(); window.start("import", file.split("/").pop()); backend.importFrom(file) }
             }
         }
     }
@@ -1755,6 +1828,118 @@ Window {
             text: parent.shown.toFixed(parent.decimals)
             color: Qt.rgba(1, 1, 1, 0.55)
             font.pixelSize: 12
+        }
+    }
+
+    property bool showDetails: false
+
+    // Counts the seconds an action takes, for the busy line.
+    Timer {
+        running: backend.busy
+        interval: 1000
+        repeat: true
+        onTriggered: window.elapsed++
+    }
+
+    // A small spinner, as macOS shows while something works.
+    component Spinner: Canvas {
+        id: spinner
+        width: 14
+        height: 14
+        onPaint: {
+            const c = getContext("2d")
+            c.reset()
+            c.lineWidth = 2
+            c.strokeStyle = Qt.rgba(1, 1, 1, 0.7)
+            c.beginPath()
+            c.arc(7, 7, 5.5, 0, Math.PI * 1.5)
+            c.stroke()
+        }
+        RotationAnimator on rotation {
+            from: 0
+            to: 360
+            duration: 900
+            loops: Animation.Infinite
+            running: spinner.visible
+        }
+    }
+
+    // A message across the page: what happened, an optional next step, all
+    // of it behind Show Details when there is more, and a way to put it away.
+    // An alert, so a screen reader reads it as one.
+    component Banner: Rectangle {
+        id: banner
+        property color tint
+        property color ink
+        property string text: ""
+        property string more: ""
+        property string details: ""
+        signal dismissed()
+
+        width: parent ? parent.width : 0
+        height: bannerColumn.height + 20
+        radius: 8
+        color: Qt.rgba(tint.r, tint.g, tint.b, 0.15)
+        border.width: 1
+        border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.4)
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: text + (more ? " " + more : "")
+
+        Column {
+            id: bannerColumn
+            x: 12
+            y: 10
+            width: parent.width - 24
+            spacing: 6
+
+            Item {
+                width: parent.width
+                height: Math.max(bannerText.height, bannerButtons.height)
+
+                Text {
+                    id: bannerText
+                    width: parent.width - bannerButtons.width - 12
+                    text: banner.text
+                    color: banner.ink
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    textFormat: Text.PlainText
+                }
+                Row {
+                    id: bannerButtons
+                    anchors.right: parent.right
+                    spacing: 8
+                    MacButton {
+                        visible: banner.details !== ""
+                        text: window.showDetails ? "Hide Details" : "Show Details"
+                        onClicked: window.showDetails = !window.showDetails
+                    }
+                    MacButton {
+                        text: "Dismiss"
+                        onClicked: banner.dismissed()
+                    }
+                }
+            }
+            Text {
+                visible: banner.more !== ""
+                width: parent.width
+                text: banner.more
+                color: Qt.rgba(1, 1, 1, 0.75)
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+            // All of it, selectable to copy into a bug report.
+            TextEdit {
+                visible: banner.details !== "" && window.showDetails
+                width: parent.width
+                text: banner.details
+                readOnly: true
+                selectByMouse: true
+                color: Qt.rgba(1, 1, 1, 0.75)
+                font.family: "monospace"
+                font.pixelSize: 11
+                wrapMode: TextEdit.Wrap
+            }
         }
     }
 
