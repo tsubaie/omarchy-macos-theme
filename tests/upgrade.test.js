@@ -76,7 +76,8 @@ try {
   run(repo, ...installed.flatMap((p) => ["--add", p]))
   const after = status(repo)
   assert.deepStrictEqual(after.features, before.features, "an update changed what is installed")
-  assert.deepStrictEqual(after.settings, before.settings, "an update changed your settings")
+  // Each setting the older version had keeps its value; a setting new since then starts at its default.
+  for (const key of Object.keys(before.settings)) assert.strictEqual(after.settings[key], before.settings[key], `an update changed your ${key} setting`)
   assert.strictEqual(fs.readFileSync(config("omarchy/themes/macos/backgrounds/mine.jpg"), "utf8"), "photo")
   // The older version's clones are known as the theme's, and marked now.
   for (const name of before.features["wide-menu"] ? ["menu", "lock"] : ["lock"]) {
@@ -88,7 +89,7 @@ try {
   run(repo, "--restore", oldSnapshot)
   const restored = status(repo)
   assert.deepStrictEqual(restored.features, before.features, "restoring the older snapshot")
-  assert.deepStrictEqual(restored.settings, before.settings)
+  for (const key of Object.keys(before.settings)) assert.strictEqual(restored.settings[key], before.settings[key], `the restore changed your ${key} setting`)
   // And everything comes off again.
   run(repo, "--uninstall")
   const gone = status(repo)

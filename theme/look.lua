@@ -13,6 +13,11 @@ local TITLE_BARS = 1
 -- How big the traffic lights are, in points: 10 to 20; the bar grows to fit
 -- the larger ones (install.sh --set traffic-lights=<10-20>).
 local LIGHTS = 14
+-- Reduce motion: 1 fades windows, menus and workspaces in and out instead of
+-- springing, popping and sliding them, and stills the dock's genie and the
+-- weather widget (install.sh --set reduce-motion=<0|1>). Omarchy's own
+-- "animations off" still turns every animation off.
+local REDUCE_MOTION = 0
 local BAR_HEIGHT = TITLE_BARS == 1 and math.max(32, LIGHTS + 14) or 0
 
 hl.config({
@@ -49,10 +54,21 @@ hl.config({
   },
 })
 
--- Springy pop-in and sideways Spaces-style workspace slides.
+-- Springy pop-in and sideways Spaces-style workspace slides; with reduce
+-- motion, fades only. Each leaf is named: Omarchy sets them one by one, and a
+-- leaf set on its own doesn't follow its parent.
 hl.curve("macSpring", { type = "bezier", points = { { 0.34, 1.8 }, { 0.64, 1 } } })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 5, bezier = "macSpring", style = "popin 90%" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOutQuint", style = "slide" })
+if REDUCE_MOTION == 1 then
+  for _, leaf in ipairs({ "windowsIn", "windowsOut", "windowsMove", "layersIn", "layersOut" }) do
+    hl.animation({ leaf = leaf, enabled = false })
+  end
+  for _, leaf in ipairs({ "workspaces", "specialWorkspaceIn", "specialWorkspaceOut" }) do
+    hl.animation({ leaf = leaf, enabled = true, speed = 4, bezier = "easeOutQuint", style = "fade" })
+  end
+else
+  hl.animation({ leaf = "windowsIn", enabled = true, speed = 5, bezier = "macSpring", style = "popin 90%" })
+  hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "easeOutQuint", style = "slide" })
+end
 
 -- Frosted glass behind the bar (it is almost clear, so blur every pixel of it)
 -- and behind the dock, menus, launcher, notifications and popups.
@@ -83,8 +99,10 @@ hl.layer_rule({ match = { namespace = "^omarchy-menubar-shade$" }, no_anim = tru
 hl.layer_rule({ match = { namespace = "^omarchy-snap-preview$" }, no_anim = true, blur = true, ignore_alpha = 0.01 })
 
 -- Menus, popups and the launcher pop in with the same spring as windows.
-hl.animation({ leaf = "layersIn", enabled = true, speed = 4.5, bezier = "macSpring", style = "popin 92%" })
-hl.animation({ leaf = "layersOut", enabled = true, speed = 2, bezier = "easeOutQuint", style = "popin 95%" })
+if REDUCE_MOTION ~= 1 then
+  hl.animation({ leaf = "layersIn", enabled = true, speed = 4.5, bezier = "macSpring", style = "popin 92%" })
+  hl.animation({ leaf = "layersOut", enabled = true, speed = 2, bezier = "easeOutQuint", style = "popin 95%" })
+end
 
 -- The window you are using stays solid, so its text reads; the others fade
 -- to frosted glass like Files (apps draw solid backgrounds, so the whole

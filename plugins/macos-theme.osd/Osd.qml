@@ -11,6 +11,9 @@ import "HudIcons.js" as HudIcons
 
 Item {
   id: root
+  // What it shows, for a screen reader: the setting and its level.
+  Accessible.role: root.hasProgress ? Accessible.ProgressBar : Accessible.StaticText
+  Accessible.name: [root.message, root.hasProgress ? root.percent + "%" : ""].filter(function(part) { return !!part }).join(" ")
 
   property bool opened: false
   property string icon: ""
