@@ -22,12 +22,12 @@ SNAPSHOT_ORDER='def taken: .id | capture("^(?<at>[0-9]{8}-[0-9]{6})(-(?<n>[0-9]+
 EXPORT_FORMAT=1
 
 # The plugin folders the theme manages, relative to $CONFIG: its own, and its
-# clones of Omarchy's menu and lock (never clones of yours). Not its workspaces
+# clones of Omarchy's menu, lock and notifications (never clones of yours). Not its workspaces
 # clone: snapshots made before held none, so restoring one would take it off
 # the bar it is still on; --add menubar makes it afresh anyway.
 managed_plugins() {
   local dir
-  for dir in "$PLUGINS_DIR"/macos-theme.* $(wide_menus) $(macos_locks); do
+  for dir in "$PLUGINS_DIR"/macos-theme.* $(wide_menus) $(macos_locks) $(macos_notifications); do
     [[ -d $dir ]] && echo "omarchy/plugins/$(basename "$dir")"
   done | sort -u
 }
@@ -186,6 +186,11 @@ snapshot_restore() {
     mkdir -p "$(dirname "$LOCK_HOOK")" && cp "$REPO/lock/post-update.sh" "$LOCK_HOOK"
   else
     rm -f "$LOCK_HOOK"
+  fi
+  if [[ -n $(macos_notifications) ]]; then
+    mkdir -p "$(dirname "$NOTIFY_HOOK")" && cp "$REPO/notifications/post-update.sh" "$NOTIFY_HOOK"
+  else
+    rm -f "$NOTIFY_HOOK"
   fi
   if jq -e '.original == true' "$dir/meta.json" >/dev/null && installed icons; then remove_icons; fi
 

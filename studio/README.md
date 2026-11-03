@@ -27,7 +27,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 | Page | What's on it |
 |---|---|
 | **About** (the theme card at the top of the sidebar) | The app's version, the Omarchy versions it's made for, a **Software Update** group with a row for the theme and one for Studio (where each stands, when it was last checked, **Check Now** or **Update Now**), **Use macOS Theme** when it's installed but another theme is current (after a download, say; **Install macOS Theme** when it isn't installed), **Remove macOS Theme…**, and links to both projects |
-| **General** | The theme itself, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, and the dictation pill |
+| **General** | The theme itself, the MacTahoe icons, striped rows in Files, the app and workspace switchers, the Spotlight-like menu, the volume and brightness capsule, the dictation pill, and macOS notifications |
 | **Windows** | How see-through the windows you aren't using are, the same for browsers and Electron apps (Claude, VS Code, Slack…), how strong the frosted blur behind them is, Reduce motion, the title bars and their traffic lights' size, and snapping windows to halves and corners |
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash), how far its icons grow, how big they are, and whether window previews show |
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |

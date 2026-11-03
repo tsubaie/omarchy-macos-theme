@@ -57,6 +57,25 @@ try {
   const missing = [...used].filter((name) => !builtin.has(name) && !declared.has(name) && !handled(name))
   assert.deepStrictEqual(missing, [], `Omarchy's lock sets these on LockView, which lock/LockView.qml lacks`)
 
+  // The notifications: Omarchy's Service.qml drives the theme's Toast.qml the
+  // same way, so everything it sets on a Toast must be ours too.
+  {
+    const service = fs.readFileSync(path.join(source("omarchy.notifications", "notifications"), "Service.qml"), "utf8")
+    const ours = fs.readFileSync(path.join(repo, "notifications/Toast.qml"), "utf8")
+    const declared = new Set([...ours.matchAll(/^\s*(?:required |readonly )*property \S+ (\w+)/gm)].map((m) => m[1]))
+    const signals = new Set([...ours.matchAll(/^\s*signal (\w+)/gm)].map((m) => m[1]))
+    const used = new Set()
+    for (const block of service.matchAll(/Toast \{([\s\S]*?)\n\s*\}/g))
+      for (const name of block[1].matchAll(/^\s*([a-zA-Z]+)\s*:/gm)) used.add(name[1])
+    assert.ok(used.size > 0, "Omarchy's notifications no longer make a Toast the way this test reads it")
+    // A handler is for a signal of ours, or for one of our properties changing (onXChanged).
+    const lower = (s) => s[0].toLowerCase() + s.slice(1)
+    const handled = (name) => /^on[A-Z]/.test(name) && (signals.has(lower(name.slice(2)))
+      || (/Changed$/.test(name) && declared.has(lower(name.slice(2, -7)))))
+    const missing = [...used].filter((name) => !builtin.has(name) && !declared.has(name) && !handled(name))
+    assert.deepStrictEqual(missing, [], `Omarchy's notifications set these on Toast, which notifications/Toast.qml lacks`)
+  }
+
   // Each of the theme's plugins is one this Omarchy accepts.
   if (has("omarchy")) {
     for (const dir of fs.readdirSync(path.join(repo, "plugins"))) {
@@ -69,7 +88,7 @@ try {
   // what qmllint says is about modules the running shell provides.
   const qmllint = ["/usr/lib/qt6/bin/qmllint", "qmllint6", "qmllint"].find((c) => has(c))
   if (qmllint) {
-    const files = ["plugins", "lock", "workspaces"].flatMap((top) =>
+    const files = ["plugins", "lock", "notifications", "workspaces"].flatMap((top) =>
       run("find", [path.join(repo, top), "-name", "*.qml"]).stdout.split("\n").filter(Boolean))
     const broken = files.flatMap((f) => run(qmllint, [f]).stderr.split("\n").filter((l) => l.includes("[syntax]")))
     assert.deepStrictEqual(broken, [])

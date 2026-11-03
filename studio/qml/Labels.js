@@ -5,7 +5,8 @@
 var PIECES = {
     theme: "macOS theme", icons: "MacTahoe icons", rows: "Striped rows in Files", switcher: "App and workspace switchers",
     "wide-menu": "Spotlight-like menu", osd: "Volume and brightness capsule", "dictation-hud": "Dictation pill",
-    dock: "macOS dock", lock: "macOS lock screen", widgets: "Desktop widgets", menubar: "macOS menu bar", "bar-icons": "macOS icons"
+    dock: "macOS dock", lock: "macOS lock screen", widgets: "Desktop widgets", menubar: "macOS menu bar", "bar-icons": "macOS icons",
+    notifications: "macOS notifications"
 }
 var SETTINGS = {
     glass: "Window glass", "web-glass": "Browser and Electron app glass", blur: "Frosted blur", "reduce-motion": "Reduce motion",

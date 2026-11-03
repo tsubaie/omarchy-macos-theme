@@ -34,7 +34,7 @@ Item {
   // none.
   readonly property color ink: Commons.Color.popups.text
   // Apple's HUD glass is clearer than its windows, but never so clear that
-  // the capsule's icon and steps get lost over a bright page.
+  // the capsule's icon and line get lost over a bright page.
   readonly property color glass: Util.alpha(Commons.Color.background, Math.max(0.55, root.windowGlass * 0.8))
 
   // Liquid Glass's edge: a faint light along the top that fades out before
@@ -257,8 +257,8 @@ Item {
 
     // Volume, brightness and other levels, as macOS 27.2 (Golden Gate) shows
     // them: a rounded panel of glass, at the bottom middle or top right, with
-    // one larger icon on the left and a bar of sixteen steps, each key press
-    // filling or clearing one. It slides in from the nearer edge.
+    // one larger icon on the left and one continuous line that fills with the
+    // level and empties as it goes down. It slides in from the nearer edge.
     BorderSurface {
       id: hud
       visible: root.hasProgress
@@ -306,40 +306,31 @@ Item {
         }
       }
 
-      // The steps, filling from the left; a level between steps fills the
-      // last one in part.
-      Row {
-        id: steps
-        readonly property real filled: root.hasProgress ? 16 * root.value / root.maxValue : 0
+      // The level as one continuous line, filling from the left as it goes up
+      // and emptying as it goes down: exactly the level, not in steps.
+      Rectangle {
+        id: track
+        readonly property real level: root.hasProgress && root.maxValue > 0 ? Math.max(0, Math.min(1, root.value / root.maxValue)) : 0
         anchors.left: art.right
         anchors.leftMargin: Style.space(14)
         anchors.right: parent.right
         anchors.rightMargin: Style.space(26)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(3)
+        height: Style.space(6)
+        radius: height / 2
+        color: Util.alpha(root.ink, 0.2)
 
-        Repeater {
-          model: 16
+        Rectangle {
+          anchors.left: parent.left
+          height: parent.height
+          // At least a dot while on at all, so a low level still shows.
+          width: track.level > 0 ? Math.max(height, parent.width * track.level) : 0
+          radius: parent.radius
+          color: root.ink
 
-          delegate: Rectangle {
-            required property int index
-            width: (steps.width - 15 * steps.spacing) / 16
-            height: Style.space(5)
-            radius: Style.space(1.5)
-            color: Util.alpha(root.ink, 0.2)
-
-            Rectangle {
-              anchors.left: parent.left
-              height: parent.height
-              width: parent.width * Math.max(0, Math.min(1, steps.filled - parent.index))
-              radius: parent.radius
-              color: root.ink
-
-              Behavior on width {
-                enabled: root.opened
-                NumberAnimation { duration: Style.duration(90); easing.type: Easing.OutCubic }
-              }
-            }
+          Behavior on width {
+            enabled: root.opened
+            NumberAnimation { duration: Style.duration(90); easing.type: Easing.OutCubic }
           }
         }
       }
