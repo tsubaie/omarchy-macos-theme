@@ -123,18 +123,39 @@ Item {
       transform: Translate { y: card.live ? 0 : (root.atTop ? -1 : 1) * Style.space(10); Behavior on y { NumberAnimation { duration: Style.duration(220); easing.type: Easing.OutBack; easing.overshoot: 1.2 } } }
       Behavior on opacity { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
 
-      // Icons8's microphone, drawn at three times its size and scaled down
-      // smoothly, so it stays crisp at any display scale.
+      // Icons8's microphone while it transcribes, drawn at three times its
+      // size and scaled down smoothly, so it stays crisp at any display scale.
       Image {
         id: mic
         x: Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(32)
         height: width
+        visible: !root.recording
         source: HudIcons.icon("microphone", Commons.Color.popups.text.toString())
         sourceSize: Qt.size(width * 3, height * 3)
         smooth: true
         mipmap: true
+      }
+
+      // Recording: a red recording light in the microphone's place, breathing
+      // slowly so it reads as live; still when animations are off.
+      Rectangle {
+        id: recordingLight
+        anchors.centerIn: mic
+        visible: root.recording
+        width: Style.space(16)
+        height: width
+        radius: width / 2
+        color: "#ff453a"
+        SequentialAnimation on opacity {
+          running: root.recording && Style.duration(1) > 0
+          loops: Animation.Infinite
+          NumberAnimation { to: 0.45; duration: 700; easing.type: Easing.InOutSine }
+          NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+          // Stopped mid-breath, it shows whole.
+          onRunningChanged: if (!running) recordingLight.opacity = 1
+        }
       }
 
       // Recording: a waveform where the volume HUD has its steps, drawn as
