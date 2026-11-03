@@ -20,7 +20,11 @@ pub mod qobject {
         #[qproperty(bool, busy)]
         #[qproperty(bool, downloaded)]
         #[qproperty(QString, error)]
+        // All a failed command wrote, for "Show Details"; empty when there is no more to it.
+        #[qproperty(QString, error_details, cxx_name = "errorDetails")]
         #[qproperty(QString, warning)]
+        // What the running action is doing now, in install.sh's or git's words.
+        #[qproperty(QString, stage)]
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
         #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
         #[qproperty(i32, updates, cxx_name = "updates")]
@@ -73,6 +77,10 @@ pub mod qobject {
         #[qinvokable]
         fn download(self: Pin<&mut Self>);
 
+        /// Stops the running action: its command, and what that started.
+        #[qinvokable]
+        fn cancel(self: Pin<&mut Self>);
+
         /// Minimizes the window into the dock; false when it should minimize
         /// the ordinary way instead.
         #[qinvokable]
@@ -114,7 +122,9 @@ pub struct ThemeBackendRust {
     busy: bool,
     downloaded: bool,
     error: QString,
+    error_details: QString,
     warning: QString,
+    stage: QString,
     theme_dir: QString,
     theme_version: QString,
     updates: i32,
@@ -124,6 +134,7 @@ pub struct ThemeBackendRust {
     omarchy_logo: QString,
     dir: PathBuf,
     previews: Arc<Mutex<Previews>>,
+    watch: Arc<Mutex<install::Watch>>,
 }
 
 /// Settings waiting to be previewed, newest value per key, and whether a
@@ -145,7 +156,9 @@ impl Default for ThemeBackendRust {
             busy: false,
             downloaded: install::is_downloaded(&dir),
             error: QString::default(),
+            error_details: QString::default(),
             warning: QString::default(),
+            stage: QString::default(),
             theme_dir: QString::from(dir.display().to_string().as_str()),
             theme_version: QString::default(),
             updates: 0,
@@ -157,6 +170,7 @@ impl Default for ThemeBackendRust {
             omarchy_logo: QString::from(install::green_omarchy_logo().unwrap_or_default().as_str()),
             dir,
             previews: Arc::default(),
+            watch: Arc::default(),
         }
     }
 }
@@ -169,6 +183,7 @@ struct Outcome {
     bar: Option<String>,
     updates: u32,
     error: Option<String>,
+    error_details: String,
     warning: String,
 }
 
@@ -269,6 +284,12 @@ impl qobject::ThemeBackend {
         self.run(install::download);
     }
 
+    pub fn cancel(self: Pin<&mut Self>) {
+        if *self.busy() {
+            install::stop(&self.rust().watch);
+        }
+    }
+
     pub fn minimize_window(&self) -> bool {
         crate::window::minimize()
     }
@@ -298,14 +319,34 @@ impl qobject::ThemeBackend {
         }
         self.as_mut().set_busy(true);
         self.as_mut().set_error(QString::default());
+        self.as_mut().set_error_details(QString::default());
         self.as_mut().set_warning(QString::default());
+        self.as_mut().set_stage(QString::default());
 
         let dir = self.rust().dir.clone();
         let qt_thread = self.qt_thread();
+        let watch = Arc::clone(&self.rust().watch);
+        *watch.lock().unwrap_or_else(PoisonError::into_inner) = install::Watch::default();
+        // What its commands say they are doing, shown as it happens.
+        let stages = qt_thread.clone();
+        let report: install::Report = Arc::new(move |stage: &str| {
+            let stage = QString::from(stage);
+            let _ = stages.queue(move |backend| backend.set_stage(stage));
+        });
         thread::spawn(move || {
-            let (error, warning) = match job(&dir) {
-                Ok(warning) => (None, warning),
-                Err(error) => (Some(format!("{error:#}")), String::new()),
+            let done = install::watched(report, Arc::clone(&watch), || job(&dir));
+            let stopped = watch.lock().unwrap_or_else(PoisonError::into_inner).stopped();
+            let (error, error_details, warning) = match done {
+                Ok(warning) => (None, String::new(), warning),
+                // Stopped by the user: said plainly, not as a failure. A run
+                // of install.sh backs up first, so what it did can be undone.
+                Err(_) if stopped => (None, String::new(),
+                    "Stopped before it finished. If it had begun changing the theme, Backups has how it was before.".to_owned()),
+                Err(error) => {
+                    let details = error.chain().find_map(|cause| cause.downcast_ref::<install::Failed>())
+                        .map(|failed| failed.output.clone()).unwrap_or_default();
+                    (Some(format!("{error:#}")), details, String::new())
+                }
             };
             let downloaded = install::is_downloaded(&dir);
             let (status, backups) = if downloaded {
@@ -324,6 +365,7 @@ impl qobject::ThemeBackend {
                     0
                 },
                 error,
+                error_details,
                 warning,
             };
             let queued = qt_thread.queue(move |mut backend| {
@@ -361,6 +403,9 @@ impl qobject::ThemeBackend {
         self.as_mut().set_backups_json(QString::from(json.as_str()));
         self.as_mut()
             .set_error(QString::from(error.unwrap_or_default().as_str()));
+        self.as_mut()
+            .set_error_details(QString::from(outcome.error_details.as_str()));
+        self.as_mut().set_stage(QString::default());
         self.as_mut()
             .set_warning(QString::from(outcome.warning.as_str()));
         self.as_mut().set_busy(false);
