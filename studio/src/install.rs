@@ -304,6 +304,20 @@ pub fn status(dir: &Path) -> Result<Status> {
 /// icons. A change there from outside Studio (a widget removed on the
 /// desktop, a theme switched in Omarchy, install.sh run from a terminal)
 /// moves it. Each folder and what's directly in it, followed through links.
+/// The workspaces Hyprland has, by number: made or closed outside Studio
+/// without any file changing, yet the status lists them (the widgets' Show
+/// On). Empty when Hyprland doesn't answer.
+#[must_use]
+pub fn workspace_ids() -> Vec<i64> {
+    let Ok(output) = Command::new("hyprctl").args(["workspaces", "-j"]).output() else {
+        return Vec::new();
+    };
+    let list: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout).unwrap_or_default();
+    let mut ids: Vec<i64> = list.iter().filter_map(|w| w.get("id")?.as_i64()).filter(|id| *id > 0).collect();
+    ids.sort_unstable();
+    ids
+}
+
 // shortcut: only one level deep; a change deeper in (inside one plugin's folder, say) waits for the next action or launch.
 #[must_use]
 pub fn changed_outside() -> Option<SystemTime> {
