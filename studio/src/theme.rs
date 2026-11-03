@@ -43,6 +43,14 @@ pub mod qobject {
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
 
+        /// Reads what is installed, the bar and the backups again when
+        /// something they come from changed outside Studio (a widget removed
+        /// on the desktop, say), without touching what an action shows;
+        /// cheap to call often.
+        #[qinvokable]
+        #[cxx_name = "rereadIfChanged"]
+        fn reread_if_changed(self: Pin<&mut Self>);
+
         /// Asks GitHub whether the theme has new commits; `checking` while it does.
         #[qinvokable]
         #[cxx_name = "checkTheme"]
@@ -131,6 +139,7 @@ use std::pin::Pin;
 use std::process::Command;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
+use std::time::SystemTime;
 
 use anyhow::Result;
 use cxx_qt::{CxxQtType, Threading};
@@ -161,6 +170,11 @@ pub struct ThemeBackendRust {
     dir: PathBuf,
     previews: Arc<Mutex<Previews>>,
     watch: Arc<Mutex<install::Watch>>,
+    /// The newest change outside Studio, as last looked at.
+    outside_seen: Option<SystemTime>,
+    rereading: bool,
+    /// Actions started, so a reread an action overtook is dropped.
+    runs: u64,
 }
 
 /// Settings waiting to be previewed, newest value per key, and whether a
@@ -201,6 +215,9 @@ impl Default for ThemeBackendRust {
             dir,
             previews: Arc::default(),
             watch: Arc::default(),
+            outside_seen: install::changed_outside(),
+            rereading: false,
+            runs: 0,
         }
     }
 }
@@ -246,6 +263,55 @@ impl qobject::ThemeBackend {
             });
             if let Err(error) = queued {
                 eprintln!("the window closed before GitHub answered: {error}");
+            }
+        });
+    }
+
+    pub fn reread_if_changed(mut self: Pin<&mut Self>) {
+        if *self.busy() || self.rust().rereading {
+            return;
+        }
+        // Downloaded from a terminal while Studio waited on its Download screen.
+        if !*self.downloaded() {
+            if install::is_downloaded(&self.rust().dir) {
+                self.refresh();
+            }
+            return;
+        }
+        let changed = install::changed_outside();
+        if changed == self.rust().outside_seen {
+            return;
+        }
+        let runs = self.rust().runs;
+        let mut rust = self.as_mut().rust_mut();
+        rust.outside_seen = changed;
+        rust.rereading = true;
+        let dir = self.rust().dir.clone();
+        let qt_thread = self.qt_thread();
+        thread::spawn(move || {
+            let status = install::status(&dir);
+            let bar = install::bar(&dir).ok();
+            let backups = install::backups(&dir).ok();
+            let queued = qt_thread.queue(move |mut backend| {
+                backend.as_mut().rust_mut().rereading = false;
+                // An action since reads it again itself, and newer.
+                if *backend.busy() || backend.rust().runs != runs {
+                    return;
+                }
+                // shortcut: a failed reread is dropped quietly; the next change or action tries again.
+                if let Ok(status) = status {
+                    let json = serde_json::to_string(&status).unwrap_or_else(|_| "{}".to_owned());
+                    backend.as_mut().set_status_json(QString::from(json.as_str()));
+                }
+                if let Some(bar) = bar {
+                    backend.as_mut().set_bar_json(QString::from(bar.as_str()));
+                }
+                if let Some(json) = backups.and_then(|b| serde_json::to_string(&b).ok()) {
+                    backend.as_mut().set_backups_json(QString::from(json.as_str()));
+                }
+            });
+            if let Err(error) = queued {
+                eprintln!("the window closed before the theme answered: {error}");
             }
         });
     }
@@ -379,6 +445,7 @@ impl qobject::ThemeBackend {
             return;
         }
         self.as_mut().set_busy(true);
+        self.as_mut().rust_mut().runs += 1;
         self.as_mut().set_error(QString::default());
         self.as_mut().set_error_details(QString::default());
         self.as_mut().set_warning(QString::default());
@@ -442,6 +509,8 @@ impl qobject::ThemeBackend {
     }
 
     fn finish(mut self: Pin<&mut Self>, outcome: Outcome) {
+        // What the action itself changed was just read; no need to read it again.
+        self.as_mut().rust_mut().outside_seen = install::changed_outside();
         self.as_mut().set_incoming(&outcome.incoming);
         self.as_mut()
             .set_theme_version(QString::from(outcome.version.unwrap_or_default().as_str()));

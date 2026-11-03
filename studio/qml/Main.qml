@@ -6,6 +6,7 @@ import QtQuick.Window
 import org.omarchy.macosstudio
 import "BarModel.js" as BarModel
 import "Labels.js" as Labels
+import "Pending.js" as Pending
 
 // macOS Theme Studio, shaped like macOS System Settings: a sidebar of
 // sections with colored icons, and grouped rows of switches and sliders.
@@ -213,6 +214,27 @@ Window {
         else next[panel] = place
         pendingPlaces = next
     }
+
+    // Changed outside Studio (a widget removed on the desktop, install.sh in
+    // a terminal): read again when you come back to the window, open a page,
+    // or every 30 s, and only when what the status comes from changed.
+    Timer { interval: 30000; running: true; repeat: true; onTriggered: backend.rereadIfChanged() }
+    onActiveChanged: if (active) backend.rereadIfChanged()
+
+    // A change waiting that the desktop now has anyway (made outside Studio)
+    // stops waiting; the rest stay marked.
+    function forgetMet() {
+        const left = Pending.forgetMet(
+            { pieces: pendingPieces, settings: pendingSettings, places: pendingPlaces, bar: pendingBar, widgets: pendingWidgets },
+            { installed: installed, setting: key => (status.settings || {})[key], place: placeNow, bar: barNow, widgets: widgetsNow })
+        if (left.pieces !== pendingPieces) pendingPieces = left.pieces
+        if (left.settings !== pendingSettings) pendingSettings = left.settings
+        if (left.places !== pendingPlaces) pendingPlaces = left.places
+        if (left.bar !== pendingBar) pendingBar = left.bar
+        if (left.widgets !== pendingWidgets) pendingWidgets = left.widgets
+    }
+    onStatusChanged: forgetMet()
+    onBarNowChanged: forgetMet()
 
     readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
         + Object.keys(pendingPlaces).length + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0)
@@ -450,7 +472,7 @@ Window {
         return backend.downloaded && pages.some(p => p.id === asked) ? asked : "overview"
     }
     // Written at once, so it survives the app being killed rather than closed.
-    onPageChanged: { prefs.lastPage = page; prefs.sync() }
+    onPageChanged: { prefs.lastPage = page; prefs.sync(); backend.rereadIfChanged() }
 
     Settings {
         id: prefs
