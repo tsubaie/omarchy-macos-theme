@@ -45,6 +45,9 @@
 #   ./install.sh --set traffic-lights=16  how big the traffic lights are, 10 to 20; 14 by default
 #   ./install.sh --set reduce-motion=1  fade windows, menus and workspaces instead of springing
 #                                 and sliding them, without the genie or moving weather (0: off)
+#   ./install.sh --set logo-menu=0  the bar's logo is Omarchy's menu button again (1: the macOS menu)
+#   ./install.sh --set logo=arch     the bar's logo: omarchy, arch, command, circle, hexagon, terminal
+#   ./install.sh --set logo-file=me.svg  your own logo, an SVG or PNG (logo-colors=1 keeps its colors)
 #   ./install.sh --preview --set blur=15  show settings at once, for a slider being dragged:
 #                                  no snapshot or theme refresh; blur and the dock's
 #                                  settings change in place until Apply, glass reloads
@@ -717,8 +720,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s,"logo-menu":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"logo":%s,"custom-widgets":%s,"widget-workspaces":%s,"widget-workspaces-there":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(logo_menu_on && echo 1 || echo 0)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(logo_json)" "$(custom_widgets)" "$(widget_workspaces)" "$(widget_workspaces_there)" \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s,"logo-menu":%s,"logo-colors":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"logo":%s,"custom-widgets":%s,"widget-workspaces":%s,"widget-workspaces-there":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(logo_menu_on && echo 1 || echo 0)" "$(jq -e ".logo.keepColors == true" "$SHELL_JSON" >/dev/null 2>&1 && echo 1 || echo 0)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(logo_json)" "$(custom_widgets)" "$(widget_workspaces)" "$(widget_workspaces_there)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
       "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
       "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"

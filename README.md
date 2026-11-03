@@ -42,6 +42,10 @@ cd omarchy-macos-theme
 | `--bar [--json]` | The bar's items by section, and the hidden ones |
 | `--bar-layout '<json>'` | Show, hide and order the bar's items at once: `{"sections":{"right":["omarchy.clock",…],…},"hidden":[…]}`, with sections `left`, `centerBegin`, `center`, `centerEnd`, `right` and `tray`. Only widgets Omarchy knows are taken |
 | `--set clock=<left\|center\|right>` | Where the bar's clock sits; the theme puts it on the right, after Control Center |
+| `--set logo-menu=<0\|1>` | Whether the logo at the left of the bar opens the macOS menu (1, the theme's) or is Omarchy's menu button again (0). Needs the menu bar |
+| `--set logo=<name>` | The bar's logo: `omarchy` (the theme's), `arch`, `command`, `circle`, `hexagon` or `terminal`, drawn in the bar's color. Never Apple's |
+| `--set logo-file=<file>` | Your own logo, an SVG or PNG, copied to `~/.config/omarchy/macos-theme-logo.svg` or `.png`; `--set logo=` goes back to one of the theme's |
+| `--set logo-colors=<0\|1>` | Whether your own logo keeps its colors (1) or takes the bar's (0, the default) |
 | `--set volume-hud=<bottom\|top>` | Where the volume and brightness panel shows: the bottom middle (the theme's) or the top right, under the bar, as macOS 27.2 has it |
 | `--set dictation-hud=<bottom\|top>` | The same for the dictation panel |
 | `--set blur=<0-20>` | How strong the frosted blur is behind see-through windows, menus, the bar and the dock; 0 turns it off (they stay see-through), the theme's own is 10 |
@@ -162,6 +166,9 @@ Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon
 The bar as macOS Tahoe draws it:
 
 - **Inter** for the shell's text (bar, popups, notifications), as macOS uses one sans serif throughout; terminals keep their own font. The bar is 24px tall, as the macOS menu bar is.
+- **A logo menu**, as macOS's Apple menu, in the menu button's place: About This Computer, System Settings… (Omarchy's menu, so Super+Space and the launcher are unchanged), App Store…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen and Log Out…; the last three ask first, and the arrow keys, Return and Esc work in it. The logo is the theme's or your own, never Apple's (`--set logo=`, `--set logo-file=`, or Studio). Right-click it for a terminal.
+  - **About This Computer**: the logo, your computer's name, Omarchy's version, the chip, memory, graphics and storage, on frosted glass with a red close button.
+  - **Force Quit… (⇧⌥⌘⎋)**: the pointer becomes a red ×, the window under it is outlined with its app's name, and a click force quits that window's process; Esc or a right click cancels. With ⌥ held it is **Force Quit Applications… (⌥⌘⎋)**: a list of the open apps, to force quit one you can't click.
 - **The focused app's name in bold** right after the menu button, the way macOS shows it next to the Apple menu.
 - **Control Center**: one icon by the clock, laid out as macOS has it on the glass of your windows (it follows the Glass setting): Wi-Fi and Bluetooth beside what is playing, with its controls; AirDrop, Tailscale, Focus (Do Not Disturb), Display and Power; then brightness and sound sliders. AirDrop works through [Omdrop](https://github.com/netmojo-systems/omdrop-plugin), AirDrop for Omarchy, which waits unseen in the tray's drawer as the other widgets Control Center stands in for; its icon turns AirDrop on or off and the rest of it opens Omdrop's own window; without it, AirDrop's switch says "Not Installed · Get Omdrop" and opens its page. A click on a switch's round icon turns it on or off; anywhere else on it opens Omarchy's own panel, on the monitor you clicked. Power opens in place to Lock, Log Out, Restart and Shut Down, the last three on a second click. The widgets it stands in for stay on the bar, unseen, which keeps their panels working and their updates coming; only those you have on the bar show in it.
 - **The keyboard**: when Control Center opens it takes the keyboard. Tab moves through it, Space flips a switch or plays and pauses, Return opens a switch's panel, the arrows move a slider or skip a track, and Esc closes it. Screen readers get each part's name and state.
@@ -238,7 +245,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | A clone of `omarchy.lock`, named after your user | `--lock` | Omarchy's lock screen (`omarchy.lock` is turned off) |
 | A clone of `omarchy.notifications`, named after your user | `--notifications` | Omarchy's notifications (`omarchy.notifications` is turned off) |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
-| `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets stay on the bar unseen, opened from Control Center |
+| `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center`, `macos-theme.logo-menu` | `--menubar` | Omarchy's menu button on the bar, by the logo menu (it stays listed, so Super+Space still opens the launcher); the network, Bluetooth, Tailscale, audio, monitor and power widgets stay on the bar unseen, opened from Control Center |
 | A clone of `omarchy.workspaces`, named after your user, with `WorkspaceMenu.qml` and the layout icons | `--menubar` | Omarchy's workspaces on the bar; a click goes to a workspace, and a click on the one shown or a right-click opens its layout menu. Each `--menubar` takes Omarchy's widget afresh and patches it, so its updates come along |
 
 `--icons` installs the MacTahoe icon theme, which is not a plugin, into `~/.local/share/icons`.

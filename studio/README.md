@@ -32,7 +32,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 | **Dock** | The macOS dock (magnification, window previews, Downloads and Trash), how far its icons grow, how big they are, and whether window previews show |
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |
 | **Widgets** | The desktop widgets: clock, calendar, weather and now playing, and any of your own (a folder each in `~/.config/omarchy/macos-theme-widgets/`), each with a switch; **Show On**: every workspace, or only the ones you pick; **Make Your Own** has **Copy Prompt**, which puts a prompt for any AI agent on the clipboard, pointing it at the theme's widget guide, and **Open Folder** |
-| **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; and every item on the bar, in Left, Center and Right, to show or hide with a switch and drag to rearrange (the clock too). Without Omdrop, which AirDrop in Control Center works through, a row says so with **Get Omdrop** |
+| **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; the logo menu and its logo; and every item on the bar, in Left, Center and Right, to show or hide with a switch and drag to rearrange (the clock too). Without Omdrop, which AirDrop in Control Center works through, a row says so with **Get Omdrop** |
 | **Backgrounds** | As System Settings' Wallpaper: the background showing, large; **Yours** (Omarchy's folder for this theme's backgrounds, `~/.config/omarchy/backgrounds/macos/`) with **Add Photos…**, which copies pictures there; and **Suggested**, the three the theme comes with. A click shows one at once, no Apply needed, after a backup, so **Undo** in the note puts the last one back. While another theme is current, the one chosen shows once the macOS theme is. Installing the theme keeps the background you have; the pictures at the top of every page draw it too |
 | **Backups** | Back up now, where backups are kept, restore any backup, and export or import your setup |
 
@@ -119,6 +119,9 @@ A setting or piece the installed theme is too old for is shown dimmed, with "Upd
 | Dock magnification | 1 (off) to 2 | 1.75 |
 | Dock size | 32 to 80 points | 48 |
 | Volume capsule and dictation pill | at the bottom, or at the top right under the menu bar | bottom |
+| Logo menu | on or off: the logo opens the macOS menu, or is Omarchy's menu button | on |
+| Logo | Omarchy, Arch, Command, Circle, Hexagon, Terminal, or your own SVG or PNG (**Your Own…**), set at once | Omarchy |
+| Keep your logo's colors | on or off, for your own logo | off |
 
 Settings are kept when the theme is updated.
 

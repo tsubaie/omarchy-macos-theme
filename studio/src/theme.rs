@@ -97,6 +97,16 @@ pub mod qobject {
         #[cxx_name = "setBackground"]
         fn set_background(self: Pin<&mut Self>, file: &QString);
 
+        /// Sets the bar's logo to one of the theme's, by name.
+        #[qinvokable]
+        #[cxx_name = "setLogo"]
+        fn set_logo(self: Pin<&mut Self>, name: &QString);
+
+        /// Sets the bar's logo to your own SVG or PNG.
+        #[qinvokable]
+        #[cxx_name = "setLogoFile"]
+        fn set_logo_file(self: Pin<&mut Self>, file: &QString);
+
         /// Copies pictures into the user's backgrounds folder, given as a
         /// JSON array of paths.
         #[qinvokable]
@@ -418,6 +428,16 @@ impl qobject::ThemeBackend {
     pub fn set_background(self: Pin<&mut Self>, file: &QString) {
         let file = PathBuf::from(file.to_string());
         self.run(move |dir| install::set_background(dir, &file));
+    }
+
+    pub fn set_logo(self: Pin<&mut Self>, name: &QString) {
+        let name = name.to_string();
+        self.run(move |dir| install::set_logo(dir, &name));
+    }
+
+    pub fn set_logo_file(self: Pin<&mut Self>, file: &QString) {
+        let file = PathBuf::from(file.to_string());
+        self.run(move |dir| install::set_logo_file(dir, &file));
     }
 
     pub fn add_backgrounds(self: Pin<&mut Self>, files: &QString) {

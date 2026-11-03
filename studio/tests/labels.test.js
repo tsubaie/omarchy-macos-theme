@@ -14,6 +14,7 @@ assert.strictEqual(m.backup(""), "")
 assert.strictEqual(m.setting("reduce-motion", 1), "Reduce motion on")
 assert.strictEqual(m.setting("dock-size", 56), "Dock size 56")
 assert.strictEqual(m.setting("dock-previews", 0), "Dock window previews off")
+assert.strictEqual(m.setting("logo-menu", 1), "Logo opens the macOS menu on")
 
 // Studio's releases, as the release workflow names them, against a build
 // from source, which is never offered one.

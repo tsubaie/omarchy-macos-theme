@@ -22,6 +22,9 @@ assert.strictEqual(m.logo(undefined).id, "omarchy")
 // install.sh --set logo= takes exactly these names.
 const installSh = require("fs").readFileSync(require("path").join(__dirname, "..", "install.sh"), "utf8")
 assert.deepStrictEqual(/^LOGOS="([^"]*)"/m.exec(installSh)[1].split(" "), m.LOGOS.map((l) => l.id))
+// Studio's Menu Bar page offers the same ones.
+const studioQml = require("fs").readFileSync(require("path").join(__dirname, "..", "studio", "qml", "Main.qml"), "utf8")
+assert.deepStrictEqual([...studioQml.matchAll(/\{ id: "(\w+)", name: "[^"]+", glyph: /g)].map((x) => x[1]), m.LOGOS.map((l) => l.id))
 
 // Force Quit's list: one per app, last used first, with all its windows and
 // processes; never the shell, its bar, Hyprland, or a window with no process.

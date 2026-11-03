@@ -30,6 +30,19 @@ Window {
         try { return JSON.parse(backend.statusJson) } catch (e) { return {} }
     }
 
+    // The logo menu: on (as marked), the logo now, and the theme's logos, as
+    // the plugin's LogoModel.js and install.sh's LOGOS have them.
+    readonly property bool logoMenuOn: pieceOn("menubar") && settingValue("logo-menu", 0) === 1
+    readonly property var logoNow: status.logo || ({})
+    readonly property var logos: [
+        { id: "omarchy", name: "Omarchy", glyph: "", font: "omarchy" },
+        { id: "arch", name: "Arch", glyph: "", font: "JetBrainsMono Nerd Font" },
+        { id: "command", name: "Command", glyph: "⌘", font: "Inter" },
+        { id: "circle", name: "Circle", glyph: "●", font: "Inter" },
+        { id: "hexagon", name: "Hexagon", glyph: "⬢", font: "Noto Sans Symbols 2" },
+        { id: "terminal", name: "Terminal", glyph: "", font: "JetBrainsMono Nerd Font" }
+    ]
+
     // Studio's own updates: its newest release on GitHub, against this one's
     // name. A build from source isn't a release (its version is Cargo's), so
     // it's never offered one.
@@ -389,7 +402,7 @@ Window {
         apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
         export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…",
         remove: "Removing the macOS theme…", use: "Switching to the macOS theme…", studio: "Updating Studio…",
-        background: "Setting the background…", "add-backgrounds": "Adding the pictures…"
+        background: "Setting the background…", "add-backgrounds": "Adding the pictures…", logo: "Setting the logo…"
     })
 
     function doneText() {
@@ -408,6 +421,7 @@ Window {
         case "studio": return "Updated Studio to " + actionDetail + ". Reopen it to use the new version."
         case "background": return "Set the background to " + actionDetail + "."
         case "add-backgrounds": return n === 1 ? "Added 1 picture to Yours." : "Added " + n + " pictures to Yours."
+        case "logo": return "Set the logo to " + actionDetail + "."
         }
         return ""
     }
@@ -1461,8 +1475,61 @@ Window {
                 SettingRow {
                     label: "macOS icons"
                     note: "For Wi-Fi and Ethernet, Bluetooth, sound and displays"
-                    last: !window.omdropMissing
                     PieceSwitch { piece: "bar-icons" }
+                }
+                SettingRow {
+                    label: "Logo menu"
+                    note: "The logo at the left opens About This Computer, System Settings, Force Quit, Sleep, Restart, Shut Down, Lock Screen and Log Out"
+                    last: !window.logoMenuOn && !window.omdropMissing
+                    SettingSwitch { key: "logo-menu"; needs: "menubar"; fallback: 0 }
+                }
+                // The logo: one of the theme's, or your own picture.
+                SettingRow {
+                    visible: window.logoMenuOn
+                    label: "Logo"
+                    note: window.logoNow.file ? "Your own picture" : "Shown in the bar's color"
+                    last: !window.logoNow.file && !window.omdropMissing
+                    Row {
+                        spacing: 6
+                        Repeater {
+                            model: window.logos
+                            Rectangle {
+                                required property var modelData
+                                readonly property bool chosen: !window.logoNow.file && (window.logoNow.glyph || "omarchy") === modelData.id
+                                width: 30; height: 30; radius: 7
+                                color: chosen ? "#0a84ff" : logoHover.hovered ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.glyph
+                                    color: "white"
+                                    font.family: modelData.font
+                                    font.pixelSize: 15
+                                }
+                                HoverHandler { id: logoHover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler {
+                                    enabled: !backend.busy && !parent.chosen
+                                    onTapped: { window.start("logo", modelData.name); backend.setLogo(modelData.id) }
+                                }
+                                Accessible.role: Accessible.RadioButton
+                                Accessible.name: modelData.name
+                                Accessible.checked: chosen
+                            }
+                        }
+                        MacButton {
+                            text: "Your Own…"
+                            // As tall as the logos, so the row lines up.
+                            height: 30
+                            enabled: !backend.busy
+                            onClicked: logoDialog.open()
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: window.logoMenuOn && !!window.logoNow.file
+                    label: "Keep your logo's colors"
+                    note: "Off, it takes the bar's color as the theme's logos do"
+                    last: !window.omdropMissing
+                    SettingSwitch { key: "logo-colors"; needs: "menubar"; fallback: 0 }
                 }
                 // AirDrop in Control Center works through Omdrop, a plugin of its own.
                 SettingRow {
@@ -1834,6 +1901,19 @@ Window {
             const files = selectedFiles.map(f => window.localPath(f))
             window.start("add-backgrounds", files.length)
             backend.addBackgrounds(JSON.stringify(files))
+        }
+    }
+
+    FileDialog {
+        id: logoDialog
+        title: "Choose Your Own Logo"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Logo (*.svg *.png *.SVG *.PNG)"]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        onAccepted: {
+            const file = window.localPath(selectedFile)
+            window.start("logo", file.split("/").pop())
+            backend.setLogoFile(file)
         }
     }
 

@@ -36,7 +36,7 @@ var LOGOS = [
   { id: "arch", name: "Arch", glyph: "" },
   { id: "command", name: "Command", glyph: "⌘" },
   { id: "circle", name: "Circle", glyph: "●" },
-  { id: "hexagon", name: "Hexagon", glyph: "⬢" },
+  { id: "hexagon", name: "Hexagon", glyph: "⬢", font: "Noto Sans Symbols 2" },
   { id: "terminal", name: "Terminal", glyph: "" }
 ]
 
