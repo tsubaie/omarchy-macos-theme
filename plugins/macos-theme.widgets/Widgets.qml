@@ -162,7 +162,10 @@ Item {
     return monitor ? monitor.activeWorkspace : null
   }
   property bool shownFloating: false
-  readonly property bool desktopSeen: !shownWorkspace || shownWorkspace.toplevels.values.length === 0 || shownFloating
+  // On every workspace, or only those "workspaces": [1, 2] in shell.json names
+  // (install.sh --widget-workspaces, Studio's Widgets page); hidden elsewhere.
+  readonly property bool onThisWorkspace: !shownWorkspace || Model.showsOn(root.config.workspaces, shownWorkspace.id)
+  readonly property bool desktopSeen: onThisWorkspace && (!shownWorkspace || shownWorkspace.toplevels.values.length === 0 || shownFloating)
   onShownWorkspaceChanged: readMode()
   // A first value sends no change, so the workspace shown at login is read here.
   Component.onCompleted: readMode()
@@ -259,6 +262,7 @@ Item {
   PanelWindow {
     id: window
     screen: root.targetScreen
+    visible: root.onThisWorkspace
     color: "transparent"
     WlrLayershell.namespace: "omarchy-widgets"
     WlrLayershell.layer: WlrLayer.Bottom

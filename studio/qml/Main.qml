@@ -108,6 +108,8 @@ Window {
             lines.push(Labels.setting(panel, "at the " + pendingPlaces[panel]))
         if (pendingBar) lines.push("Rearrange the menu bar")
         if (pendingWidgets) lines.push("Show " + pendingWidgets.map(w => (desktopWidgets.find(d => d.id === w) || { name: w }).name).join(", "))
+        if (pendingWorkspaces !== null) lines.push(pendingWorkspaces === "all" ? "Show the widgets on every workspace"
+            : "Show the widgets on workspace" + (pendingWorkspaces.length > 1 ? "s " : " ") + pendingWorkspaces.join(", ") + " only")
         if (pendingSwitchTo) lines.push("Switch to " + pendingSwitchTo + " first")
         return lines
     }
@@ -236,6 +238,21 @@ Window {
         pendingWidgets = JSON.stringify(next) === JSON.stringify(widgetsNow) ? null : next
     }
 
+    // The workspaces the widgets show on: "all", or their numbers; waiting for
+    // Apply, or null while unchanged. An older theme reports none: all.
+    readonly property var workspacesNow: status["widget-workspaces"] || "all"
+    property var pendingWorkspaces: null
+    readonly property var workspacesShown: pendingWorkspaces !== null ? pendingWorkspaces : workspacesNow
+    function markWorkspaces(next) {
+        pendingWorkspaces = JSON.stringify(next) === JSON.stringify(workspacesNow) ? null : next
+    }
+    // One workspace in or out of the list, kept in order, never down to none.
+    function toggleWorkspace(n) {
+        const list = Array.isArray(workspacesShown) ? workspacesShown : []
+        const next = list.includes(n) ? list.filter(w => w !== n) : list.concat([n]).sort((a, b) => a - b)
+        if (next.length > 0) markWorkspaces(next)
+    }
+
     // Where the volume and dictation panels show ("bottom" or "top"), and
     // the places waiting for Apply. An older theme reports none: bottom.
     property var pendingPlaces: ({})
@@ -258,19 +275,20 @@ Window {
     // stops waiting; the rest stay marked.
     function forgetMet() {
         const left = Pending.forgetMet(
-            { pieces: pendingPieces, settings: pendingSettings, places: pendingPlaces, bar: pendingBar, widgets: pendingWidgets },
-            { installed: installed, setting: key => (status.settings || {})[key], place: placeNow, bar: barNow, widgets: widgetsNow })
+            { pieces: pendingPieces, settings: pendingSettings, places: pendingPlaces, bar: pendingBar, widgets: pendingWidgets, workspaces: pendingWorkspaces },
+            { installed: installed, setting: key => (status.settings || {})[key], place: placeNow, bar: barNow, widgets: widgetsNow, workspaces: workspacesNow })
         if (left.pieces !== pendingPieces) pendingPieces = left.pieces
         if (left.settings !== pendingSettings) pendingSettings = left.settings
         if (left.places !== pendingPlaces) pendingPlaces = left.places
         if (left.bar !== pendingBar) pendingBar = left.bar
         if (left.widgets !== pendingWidgets) pendingWidgets = left.widgets
+        if (left.workspaces !== pendingWorkspaces) pendingWorkspaces = left.workspaces
     }
     onStatusChanged: forgetMet()
     onBarNowChanged: forgetMet()
 
     readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
-        + Object.keys(pendingPlaces).length + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0)
+        + Object.keys(pendingPlaces).length + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0) + (pendingWorkspaces !== null ? 1 : 0)
 
 
     property bool applying: false
@@ -335,6 +353,7 @@ Window {
     function revert() {
         pendingBar = null
         pendingWidgets = null
+        pendingWorkspaces = null
         pendingSwitchTo = null
         pendingPieces = {}
         pendingSettings = {}
@@ -484,6 +503,7 @@ Window {
         if (needsSwitchTo && pendingSwitchTo) changes.switchTo = pendingSwitchTo
         if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
         if (pendingWidgets) changes.widgets = pendingWidgets
+        if (pendingWorkspaces !== null) changes.widgetWorkspaces = pendingWorkspaces
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
         applying = true
         backend.apply(JSON.stringify(changes))
@@ -1346,6 +1366,47 @@ Window {
                                 reason: !window.pieceOn("widgets") ? window.why("widgets")
                                     : shown && window.widgetsShown.length === 1 ? "One widget always stays shown" : ""
                                 onToggled: on => window.markWidget(modelData.id, on)
+                            }
+                        }
+                    }
+                }
+
+                // Which workspaces show them: every one, or the ones chosen.
+                Group {
+                    title: "Workspaces"
+                    visible: window.widgetsNow !== null && window.status["widget-workspaces"] !== undefined
+                    SettingRow {
+                        label: "Show On"
+                        note: "The widgets show behind your windows on every workspace, or only on the ones you choose"
+                        last: !Array.isArray(window.workspacesShown)
+                        MacSegmented {
+                            readonly property bool changed: window.pendingWorkspaces !== null
+                            options: [{ value: "all", label: "All Workspaces" }, { value: "some", label: "Some" }]
+                            value: Array.isArray(window.workspacesShown) ? "some" : "all"
+                            enabled: !backend.busy && window.pieceOn("widgets")
+                            reason: window.pieceOn("widgets") ? "" : window.why("widgets")
+                            onPicked: v => window.markWorkspaces(v === "all" ? "all"
+                                : Array.isArray(window.workspacesNow) ? window.workspacesNow : [1])
+                        }
+                    }
+                    SettingRow {
+                        visible: Array.isArray(window.workspacesShown)
+                        label: "Workspaces"
+                        note: "Click to add or take one away; one always stays"
+                        last: true
+                        Row {
+                            spacing: 4
+                            Repeater {
+                                model: 10
+                                MacButton {
+                                    required property int index
+                                    readonly property int number: index + 1
+                                    text: String(number)
+                                    primary: Array.isArray(window.workspacesShown) && window.workspacesShown.includes(number)
+                                    enabled: !backend.busy && window.pieceOn("widgets")
+                                    Accessible.name: "Workspace " + number + (primary ? ", widgets show" : "")
+                                    onClicked: window.toggleWorkspace(number)
+                                }
                             }
                         }
                     }

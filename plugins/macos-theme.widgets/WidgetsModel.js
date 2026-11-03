@@ -206,6 +206,14 @@ function add(layout, id, cols, rows, known) {
   return cell ? layout.concat([{ id: id, col: cell.col, row: cell.row }]) : layout
 }
 
+// Whether the widgets show on a workspace (its number): on every one, unless
+// shell.json's widgets.workspaces lists some ([1, 2]); "all", an empty list or
+// anything else is every one, so they can't end up shown nowhere.
+function showsOn(workspaces, id) {
+  if (!Array.isArray(workspaces) || workspaces.length === 0) return true
+  return workspaces.indexOf(Number(id)) >= 0
+}
+
 // The cell nearest a position, kept on the grid.
 function snap(x, y, cell, cols, rows) {
   return {
@@ -214,4 +222,4 @@ function snap(x, y, cell, cols, rows) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, fitLayout: fitLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap }
+if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, fitLayout: fitLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap, showsOn: showsOn }

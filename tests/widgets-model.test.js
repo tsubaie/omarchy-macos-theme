@@ -119,4 +119,12 @@ assert.match(m.forecastUrl(1, 2), /sunrise,sunset.*timeformat=unixtime/)
   assert.deepStrictEqual(m.add([{ id: "clock", col: 0, row: 0 }], "my-quotes", 4, 4), [{ id: "clock", col: 0, row: 0 }])
 }
 
+// Which workspaces show the widgets: all unless some are named; never none.
+assert.strictEqual(m.showsOn(undefined, 3), true)
+assert.strictEqual(m.showsOn("all", 3), true)
+assert.strictEqual(m.showsOn([], 3), true)
+assert.strictEqual(m.showsOn([1, 2], 1), true)
+assert.strictEqual(m.showsOn([1, 2], 3), false)
+assert.strictEqual(m.showsOn([1, 2], "2"), true)
+
 console.log("widgets model: ok")

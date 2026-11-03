@@ -49,7 +49,8 @@ cd omarchy-macos-theme
 | `--set dock-previews=0` | No window previews over dock icons on hover; 1 (on) is the default |
 | `--set title-bars=<0\|1>` | Turn the title bars with traffic lights off (0) or on (1, the theme's) |
 | `--set traffic-lights=<10-20>` | How big the traffic lights are, in points; the bar grows to fit; 14 by default |
-| `--show-widgets <list>` | Which desktop widgets show, comma-separated: `clock`, `calendar`, `weather`, `playing`; at least one |
+| `--show-widgets <list>` | Which desktop widgets show, comma-separated: `clock`, `calendar`, `weather`, `playing`, or one of your own; at least one |
+| `--widget-workspaces <all\|1,2>` | Which workspaces show the desktop widgets: every one (`all`, the default) or only those |
 | `--preview --set <setting>` | Show a setting at once without keeping it, for a slider being dragged: no backup, no theme reload; `glass`, `web-glass`, `blur`, `snapping`, `drop-follow`, `title-bars`, `traffic-lights`, `magnification` and `dock-size`. The next Apply (or theme refresh) replaces it |
 | `--doctor` | What the running shell logged against the theme's plugins; exits 1 if anything |
 | `--backups [--json]` | The backups, newest first. One is taken by itself before every change; the last 10 are kept, and the first one for good |
@@ -194,7 +195,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
   - **Weather**: the place, temperature, sky, and today's high and low, over a moving scene of the weather outside: a sun or a moon and stars, clouds, rain, snow, fog, lightning, and wind streaks when it blows, with a warm sky at sunrise and sunset. It uses the place you gave Omarchy's weather, or Omarchy's own lookup of your city, and [Open-Meteo](https://open-meteo.com), every 15 minutes; °F only where it is the custom.
   - **Now Playing**: the artwork, song and artist, with previous, play/pause and next, from Omarchy's media service.
 - **Drag a widget** to move it: it snaps to a grid, and dropping it on another widget swaps the two. **Right-click a widget** to remove it, or to add back one you removed. Where they sit is saved in `~/.config/omarchy/shell.json` (`widgets.layout`).
-- They show on your first screen. To pick another, add `"widgets": { "screen": "HDMI-A-1" }` to `~/.config/omarchy/shell.json`, with a name from `hyprctl monitors`; they move right away.
+- They show on your first screen. To pick another, add `"widgets": { "screen": "HDMI-A-1" }` to `~/.config/omarchy/shell.json`, with a name from `hyprctl monitors`; they move right away. They show on every workspace, or only on the ones you choose: `--widget-workspaces 1,2`, or **Show On** in Studio.
 - **Widgets of your own**: a folder in `~/.config/omarchy/macos-theme-widgets/`, named for the widget (`my-quotes`), with a `Widget.qml` and an optional `manifest.json` naming it. Right-click a widget › **Add** shows it, as Studio's Widgets page does, and it drags like the others. [docs/make-a-widget/SKILL.md](docs/make-a-widget/SKILL.md) says how to make one, and works as a prompt for any AI agent: Studio's **Copy Prompt** puts one on the clipboard. An example: [docs/make-a-widget/example/uptime](docs/make-a-widget/example/uptime). A widget runs inside the shell with your account's rights, so only add ones you made or have read.
 
 ### Lock screen (`--lock`)

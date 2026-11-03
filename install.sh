@@ -49,7 +49,9 @@
 #                                  settings change in place until Apply, glass reloads
 #                                  Hyprland
 #   ./install.sh --show-widgets clock,weather  which desktop widgets show (clock, calendar,
-#                                 weather, playing); at least one
+#                                 weather, playing, or one of yours); at least one
+#   ./install.sh --widget-workspaces 1,2  show the desktop widgets on those workspaces only
+#                                 (all: on every one, the default)
 #   ./install.sh --switch-to "Tokyo Night" --uninstall  remove all of it, switching to
 #                                 that theme first if the macOS theme is current
 #
@@ -141,7 +143,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false preview=false legacy=false uninstall=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets="" new_backgrounds=()
+status=false json=false preview=false legacy=false uninstall=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets="" widget_workspaces="" new_backgrounds=()
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -198,6 +200,11 @@ while (( $# )); do
         [[ " $DESKTOP_WIDGETS " == *" $w "* ]] || custom_widget "$w" ||
           { echo "Unknown widget: $w (one of: ${DESKTOP_WIDGETS// /, }, or one of yours in $CUSTOM_WIDGETS_DIR)" >&2; exit 1; }
       done
+      shift ;;
+    --widget-workspaces)
+      widget_workspaces=${2:-}
+      [[ $widget_workspaces =~ ^(all|[1-9][0-9]*(,[1-9][0-9]*)*)$ ]] ||
+        { echo "--widget-workspaces needs all, or workspace numbers like 1,2" >&2; exit 1; }
       shift ;;
     --backup) mode=backup ;;
     --restore-original) mode=restore-original ;;
@@ -513,6 +520,10 @@ shown_widgets() {
     | if length == 0 then $own | split(" ") else [$all[] as $id | select(index($id)) | $id] end' 2>/dev/null ||
     jq -cn --arg all "$DESKTOP_WIDGETS" '$all | split(" ")'
 }
+# The workspaces the widgets show on: "all", or their numbers as a JSON list.
+widget_workspaces() {
+  jq -c '.widgets.workspaces | if type == "array" and length > 0 then . else "all" end' "$SHELL_JSON" 2>/dev/null || echo '"all"'
+}
 # Your own widgets, as [{id, name}]: the name from its manifest.json, else its id.
 custom_widgets() {
   local d id name
@@ -627,8 +638,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"custom-widgets":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(custom_widgets)" \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"custom-widgets":%s,"widget-workspaces":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(custom_widgets)" "$(widget_workspaces)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
       "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
       "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"
@@ -936,7 +947,7 @@ done
 
 # Every change can be undone: a snapshot of how things are, first.
 snap=""
-if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]]; then
+if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets$widget_workspaces ]]; then
   take_lock
   [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snap=$(snapshot_take "$(describe_changes)")
 fi
@@ -974,7 +985,7 @@ if (( ${#remove[@]} )); then
     say "The macOS theme is gone, and what it replaced is back.${snap:+ Undo it with: ./install.sh --restore $snap, then ./install.sh --add icons}"
     say "Its backups stay in $BACKUP_DIR; delete the folder if you won't want them."
   fi
-  (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]] || exit 0
+  (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets$widget_workspaces ]] || exit 0
 fi
 
 want() { [[ -n ${add[$1]:-} ]]; }
@@ -1272,6 +1283,13 @@ done
 if [[ -n $show_widgets ]]; then
   set_shown_widgets "$show_widgets"
   say "Showing the desktop widgets: ${show_widgets//,/, }"
+fi
+if [[ $widget_workspaces == all ]]; then
+  shell_write 'del(.widgets.workspaces)'
+  say "Showing the desktop widgets on every workspace"
+elif [[ -n $widget_workspaces ]]; then
+  shell_set '.widgets.workspaces' "[$widget_workspaces]"
+  say "Showing the desktop widgets on workspaces ${widget_workspaces//,/, } only"
 fi
 
 # 5. Apply: refresh the active theme in place, or switch to it when it was asked for.

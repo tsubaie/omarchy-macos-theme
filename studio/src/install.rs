@@ -137,6 +137,10 @@ pub struct Status {
     /// Your own desktop widgets, as `{id, name}`. Older themes don't report them.
     #[serde(default, rename = "custom-widgets")]
     pub custom_widgets: Vec<serde_json::Value>,
+    /// The workspaces the desktop widgets show on: "all" or their numbers.
+    /// Older themes don't report it.
+    #[serde(default, rename = "widget-workspaces")]
+    pub widget_workspaces: Option<serde_json::Value>,
     /// Where the volume panel shows: "bottom" or "top". Older themes don't
     /// report it.
     #[serde(default, rename = "volume-hud")]
@@ -342,7 +346,23 @@ pub struct Changes {
     places: Vec<(&'static str, &'static str)>,
     bar: Option<BarLayout>,
     widgets: Option<Vec<String>>,
+    /// Where the desktop widgets show, as `--widget-workspaces` takes it.
+    widget_workspaces: Option<String>,
     switch_to: Option<String>,
+}
+
+/// Checks where the widgets show: "all", or workspace numbers (1 and up), as
+/// `--widget-workspaces` takes them: `all` or `1,2`.
+fn widget_workspaces(value: serde_json::Value) -> Result<String> {
+    match value {
+        serde_json::Value::String(all) if all == "all" => Ok(all),
+        serde_json::Value::Array(list) if !list.is_empty() => list
+            .iter()
+            .map(|n| n.as_u64().filter(|n| *n >= 1).map(|n| n.to_string()).with_context(|| format!("not a workspace: {n}")))
+            .collect::<Result<Vec<_>>>()
+            .map(|numbers| numbers.join(",")),
+        other => bail!("the desktop widgets can't show on {other}"),
+    }
 }
 
 /// The changes as the window sends them, before they are checked.
@@ -362,6 +382,8 @@ struct RawChanges {
     bar: Option<BarLayout>,
     #[serde(default)]
     widgets: Option<Vec<String>>,
+    #[serde(default, rename = "widgetWorkspaces")]
+    widget_workspaces: Option<serde_json::Value>,
     /// The theme to switch to first, when the current one is removed.
     #[serde(default, rename = "switchTo")]
     switch_to: Option<String>,
@@ -427,6 +449,7 @@ impl Changes {
                 .collect::<Result<_>>()?,
             bar: raw.bar.map(BarLayout::check).transpose()?,
             widgets: raw.widgets.map(shown_widgets).transpose()?,
+            widget_workspaces: raw.widget_workspaces.map(widget_workspaces).transpose()?,
             switch_to: raw.switch_to.map(theme_name).transpose()?,
         };
         if let Some(piece) = changes
@@ -448,6 +471,7 @@ impl Changes {
             && self.places.is_empty()
             && self.bar.is_none()
             && self.widgets.is_none()
+            && self.widget_workspaces.is_none()
     }
 
     /// The arguments for one `install.sh` call.
@@ -477,6 +501,9 @@ impl Changes {
         }
         if let Some(widgets) = &self.widgets {
             args.extend(["--show-widgets".to_owned(), widgets.join(",")]);
+        }
+        if let Some(workspaces) = &self.widget_workspaces {
+            args.extend(["--widget-workspaces".to_owned(), workspaces.clone()]);
         }
         Ok(args)
     }
@@ -1325,6 +1352,16 @@ mod tests {
         let custom = parse_status(r#"{"active":true,"features":{},"settings":{},"custom-widgets":[{"id":"my-quotes","name":"Quotes"}]}"#)
             .expect("valid");
         assert_eq!(custom.custom_widgets.len(), 1);
+
+        // Where they show: all, or workspace numbers; nothing else reaches install.sh.
+        let some = Changes::from_json(r#"{"widgetWorkspaces":[1,3]}"#).expect("some");
+        assert_eq!(some.args().expect("args"), ["--widget-workspaces", "1,3"]);
+        assert!(!some.is_empty());
+        let all = Changes::from_json(r#"{"widgetWorkspaces":"all"}"#).expect("all");
+        assert_eq!(all.args().expect("args"), ["--widget-workspaces", "all"]);
+        for bad in [r#""some""#, "[]", "[0]", "[-1]", "[1.5]", r#"["1"]"#, "3"] {
+            assert!(Changes::from_json(&format!(r#"{{"widgetWorkspaces":{bad}}}"#)).is_err(), "{bad}");
+        }
         let status =
             parse_status(r#"{"active":true,"features":{},"settings":{},"widgets":["weather"]}"#)
                 .expect("valid");

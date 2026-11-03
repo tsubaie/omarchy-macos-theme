@@ -311,6 +311,17 @@ try {
   assert.strictEqual(ownShown.status, 0, ownShown.stderr)
   assert.deepStrictEqual(status().widgets, ["clock", "uptime"])
   for (const bad of ["clock,no-widget", "clock,Bad Name", "clock,../uptime"]) assert.strictEqual(run("--show-widgets", bad).status, 1, bad)
+  // Which workspaces show them: all by default, then only the named ones, then
+  // all again, without touching the widgets shown; bad lists refused.
+  assert.strictEqual(status()["widget-workspaces"], "all")
+  const some = run("--widget-workspaces", "1,3")
+  assert.strictEqual(some.status, 0, some.stderr)
+  assert.deepStrictEqual(status()["widget-workspaces"], [1, 3])
+  assert.deepStrictEqual(status().widgets, ["clock", "uptime"])
+  assert.strictEqual(run("--widget-workspaces", "all").status, 0)
+  assert.strictEqual(status()["widget-workspaces"], "all")
+  assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).widgets.workspaces, undefined)
+  for (const bad of ["", "0", "1,", "1;2", "one", "-1"]) assert.strictEqual(run("--widget-workspaces", bad).status, 1, bad)
   // Its folder gone, it's no longer shown; the theme's own stay.
   fs.rmSync(path.join(own, "uptime"), { recursive: true })
   assert.deepStrictEqual(status().widgets, ["clock"])
