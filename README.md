@@ -27,7 +27,7 @@ cd omarchy-macos-theme
 | `--lock` | The macOS lock screen |
 | `--widgets` | Desktop widgets: clock, calendar, weather and now playing |
 | `--all` | All of the above |
-| `--uninstall` | Undo everything (switch to another theme first) |
+| `--uninstall` | Undo everything; with `--switch-to <theme>` too while the macOS theme is current |
 | `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `bar-icons`, `lock` or `widgets` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
@@ -44,6 +44,12 @@ cd omarchy-macos-theme
 | `--set dictation-hud=<bottom\|top>` | The same for the dictation panel |
 | `--set blur=<0-20>` | How strong the frosted blur is behind see-through windows, menus, the bar and the dock; 0 turns it off (they stay see-through), the theme's own is 10 |
 | `--set magnification=<1-2>` | How far dock icons grow under the pointer; 1 turns it off, the theme's own is 1.75 |
+| `--set dock-size=<32-80>` | How big the dock's icons are, in points; 48 by default |
+| `--set title-bars=<0\|1>` | Turn the title bars with traffic lights off (0) or on (1, the theme's) |
+| `--set traffic-lights=<10-20>` | How big the traffic lights are, in points; the bar grows to fit; 14 by default |
+| `--show-widgets <list>` | Which desktop widgets show, comma-separated: `clock`, `calendar`, `weather`, `playing`; at least one |
+| `--preview --set <setting>` | Show a setting at once without keeping it, for a slider being dragged: no backup, no theme reload; `glass`, `web-glass`, `blur`, `snapping`, `drop-follow`, `title-bars`, `traffic-lights`, `magnification` and `dock-size`. The next Apply (or theme refresh) replaces it |
+| `--doctor` | What the running shell logged against the theme's plugins; exits 1 if anything |
 | `--backups [--json]` | The backups, newest first. One is taken by itself before every change; the last 10 are kept, and the first one for good |
 | `--backup` | Take a backup now |
 | `--restore <id>` | Put a backup back (your setup now is backed up first, so it can be undone) |
@@ -104,7 +110,7 @@ Omarchy's dock, which appears on floating workspaces, reworked to behave like th
 
 - A borderless frosted platter with 48px icons, and the app's name on hover.
 - **Window previews**: hover an open app for a moment and live pictures of its windows appear above it, each with its title (dimmed when minimized). Moving to another app switches to its windows; click one to bring it forward.
-- **Magnification** like macOS: icons near the pointer grow (up to 1.75×) and their neighbors slide aside, with the platter stretching to fit. Change `magnifyPeak` in `DockWindow.qml` for more or less.
+- **Magnification** like macOS: icons near the pointer grow (up to 1.75×) and their neighbors slide aside, with the platter stretching to fit. Set how far with `--set magnification=<1-2>` (1 turns it off) and the icons' size with `--set dock-size=<32-80>`, or on Studio's Dock page.
 - **Pinned apps on the left.** Running apps that aren't pinned sit to the right of a divider, minimized or not.
 - **A dot under every running app.** Pins survive restarts.
 - **Right-click an app** for a macOS-style menu: its open windows, New Window, Options › Keep in Dock, and Quit.
@@ -150,6 +156,7 @@ The bar as macOS Tahoe draws it:
 - **Inter** for the shell's text (bar, popups, notifications), as macOS uses one sans serif throughout; terminals keep their own font. The bar is 24px tall, as the macOS menu bar is.
 - **The focused app's name in bold** right after the menu button, the way macOS shows it next to the Apple menu.
 - **Control Center**: one icon by the clock, laid out as macOS has it on the glass of your windows (it follows the Glass setting): Wi-Fi and Bluetooth beside what is playing, with its controls; AirDrop, Tailscale, Focus (Do Not Disturb), Display and Power; then brightness and sound sliders. AirDrop works through [Omdrop](https://github.com/netmojo-systems/omdrop-plugin), AirDrop for Omarchy, which waits unseen in the tray's drawer as the other widgets Control Center stands in for; its icon turns AirDrop on or off and the rest of it opens Omdrop's own window; without it, AirDrop's switch says "Not Installed · Get Omdrop" and opens its page. A click on a switch's round icon turns it on or off; anywhere else on it opens Omarchy's own panel, on the monitor you clicked. Power opens in place to Lock, Log Out, Restart and Shut Down, the last three on a second click. The widgets it stands in for stay on the bar, unseen, which keeps their panels working and their updates coming; only those you have on the bar show in it.
+- **The keyboard**: when Control Center opens it takes the keyboard. Tab moves through it, Space flips a switch or plays and pauses, Return opens a switch's panel, the arrows move a slider or skip a track, and Esc closes it. Screen readers get each part's name and state.
 - **Camera and microphone in use**: a green and an orange dot by Control Center while an app has the camera or the microphone, and its name at the top of Control Center (for two minutes after, "recently").
 - **A soft shade** behind the see-through bar, as Tahoe has, so it reads on any wallpaper.
 - **Workspaces you click to go to**: a click goes to a workspace, and a click on the one you're on, or a right-click on any, opens its menu, as a macOS menu-bar item's: Tiling, Scrolling or Floating, each with an icon that maps its windows (Icons8), with a check by the one it has, set without going there, and an item to make it the layout of new workspaces. The workspace you're on shows its layout's icon on a soft light pill, as macOS lights an open menu-bar item. Super+L still cycles the shown one's. (Omarchy's own cycles the layout on a click on the shown workspace.)
@@ -242,11 +249,11 @@ Each run takes a snapshot first (see [Backups](#backups)). A removed theme folde
 ## Uninstall
 
 ```bash
-omarchy theme set catppuccin   # or any other theme
-./install.sh --uninstall
+./install.sh --switch-to "Tokyo Night" --uninstall   # or any other theme you have
+./install.sh --switch-to "Tokyo Night" --uninstall --remove icons   # the MacTahoe icons too
 ```
 
-This removes the theme and plugins, turns Omarchy's dock, on-screen display and menu back on, and takes out the lines added to `looknfeel.lua` and `gtk.css`. MacTahoe icons stay installed; the script prints how to remove them.
+`--switch-to` is needed only while the macOS theme is the current one. This removes the theme, its plugins and its clones of Omarchy's menu, lock and workspaces, and turns back on what stood in their place before the theme: Omarchy's own dock, on-screen display, menu and lock, or a clone of your own, or nothing where you had turned it off. The bar goes back to how it was before the menu bar. The lines added to `looknfeel.lua` and `gtk.css`, and the lock screen's update hook, come out. The theme folder is kept in `~/.config/omarchy/macos-theme-backups/`, wallpapers of yours included, and every backup stays, so the uninstall can be undone with `--restore`. MacTahoe icons stay unless you add `--remove icons`, and only icons the theme installed are removed.
 
 ## Customize
 
@@ -262,8 +269,8 @@ Bar, menu, launcher, notification and popup colors and transparency are in `shel
 ## Good to know
 
 - Needs Omarchy 4 (Lua Hyprland config). The title bars use the plugin Omarchy ships for floating workspaces.
-- The dock appears on floating workspaces, as Omarchy's does. Click the current workspace in the bar (or press Super+L) to change a workspace's layout.
-- Title bars fade with their window, so on glass windows they are about 70% opaque. Hyprland fades a window as a whole.
+- The dock appears on floating workspaces, as Omarchy's does. Press Super+L, or with the menu bar right-click a workspace in the bar, to change a workspace's layout.
+- Title bars fade with their window, so on a window you aren't using they are as see-through as the Glass setting (85% by default). Hyprland fades a window as a whole.
 - Apps that draw their own title bar (like Brave or Files) show the macOS strip above it.
 
 ## Tests
