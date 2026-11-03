@@ -29,11 +29,24 @@ fi
 binary="$repo/target/release/$id"
 [[ -x $binary ]] || { echo "Build it first: cargo build --release" >&2; exit 1; }
 
-exec_line=$binary
+# One argument of Exec=, quoted as the Desktop Entry spec asks: in double
+# quotes with " ` $ and \ escaped, every \ then doubled again for the file's
+# own escaping, and % written %%.
+quote() {
+  local s=${1//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//\`/\\\`}
+  s=${s//\$/\\\$}
+  s=${s//\\/\\\\}
+  s=${s//%/%%}
+  printf '"%s"' "$s"
+}
+
+exec_line=$(quote "$binary")
 if [[ -n ${1:-} ]]; then
   theme=$(cd "$1" && pwd) || { echo "No folder $1" >&2; exit 1; }
   [[ -f $theme/install.sh ]] || { echo "$theme has no install.sh; is it the theme?" >&2; exit 1; }
-  exec_line="env OMARCHY_MACOS_THEME_DIR=$theme $binary"
+  exec_line="env $(quote "OMARCHY_MACOS_THEME_DIR=$theme") $exec_line"
 fi
 
 mkdir -p "$(dirname "$entry")" "$(dirname "$icon")"

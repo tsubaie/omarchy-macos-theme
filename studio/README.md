@@ -239,8 +239,10 @@ The app follows Apple's [Human Interface Guidelines](https://developer.apple.com
 | What you see | Why, and what to do |
 |---|---|
 | "Switch to another theme first" | The macOS theme can't be removed while it is the current theme. Run `omarchy theme set <another theme>`, then apply again. |
-| Download fails | The app clones from GitHub with git; check that git is installed and you are online. |
+| Download fails | The app clones from GitHub with git; check that git is installed and you are online. A download cut short leaves nothing half done; try again. |
+| "Couldn't check for updates" | GitHub didn't answer within 30 seconds, or you're offline. Everything else works meanwhile; **Check Again** asks once more. |
 | Update stops with a git message | The theme folder has changes of its own that can't be fast-forwarded. Commit or discard them in `~/.local/share/omarchy-macos-theme`, then update again. |
+| Update is still offered after one failed | It downloaded the new version but couldn't install it; the error says why. **Update** installs it again once that is fixed. |
 | Backups is empty | The theme is older than its backups feature; updating it brings backups. |
 | The window doesn't look like the screenshots | The macOS theme isn't the current Omarchy theme, or the Inter font is missing (`sudo pacman -S inter-font`). |
 | The build can't find Qt | Set `QMAKE=qmake6` (or the path to your `qmake`) before `cargo build`. |

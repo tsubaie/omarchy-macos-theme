@@ -11,6 +11,11 @@ use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 const MAIN_QML: &str = "qrc:/qt/qml/org/omarchy/macosstudio/qml/Main.qml";
 
 fn main() {
+    if let Err(error) = install::theme_dir() {
+        eprintln!("macOS Theme Studio: {error:#}");
+        std::process::exit(1);
+    }
+
     let mut app = QGuiApplication::new();
     if let Some(mut app) = app.as_mut() {
         app.as_mut()
@@ -30,7 +35,16 @@ fn main() {
     window::hide_title_bar();
 
     let mut engine = QQmlApplicationEngine::new();
-    if let Some(engine) = engine.as_mut() {
+    if let Some(mut engine) = engine.as_mut() {
+        // A window that fails to load leaves nothing on screen: say why and
+        // stop, rather than run on unseen.
+        engine
+            .as_mut()
+            .on_object_creation_failed(|_, url| {
+                eprintln!("macOS Theme Studio: the window failed to load ({url})");
+                std::process::exit(1);
+            })
+            .release();
         engine.load(&QUrl::from(MAIN_QML));
     }
 
