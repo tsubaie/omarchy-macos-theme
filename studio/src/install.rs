@@ -631,12 +631,38 @@ pub fn update_studio(dir: &Path) -> Result<Warnings> {
     if !dir.join("studio/get.sh").is_file() {
         bail!("Update the theme first: this copy of it is too old to update Studio");
     }
-    // get.sh says what it is doing in plain lines; curl's progress bar goes to stderr.
-    run_script(dir, "studio/get.sh", &[], |line| {
-        let line = line.trim();
-        (!line.is_empty()).then(|| line.to_owned())
-    })
+    // get.sh says what it is doing in plain lines, and curl how far the
+    // download is, on stderr.
+    run_script(
+        dir,
+        "studio/get.sh",
+        &[],
+        |line| {
+            let line = line.trim();
+            (!line.is_empty()).then(|| line.to_owned())
+        },
+        Some(curl_progress),
+    )
     .map(|ran| ran.warnings)
+}
+
+/// How far curl's download is, from its progress bar ("####   45.2%"):
+/// "Downloading Studio… 45%".
+fn curl_progress(line: &str) -> Option<String> {
+    let percent: f64 = line.trim().strip_suffix('%')?.rsplit([' ', '#']).next()?.parse().ok()?;
+    Some(format!("Downloading Studio… {}%", percent.floor()))
+}
+
+/// Undoes a theme update: puts back the backup it took, and leaves the update
+/// offered, since its new files are still here, to apply again later.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when the restore does.
+pub fn undo_update(dir: &Path, id: &str) -> Result<Warnings> {
+    let warnings = restore(dir, id)?;
+    let _ = std::fs::write(needs_install(dir), "");
+    Ok(warnings)
 }
 
 /// Where Omarchy is installed: `$OMARCHY_PATH`, else `/usr/share/omarchy`.
@@ -813,15 +839,17 @@ struct Ran {
 /// Runs `install.sh`. It writes what it did to stdout, and warnings and
 /// errors to stderr, so stderr on success is its warnings.
 fn run(dir: &Path, args: &[&str]) -> Result<Ran> {
-    run_script(dir, "install.sh", args, install_step)
+    run_script(dir, "install.sh", args, install_step, None)
 }
 
-/// Runs a script of the theme's, `install.sh` or `studio/get.sh`, the same way.
-fn run_script(dir: &Path, script: &str, args: &[&str], progress: Progress) -> Result<Ran> {
+/// Runs a script of the theme's, `install.sh` or `studio/get.sh`, the same
+/// way; what it is doing comes from its stdout, and from its stderr too when
+/// `progress_err` reads it.
+fn run_script(dir: &Path, script: &str, args: &[&str], progress: Progress, progress_err: Option<Progress>) -> Result<Ran> {
     let script = dir.join(script);
     let mut command = Command::new("bash");
     command.arg(&script).args(args).current_dir(dir);
-    let output = watched_output(command, Some(progress), None)
+    let output = watched_output(command, Some(progress), progress_err)
         .with_context(|| format!("running {}", script.display()))?;
     if !output.status.success() {
         let name = script.file_name().map_or_else(|| "it".into(), |n| n.to_string_lossy());
@@ -1208,6 +1236,24 @@ mod tests {
         assert_eq!(older.previous_theme, None);
         let status = parse_status(r#"{"active":true,"features":{},"settings":{},"previous-theme":"Nord"}"#).expect("valid");
         assert_eq!(status.previous_theme.as_deref(), Some("Nord"));
+    }
+
+    #[test]
+    fn curl_progress_reads_the_bar() {
+        assert_eq!(curl_progress("##########                          17.4%").as_deref(), Some("Downloading Studio… 17%"));
+        assert_eq!(curl_progress("######################################## 100.0%").as_deref(), Some("Downloading Studio… 100%"));
+        assert_eq!(curl_progress("#=#=#").as_deref(), None);
+        assert_eq!(curl_progress("Downloading macOS Theme Studio…").as_deref(), None);
+    }
+
+    #[test]
+    fn undoing_an_update_keeps_it_offered() {
+        let dir = env::temp_dir().join(format!("studio-undo-update-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".git")).expect("a folder");
+        // No install.sh here, so the restore fails and the update stays as it was.
+        assert!(undo_update(&dir, "20261103-160000").is_err());
+        assert!(!needs_install(&dir).exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

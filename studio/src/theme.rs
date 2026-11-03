@@ -86,6 +86,12 @@ pub mod qobject {
         #[qinvokable]
         fn download(self: Pin<&mut Self>);
 
+        /// Undoes a theme update: restores the backup it took, by its id, and
+        /// keeps the update offered.
+        #[qinvokable]
+        #[cxx_name = "undoUpdate"]
+        fn undo_update(self: Pin<&mut Self>, id: &QString);
+
         /// Puts Studio's newest release in place of this one.
         #[qinvokable]
         #[cxx_name = "updateStudio"]
@@ -314,6 +320,13 @@ impl qobject::ThemeBackend {
 
     pub fn download(self: Pin<&mut Self>) {
         self.run(install::download);
+    }
+
+    pub fn undo_update(self: Pin<&mut Self>, id: &QString) {
+        match install::backup_id(&id.to_string()) {
+            Ok(id) => self.run(move |dir| install::undo_update(dir, &id)),
+            Err(error) => self.set_error(QString::from(format!("{error:#}").as_str())),
+        }
     }
 
     pub fn update_studio(self: Pin<&mut Self>) {

@@ -63,6 +63,17 @@ Window {
         xhr.send()
     }
     Component.onCompleted: checkStudio()
+    // A window left open for days still hears of updates: both asked again
+    // every 6 hours, the theme not while an action is changing it.
+    Timer {
+        interval: 6 * 60 * 60 * 1000
+        repeat: true
+        running: true
+        onTriggered: {
+            if (!backend.busy) backend.checkTheme()
+            window.checkStudio()
+        }
+    }
     Connections {
         target: backend
         function onCheckingChanged() { if (!backend.checking) window.themeCheckedAt = new Date() }
@@ -302,7 +313,7 @@ Window {
         const n = Number(actionDetail)
         switch (action) {
         case "apply": return n === 1 ? "Applied 1 change." : "Applied " + n + " changes."
-        case "update": return "Updated the theme" + (backend.themeVersion ? " to " + backend.themeVersion : "") + "."
+        case "update": return "Updated the theme" + (backend.themeVersion ? " to " + Labels.themeVersion(backend.themeVersion) : "") + "."
         case "backup": return "Backed up. It's first in the list below."
         case "restore": return "Restored the backup from " + actionDetail + ". Your setup before it is backed up too."
         case "export": return "Exported your setup to " + actionDetail + "."
@@ -335,7 +346,7 @@ Window {
     }
 
     // The actions whose done note offers Undo: the backup each took first.
-    readonly property var undoable: ["apply", "remove", "use"]
+    readonly property var undoable: ["apply", "remove", "use", "update"]
 
     // Install macOS Theme, or Use macOS Theme when it is installed but another
     // theme is current: install.sh puts the theme in (your settings kept)
@@ -635,10 +646,12 @@ Window {
                     }
 
                     Text {
+                        // An update for the theme or for Studio: About has both.
+                        readonly property bool hasUpdate: backend.updates > 0 || window.studioUpdate
                         text: !backend.downloaded ? "Not downloaded"
-                            : backend.updates > 0 ? "Update available"
+                            : hasUpdate ? "Update available"
                             : window.status.active ? "Current theme" : "Installed, not current"
-                        color: backend.updates > 0 ? "#0a84ff" : Qt.rgba(1, 1, 1, 0.55)
+                        color: hasUpdate ? "#0a84ff" : Qt.rgba(1, 1, 1, 0.55)
                         font.pixelSize: 11
                     }
                 }
@@ -852,8 +865,10 @@ Window {
                 actionText: window.undoBackup !== "" && window.undoable.includes(window.action) ? "Undo" : ""
                 onActed: {
                     const id = window.undoBackup
+                    // An update's undo also keeps the update offered, to apply again.
+                    const wasUpdate = window.action === "update"
                     window.start("undo")
-                    backend.restore(id)
+                    if (wasUpdate) backend.undoUpdate(id); else backend.restore(id)
                 }
                 onDismissed: window.notice = ""
             }
@@ -1386,7 +1401,7 @@ Window {
                     SettingRow {
                         label: "Theme"
                         // Its version, the commit and its date, says which one is here.
-                        readonly property string here: backend.themeVersion ? " You have " + backend.themeVersion + "." : ""
+                        readonly property string here: backend.themeVersion ? " You have " + Labels.themeVersion(backend.themeVersion) + "." : ""
                         note: backend.checking ? "Checking GitHub for new changes…"
                             : backend.updates > 0 ? (backend.updates === 1 ? "1 new change is ready." : backend.updates + " new changes are ready.")
                                 + " " + window.lastChecked(window.themeCheckedAt)
@@ -1404,7 +1419,12 @@ Window {
                                 text: "The newest version is downloaded and the pieces you use are installed again, after a backup you can restore. The theme reloads once."
                                     + (backend.updateNotes ? "\n\n" + Labels.whatsNew(backend.updateNotes) : "") + window.droppedNote(),
                                 button: "Update",
-                                action: () => { window.discard(); window.start("update"); backend.update() }
+                                action: () => {
+                                    window.discard()
+                                    window.start("update")
+                                    window.backupBeforeApply = window.backups.length > 0 ? window.backups[0].id : ""
+                                    backend.update()
+                                }
                             }
                         }
                     }

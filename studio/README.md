@@ -43,6 +43,8 @@ Made for Omarchy 4 and later. Open source, MIT.
 - **Updates.** The theme and Studio update separately, as they ship separately:
   - **The theme** follows `main`: when the app opens it asks GitHub whether the theme has new commits (ones that only change Studio don't count). If it has, the theme card in the sidebar and the About page say **Update available**, and **Update** brings the theme up to date.
   - **Studio** follows its [releases](https://github.com/tsubaie/omarchy-macos-theme/releases): when the app opens it asks for the newest one, and About's Studio row offers **Update Now**, which runs the theme's own `studio/get.sh` to put it in place. **Reopen** then opens the new one. A build from source says so and is never offered one.
+  - Either one waiting shows on the theme card at the top of the sidebar, in blue: **Update available**, whatever page is open. Both are asked again every 6 hours while the app stays open.
+  - The theme's row names its version by its date, "the 3 Nov 2026 version (de449a2)". After a theme update, **Undo** in the note restores the backup it took and keeps the update offered, to apply again later. While Studio updates, the toolbar shows how far its download is.
   - **Check Now**, on each one's row under Software Update, asks again about that one alone: the button says "Checking…" with a spinner, then the row says what it found and when.
 - **Before the theme is downloaded**, only About can be opened: the other pages, and search, wait for it.
 - **It reopens on the page you last used**, and the window's title follows the page, as in macOS.

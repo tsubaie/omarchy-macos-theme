@@ -66,7 +66,17 @@ function lastChecked(at, now) {
     return "Last checked " + day + " at " + two(at.getHours()) + ":" + two(at.getMinutes()) + "."
 }
 
+// The theme's version as git describes it, "de449a2, 2026-11-03" (or
+// "v1.2.0, 2026-11-03" once it has releases), by its date, as people say it:
+// "the 3 Nov 2026 version (de449a2)", "v1.2.0, from 3 Nov 2026".
+function themeVersion(version) {
+    var m = /^(.+), ([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(version || "")
+    if (!m) return version || ""
+    var date = Number(m[4]) + " " + MONTHS[Number(m[3]) - 1] + " " + m[2]
+    return /^v[0-9]/.test(m[1]) ? m[1] + ", from " + date : "the " + date + " version (" + m[1] + ")"
+}
+
 if (typeof module !== "undefined") module.exports = {
     piece: piece, setting: setting, backup: backup, whatsNew: whatsNew,
-    isRelease: isRelease, studioUpdate: studioUpdate, lastChecked: lastChecked
+    isRelease: isRelease, studioUpdate: studioUpdate, lastChecked: lastChecked, themeVersion: themeVersion
 }
