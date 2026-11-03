@@ -45,14 +45,14 @@ Item {
     }
   }
 
-  property real windowGlass: 0.7
+  property real windowGlass: 0.85
   FileView {
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
     blockLoading: true
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var m = /o\.window\("\.\*", \{ opacity = "([0-9.]+)/.exec(text())
+      var m = /o\.window\("\.\*", \{ opacity = "[0-9.]+ ([0-9.]+)/.exec(text())
       if (m) root.windowGlass = Math.max(0.3, Math.min(1, parseFloat(m[1])))
     }
     onFileChanged: reload()
@@ -101,7 +101,8 @@ Item {
       radius: height / 2
       x: root.atTop ? parent.width - width - Style.space(10) : Math.round((parent.width - width) / 2)
       y: root.atTop ? panel.barClear + Style.space(6) : parent.height - height - Style.space(96)
-      color: Util.alpha(Commons.Color.background, root.windowGlass * root.windowGlass * 0.5)
+      // Clearer than windows, as the volume capsule is, and as readable over a bright page.
+      color: Util.alpha(Commons.Color.background, Math.max(0.55, root.windowGlass * 0.8))
 
       Rectangle { anchors.fill: parent; radius: card.radius; color: Qt.rgba(1, 1, 1, 0.05) }
       Repeater {

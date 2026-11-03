@@ -18,7 +18,8 @@
 #   ./install.sh --add dock       only that piece, without the theme
 #   ./install.sh --remove dock    remove only that piece
 #   ./install.sh --status [--json]  which pieces are installed, and the settings
-#   ./install.sh --set glass=0.8  how solid windows are, 0.5 to 1 (1 is solid)
+#   ./install.sh --set glass=0.9  how solid the windows you aren't using are, 0.75 to 1
+#                                 (1 is solid; the one you are using always is)
 #   ./install.sh --set web-glass=0.9  the same for browsers, web apps and Electron apps
 #   ./install.sh --set snapping=0  turn off snapping windows to halves and corners (1: on)
 #   ./install.sh --set blur=15     how strong the frosted blur is, 0 (off) to 20; the theme's is 10
@@ -149,9 +150,9 @@ while (( $# )); do
       fi
       [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|snapping|drop-follow|title-bars|traffic-lights|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
         awk -v k="${BASH_REMATCH[1]}" -v v="${BASH_REMATCH[2]}" 'BEGIN {
-          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "snapping" || k == "drop-follow" || k == "title-bars" ? v == "0" || v == "1" : k == "traffic-lights" ? v ~ /^[0-9]+$/ && v >= 10 && v <= 20 : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : v >= 0.5 && v <= 1)
+          exit !(k == "magnification" ? v >= 1 && v <= 2 : k == "dock-size" ? v ~ /^[0-9]+$/ && v >= 32 && v <= 80 : k == "snapping" || k == "drop-follow" || k == "title-bars" ? v == "0" || v == "1" : k == "traffic-lights" ? v ~ /^[0-9]+$/ && v >= 10 && v <= 20 : k == "blur" ? v ~ /^[0-9]+$/ && v <= 20 : k == "glass" ? v >= 0.75 && v <= 1 : v >= 0.5 && v <= 1)
         }' ||
-        { echo "Unknown setting: ${2:-} (glass or web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, snapping, drop-follow or title-bars=0 or 1, traffic-lights=10 to 20, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
+        { echo "Unknown setting: ${2:-} (glass=0.75 to 1, web-glass=0.5 to 1, magnification=1 to 2, dock-size=32 to 80, snapping, drop-follow or title-bars=0 or 1, traffic-lights=10 to 20, blur=0 to 20, clock=left, center or right, volume-hud or dictation-hud=bottom or top)" >&2; exit 1; }
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
@@ -273,7 +274,8 @@ active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
 # shell.json, which the dock follows live.
 LOOK_SETTINGS="glass web-glass snapping drop-follow blur title-bars traffic-lights"
 declare -A LOOK_RULE=(
-  [glass]='^(o\.window\("\.\*", \{ opacity = ")([0-9.]+) [0-9.]+'
+  # The inactive one, the rule's second number: the active window is solid.
+  [glass]='^(o\.window\("\.\*", \{ opacity = ")[0-9.]+ ([0-9.]+)'
   [web-glass]='^(o\.window\("\^\(brave-browser\|[^"]*", \{ opacity = ")([0-9.]+) [0-9.]+'
   [snapping]='^(local SNAPPING = )([01])'
   [drop-follow]='^(local DROP_FOLLOW = )([01])'
@@ -281,20 +283,32 @@ declare -A LOOK_RULE=(
   [title-bars]='^(local TITLE_BARS = )([01])'
   [traffic-lights]='^(local LIGHTS = )([0-9]+)'
 )
-declare -A DEFAULT=([glass]=0.7 [web-glass]=1 [snapping]=1 [drop-follow]=1 [blur]=10 [title-bars]=1 [traffic-lights]=14 [magnification]=1.75)
+declare -A DEFAULT=([glass]=0.85 [web-glass]=1 [snapping]=1 [drop-follow]=1 [blur]=10 [title-bars]=1 [traffic-lights]=14 [magnification]=1.75)
 look_get() {
   local v
   v=$(sed -nE "s/${LOOK_RULE[$1]}.*/\2/p" "$THEME_DIR/look.lua" 2>/dev/null) || true
   echo "${v:-${DEFAULT[$1]}}"
 }
+# The least glass takes: below it, text in the windows behind fails contrast.
+GLASS_MIN=0.75
+# glass_floor <value>: raised to GLASS_MIN, for a value kept from a version
+# that let it go lower.
+glass_floor() { awk -v v="$1" -v m="$GLASS_MIN" 'BEGIN { print (v < m ? m : v) }'; }
 # look_set <setting> <value> [folder]: the theme folder, or another copy of it.
 look_set() {
-  local value="$2 $2" dir=${3:-$THEME_DIR}
-  [[ $1 == glass || $1 == web-glass ]] || value=$2
+  local v=$2 value dir=${3:-$THEME_DIR} s
+  [[ $1 == glass ]] && v=$(glass_floor "$v")
+  case $1 in
+    glass) value="1 $v" ;;
+    web-glass) value="$v $v" ;;
+    *) value=$v ;;
+  esac
   sed -i -E "s/${LOOK_RULE[$1]}/\1$value/" "$dir/look.lua"
-  # The menu bar's panels and popups take the windows' glass too.
-  [[ $1 == glass ]] && sed -i -E "/^\[popups\]/,/^\[/ s/^(background-alpha *= *).*/\1$2/" "$dir/shell.toml"
-  return 0
+  # The shell's panels, menus, launcher and notifications take the windows' glass too.
+  [[ $1 == glass ]] || return 0
+  for s in popups launcher menu notifications; do
+    sed -i -E "/^\[$s\]/,/^\[/ s/^(background-alpha *= *).*/\1$v/" "$dir/shell.toml"
+  done
 }
 magnification() {
   local m

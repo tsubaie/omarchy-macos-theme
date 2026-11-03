@@ -54,7 +54,7 @@ impl fmt::Display for Piece {
 /// The settings Studio sets, each with the range `install.sh --set` accepts
 /// and whether it takes whole numbers only (a switch, a size in points).
 const SETTINGS: [(&str, f64, f64, bool); 8] = [
-    ("glass", 0.5, 1.0, false),
+    ("glass", 0.75, 1.0, false),
     ("web-glass", 0.5, 1.0, false),
     ("magnification", 1.0, 2.0, false),
     ("dock-size", 32.0, 80.0, true),

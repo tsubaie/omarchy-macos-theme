@@ -30,10 +30,9 @@ Item {
   // blur (look.lua blurs this layer), without an edge, as Apple's HUDs have
   // none.
   readonly property color ink: Commons.Color.popups.text
-  // Apple's HUD glass is far clearer than its windows: the content behind
-  // shows through, lightened. Squared so the Glass setting still runs from
-  // nearly clear (0.5) to a solid-looking 1.
-  readonly property color glass: Util.alpha(Commons.Color.background, root.windowGlass * root.windowGlass * 0.5)
+  // Apple's HUD glass is clearer than its windows, but never so clear that
+  // the capsule's icon and steps get lost over a bright page.
+  readonly property color glass: Util.alpha(Commons.Color.background, Math.max(0.55, root.windowGlass * 0.8))
 
   // Liquid Glass's edge: a faint light along the top that fades out before
   // the middle (drawn in bands, each fainter), over a faint white sheen that
@@ -80,14 +79,14 @@ Item {
     }
   }
 
-  property real windowGlass: 0.7
+  property real windowGlass: 0.85
   FileView {
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
     blockLoading: true
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var m = /o\.window\("\.\*", \{ opacity = "([0-9.]+)/.exec(text())
+      var m = /o\.window\("\.\*", \{ opacity = "[0-9.]+ ([0-9.]+)/.exec(text())
       if (m) root.windowGlass = Math.max(0.3, Math.min(1, parseFloat(m[1])))
     }
     onFileChanged: reload()

@@ -42,14 +42,13 @@ hover-cursor-border       = "#f5f5f7"
 hover-cursor-border-width = 1
 hover-cursor-border-alpha = 0.25
 
-# Focus: Qt activeFocus. Mirror the hover-cursor values by default so
-# mouse hover, keyboard cursor, and tab focus all read as the same state
-# — themes that want focus to stand out override these four lines.
+# Focus: Qt activeFocus. Thicker and brighter than hover, so the keyboard's
+# place can be told from where the mouse is.
 focus-color        = "#f5f5f7"
 focus-fill-alpha   = 0.08
 focus-border       = "#f5f5f7"
-focus-border-width = 1
-focus-border-alpha = 0.25
+focus-border-width = 2
+focus-border-alpha = 0.7
 
 # Selected: persistent chosen/current state.
 selected-color        = "#f5f5f7"
@@ -123,8 +122,9 @@ base-size = 12
 # widths accept one CSS-style scalar/list: N, "Y X", "T X B", or "T R B L";
 # individual border-width-top/right/bottom/left keys override the list.
 background       = "#1c1c1e"
-# How see-through: the Glass setting writes it, as it does for windows.
-background-alpha = 0.7
+# How see-through: the Glass setting writes it, here and in [launcher], [menu]
+# and [notifications], as it does for windows (never below 0.75).
+background-alpha = 0.85
 text             = "#f5f5f7"
 # The volume capsule's edge: a faint light along the top that fades out by
 # the middle, no line along the sides or bottom. 2px: the gradient renderer
@@ -145,7 +145,7 @@ border-alpha     = 1.0
 [notifications]
 # The same borderless frosted glass as the dock, its menus and the switchers.
 background       = "#33333b"
-background-alpha = 0.45
+background-alpha = 0.85
 text             = "#f5f5f7"
 border           = "hyprland.active-border"
 border-alpha     = 0.0
@@ -158,14 +158,15 @@ countdown        = "#0a84ff"
 # dim layer behind the card; background is the card itself. Defaults
 # mirror [menu] with the card at 0.95 to preserve the legacy translucency.
 background                = "#33333b"
-background-alpha          = 0.5
+background-alpha          = 0.85
 text                      = "#f5f5f7"
 border                    = "hyprland.active-border-foreground"
 border-alpha              = 0.0
 scrim                     = "#1c1c1e"
 scrim-alpha               = 0.0
-selected-background       = "#0a84ff"
-selected-background-alpha = 0.9
+# A deeper blue than the system one, so white text on it reads on any backdrop.
+selected-background       = "#0064d1"
+selected-background-alpha = 1.0
 selected-text             = "#ffffff"
 selected-border           = "hyprland.active-border-foreground"
 selected-border-alpha     = 0.0
@@ -176,14 +177,15 @@ selected-border-alpha     = 0.0
 # behind the card. Clipboard and emojis inherit these tokens.
 # macOS theme: the same borderless frosted glass as the dock and its menus.
 background                = "#33333b"
-background-alpha          = 0.5
+background-alpha          = 0.85
 text                      = "#f5f5f7"
 border                    = "hyprland.active-border-foreground"
 border-alpha              = 0.0
 scrim                     = "#1c1c1e"
 scrim-alpha               = 0.0
-selected-background       = "#0a84ff"
-selected-background-alpha = 0.9
+# A deeper blue than the system one, so white text on it reads on any backdrop.
+selected-background       = "#0064d1"
+selected-background-alpha = 1.0
 selected-text             = "#ffffff"
 selected-border           = "hyprland.active-border-foreground"
 selected-border-alpha     = 0.0
