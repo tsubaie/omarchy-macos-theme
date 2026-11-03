@@ -52,7 +52,7 @@ fs.writeFileSync(path.join(bin, "hyprctl"), '#!/bin/sh\n[ "$1" = workspaces ] &&
 const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
 const status = () => JSON.parse(execFileSync("bash", [script, "--status", "--json"], { env, encoding: "utf8" }))
-const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "bar-icons", "lock", "widgets"]
+const pieces = ["theme", "rows", "icons", "wide-menu", "dock", "switcher", "osd", "dictation-hud", "menubar", "bar-icons", "lock", "widgets", "notifications"]
 
 try {
   // stdout says what was done; stderr is for warnings only, which Studio shows

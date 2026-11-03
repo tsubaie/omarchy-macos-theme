@@ -12,6 +12,7 @@
 #   ./install.sh --bar-icons      + macOS icons for the bar's Network, Bluetooth, Audio and Display
 #   ./install.sh --lock           + macOS lock screen: date, large clock, account picture, glass field
 #   ./install.sh --widgets        + desktop widgets: clock, calendar, weather, now playing
+#   ./install.sh --notifications  + macOS notifications: icon, bold title and time, round corners
 #   ./install.sh --all            everything
 #   ./install.sh --uninstall      undo all of the above, the MacTahoe icons too, giving back
 #                                 what each piece replaced; while the macOS theme is
@@ -70,7 +71,7 @@
 #                                     taken before its first change, and the icons gone
 #   ./install.sh --export <file|dir>  your choices in one file, for another computer or a new install
 #   ./install.sh --import <file>      apply an export here
-#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets
+#   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets notifications
 #
 #   What it did goes to stdout; warnings and errors to stderr. So a run that
 #   succeeds (exit 0) may still have warned, about a piece it skipped, say.
@@ -141,7 +142,7 @@ MACTAHOE_COMMIT=839848b9a8a38a92a6936e30c4abe35cc6f2546d
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
 # Each piece, by the name --add, --remove and --status use.
-FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
+FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets notifications"
 declare -A add=() remove=() settings=()
 status=false json=false preview=false legacy=false uninstall=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets="" widget_workspaces="" new_backgrounds=()
 (( $# )) || legacy=true
@@ -157,7 +158,8 @@ while (( $# )); do
     --bar-icons) add[bar-icons]=1; legacy=true ;;
     --lock) add[lock]=1; legacy=true ;;
     --widgets) add[widgets]=1; legacy=true ;;
-    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar bar-icons lock widgets; do add[$f]=1; done; legacy=true ;;
+    --notifications) add[notifications]=1; legacy=true ;;
+    --all) for f in osd dictation-hud dock icons switcher wide-menu menubar bar-icons lock widgets notifications; do add[$f]=1; done; legacy=true ;;
     --add|--remove)
       [[ " $FEATURES " == *" ${2:-} "* ]] || { echo "Unknown feature: ${2:-} (one of: $FEATURES)" >&2; exit 1; }
       if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
@@ -270,6 +272,12 @@ LOCK_MARK="The macOS lock screen"
 LOCK_HOOK="$HOME/.config/omarchy/hooks/post-update.d/macos-theme-lock"
 macos_locks() { theme_clones omarchy.lock LockView.qml "$LOCK_MARK"; }
 
+# The notifications are a clone of Omarchy's, drawn by the macOS Toast.qml.
+NOTIFY_MARK="One notification card, as macOS draws one"
+# Brings Omarchy's notifications code into the clone after each omarchy-update.
+NOTIFY_HOOK="$HOME/.config/omarchy/hooks/post-update.d/macos-theme-notifications"
+macos_notifications() { theme_clones omarchy.notifications Toast.qml "$NOTIFY_MARK"; }
+
 # A MacTahoe folder the theme installed: marked, or (installed before the
 # mark) with the large folder icons it copies over the small ones.
 theme_icons() {
@@ -295,6 +303,7 @@ installed() {
     menubar) [[ -d $PLUGINS_DIR/macos-theme.menubar ]] ;;
     bar-icons) [[ -d $PLUGINS_DIR/$BAR_ICONS_ID ]] ;;
     lock) [[ -n $(macos_locks) ]] ;;
+    notifications) [[ -n $(macos_notifications) ]] ;;
     widgets) [[ -d $PLUGINS_DIR/$WIDGETS_ID ]] ;;
   esac
 }
@@ -792,6 +801,18 @@ remove_lock() {
   omarchy restart shell >/dev/null 2>&1 || true
   say "Removed the macOS lock screen and restored Omarchy's own"
 }
+remove_notifications() {
+  local dir
+  for dir in $(macos_notifications); do
+    omarchy plugin disable "$(basename "$dir")" >/dev/null 2>&1 || true
+    give_back omarchy.notifications
+    rm -rf "${dir:?}"
+  done
+  rm -f "$NOTIFY_HOOK"
+  # One notifications service at a time: a restart hands the job back to Omarchy's.
+  omarchy restart shell >/dev/null 2>&1 || true
+  say "Removed the macOS notifications and restored Omarchy's own"
+}
 remove_dictation_hud() {
   omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
   rm -rf "${PLUGINS_DIR:?}/$HUD_ID"
@@ -850,7 +871,7 @@ restore_original() {
 doctor() {
   command -v qs >/dev/null || { echo "Needs Quickshell's qs command" >&2; exit 1; }
   local dir ours=() log problems
-  for dir in "$PLUGINS_DIR"/macos-theme.* $(wide_menus) $(workspaces_clones) $(macos_locks); do
+  for dir in "$PLUGINS_DIR"/macos-theme.* $(wide_menus) $(workspaces_clones) $(macos_locks) $(macos_notifications); do
     [[ -d $dir ]] && ours+=("$(basename "$dir" | sed 's/\./\\./g')")
   done
   (( ${#ours[@]} )) || { say "None of the theme's plugins is installed"; exit 0; }
@@ -977,7 +998,7 @@ fi
 
 if (( ${#remove[@]} )); then
   # Plugins before the theme they sit on.
-  for f in widgets lock osd dock wide-menu switcher bar-icons menubar dictation-hud rows icons theme; do
+  for f in notifications widgets lock osd dock wide-menu switcher bar-icons menubar dictation-hud rows icons theme; do
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
   # All of it gone: the next install records afresh what is on then.
@@ -1239,6 +1260,24 @@ if want lock; then
     say "Installed the macOS lock screen (see it without locking: omarchy-shell lock preview)"
   else
     echo "    Could not clone Omarchy's lock screen; it keeps its own look." >&2
+  fi
+fi
+if want notifications; then
+  # Clone Omarchy's notifications (one service may own them), take this
+  # Omarchy's own code into it every time, and draw the cards the macOS way.
+  notify_src="$OMARCHY_PATH/shell/plugins/notifications"
+  notify_dir=$(theme_clone omarchy.notifications Toast.qml "$NOTIFY_MARK") || notify_dir=""
+  if [[ -n $notify_dir ]]; then
+    for f in "$notify_src"/*; do [[ -e $f && ${f##*/} != manifest.json ]] && cp -r "$f" "$notify_dir/"; done
+    cp "$REPO/notifications/Toast.qml" "$notify_dir/Toast.qml"
+    mkdir -p "$(dirname "$NOTIFY_HOOK")"
+    cp "$REPO/notifications/post-update.sh" "$NOTIFY_HOOK"
+    omarchy plugin enable "$(basename "$notify_dir")" >/dev/null 2>&1 || true
+    # The shell caches loaded QML; the refresh below restarts it when the theme is current.
+    active || omarchy restart shell >/dev/null 2>&1 || true
+    say "Installed the macOS notifications (try one: notify-send \"Hello\" \"From the macOS theme\")"
+  else
+    echo "    Could not clone Omarchy's notifications; they keep their own look." >&2
   fi
 fi
 if want dictation-hud; then

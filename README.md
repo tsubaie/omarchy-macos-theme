@@ -26,10 +26,11 @@ cd omarchy-macos-theme
 | `--dictation-hud` | A dictation panel for [Voxtype](https://voxtype.io) |
 | `--lock` | The macOS lock screen |
 | `--widgets` | Desktop widgets: clock, calendar, weather and now playing |
+| `--notifications` | macOS notifications: the app's icon, a bold title with when it came, round corners |
 | `--all` | All of the above |
 | `--uninstall` | Undo everything, the MacTahoe icons too, giving back what each piece replaced; while the macOS theme is current it switches first to the theme you had before it (or `--switch-to <theme>`) |
 | `--restore-original` | Go back to before the macOS theme: the backup taken before its first change, whole, and the icons gone. Refuses when there is none (installs from before backups were kept) |
-| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `bar-icons`, `lock` or `widgets` |
+| `--add <piece>` | Only that piece, without the theme: `theme`, `rows`, `icons`, `wide-menu`, `dock`, `switcher`, `osd`, `dictation-hud`, `menubar`, `bar-icons`, `lock`, `widgets` or `notifications` |
 | `--remove <piece>` | Remove only that piece (the theme only when another theme is current) |
 | `--status [--json]` | Which pieces are installed, whether the theme is current, and the settings |
 | `--set glass=<0.75-1>` | How solid the windows you aren't using are; 1 is solid, the theme's own is 0.85. The window you are using is always solid. The menus, launcher, notifications and popups take the same glass. Kept when the theme is updated |
@@ -208,6 +209,12 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 - Only the look changes: it is a clone of Omarchy's lock (`omarchy plugin clone omarchy.lock`), and the installer copies this Omarchy's own locking, password and fingerprint code into it each time, then adds the macOS `LockView.qml`. After each `omarchy-update`, a hook (`~/.config/omarchy/hooks/post-update.d/macos-theme-lock`) copies in Omarchy's latest lock code, keeping the macOS view.
 - See it without locking: `omarchy-shell lock preview` (click to close).
 
+### Notifications (`--notifications`)
+- Each one as macOS draws it, on the same frosted glass as the rest: the app's icon on the left, the title in bold with when it came on the right ("now", then minutes), the body under it, in Inter, with round corners.
+- A round × on the card's top-left corner while the pointer is on it, as on macOS.
+- Only the look changes: it is a clone of Omarchy's notifications (`omarchy plugin clone omarchy.notifications`), with the installer copying this Omarchy's own notifications code into it each time and adding the macOS `Toast.qml`; stacking, actions, Do Not Disturb and history stay Omarchy's. After each `omarchy-update`, a hook (`~/.config/omarchy/hooks/post-update.d/macos-theme-notifications`) copies in Omarchy's latest, keeping the macOS card.
+- Try one: `notify-send "Hello" "From the macOS theme"`.
+
 ## Backups
 
 Every change the installer makes is backed up first, to `~/.config/omarchy/macos-theme-backups/snapshots`: your Omarchy shell settings (`shell.json`), `looknfeel.lua`, `gtk.css`, the theme folder and the plugins the theme manages. Plugins and clones of your own are left out, so a restore never touches them. `shell.json`, `looknfeel.lua` and `gtk.css` come back whole, though: an edit you made to them after the backup (a keybinding, a bar change) goes too. The theme's own wallpapers come back from the repository, so a backup is a few hundred KB. The first backup, from before the theme changed anything, is kept for good.
@@ -229,6 +236,7 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 | `macos-theme.bar-icons` | `--bar-icons` | Nothing; gives Omarchy's own widgets macOS icons, from the bar, unseen |
 | `macos-theme.widgets` | `--widgets` | Nothing; adds the desktop widgets |
 | A clone of `omarchy.lock`, named after your user | `--lock` | Omarchy's lock screen (`omarchy.lock` is turned off) |
+| A clone of `omarchy.notifications`, named after your user | `--notifications` | Omarchy's notifications (`omarchy.notifications` is turned off) |
 | A copy of `omarchy.menu`, named after your user | `--wide-menu` | Omarchy's menu (`omarchy.menu` is turned off) |
 | `macos-theme.menubar`, `macos-theme.app-name`, `macos-theme.control-center` | `--menubar` | Nothing; the network, Bluetooth, Tailscale, audio, monitor and power widgets stay on the bar unseen, opened from Control Center |
 | A clone of `omarchy.workspaces`, named after your user, with `WorkspaceMenu.qml` and the layout icons | `--menubar` | Omarchy's workspaces on the bar; a click goes to a workspace, and a click on the one shown or a right-click opens its layout menu. Each `--menubar` takes Omarchy's widget afresh and patches it, so its updates come along |
@@ -247,6 +255,7 @@ Each run takes a snapshot first (see [Backups](#backups)). A removed theme folde
 | `~/.config/omarchy/plugins/` | The plugins you chose |
 | `~/.config/omarchy/shell.json` | Turns on the plugins and turns off the Omarchy ones they replace |
 | `~/.config/omarchy/hooks/post-update.d/macos-theme-lock` | With `--lock`: refreshes the lock screen's Omarchy code after each update |
+| `~/.config/omarchy/hooks/post-update.d/macos-theme-notifications` | With `--notifications`: refreshes the notifications' Omarchy code after each update |
 
 ### Impact on your system
 
@@ -266,7 +275,7 @@ Each run takes a snapshot first (see [Backups](#backups)). A removed theme folde
 
 Or in [macOS Theme Studio](studio/): **Remove macOS Theme…** on its About page does either.
 
-**`--uninstall`** removes the theme, its plugins, its clones of Omarchy's menu, lock and workspaces, and the MacTahoe icons it installed (icons installed some other way stay), and turns back on what stood in their place before the theme: Omarchy's own dock, on-screen display, menu and lock, or a clone of your own, or nothing where you had turned it off. The bar goes back to how it was before the menu bar, Alt+Tab to your own binding, and the lines added to `looknfeel.lua` and `gtk.css`, and the lock screen's update hook, come out. While the macOS theme is current, it first switches to the theme you had before installing it (Tokyo Night when that isn't known; `--switch-to <theme>` picks another). Your dock's pinned apps stay pinned in Omarchy's dock, and its size and magnification stay in `shell.json` for when it comes back, which Omarchy's dock ignores. Changes you made since, to the bar or anything else, stay.
+**`--uninstall`** removes the theme, its plugins, its clones of Omarchy's menu, lock, notifications and workspaces, and the MacTahoe icons it installed (icons installed some other way stay), and turns back on what stood in their place before the theme: Omarchy's own dock, on-screen display, menu and lock, or a clone of your own, or nothing where you had turned it off. The bar goes back to how it was before the menu bar, Alt+Tab to your own binding, and the lines added to `looknfeel.lua` and `gtk.css`, and the lock screen's update hook, come out. While the macOS theme is current, it first switches to the theme you had before installing it (Tokyo Night when that isn't known; `--switch-to <theme>` picks another). Your dock's pinned apps stay pinned in Omarchy's dock, and its size and magnification stay in `shell.json` for when it comes back, which Omarchy's dock ignores. Changes you made since, to the bar or anything else, stay.
 
 **`--restore-original`** puts back the backup taken before the theme's first change: `shell.json`, `looknfeel.lua` and `gtk.css` whole, the plugins as they were, and the theme that was current, with the theme's icons gone. Edits you made to those three files since, a keybinding or a bar widget, go too. Undoing it brings the theme back but not the icons, which backups don't hold; `--add icons` does. A computer where the theme was installed before backups were kept has no such backup; use `--uninstall` there.
 

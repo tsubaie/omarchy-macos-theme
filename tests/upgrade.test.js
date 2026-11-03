@@ -75,7 +75,9 @@ try {
   const installed = Object.keys(before.features).filter((p) => before.features[p] && p !== "icons")
   run(repo, ...installed.flatMap((p) => ["--add", p]))
   const after = status(repo)
-  assert.deepStrictEqual(after.features, before.features, "an update changed what is installed")
+  // Every piece the older version knew stays as it was; one new since then isn't added.
+  for (const p of Object.keys(before.features)) assert.strictEqual(after.features[p], before.features[p], `an update changed whether ${p} is installed`)
+  for (const p of Object.keys(after.features).filter((p) => !(p in before.features))) assert.strictEqual(after.features[p], false, `an update added ${p}`)
   // Each setting the older version had keeps its value; a setting new since then starts at its default.
   for (const key of Object.keys(before.settings)) assert.strictEqual(after.settings[key], before.settings[key], `an update changed your ${key} setting`)
   assert.strictEqual(fs.readFileSync(config("omarchy/themes/macos/backgrounds/mine.jpg"), "utf8"), "photo")
@@ -88,7 +90,8 @@ try {
   run(repo, "--uninstall")
   run(repo, "--restore", oldSnapshot)
   const restored = status(repo)
-  assert.deepStrictEqual(restored.features, before.features, "restoring the older snapshot")
+  for (const p of Object.keys(before.features)) assert.strictEqual(restored.features[p], before.features[p], `restoring the older snapshot changed whether ${p} is installed`)
+  for (const p of Object.keys(restored.features).filter((p) => !(p in before.features))) assert.strictEqual(restored.features[p], false, `restoring the older snapshot added ${p}`)
   for (const key of Object.keys(before.settings)) assert.strictEqual(restored.settings[key], before.settings[key], `the restore changed your ${key} setting`)
   // And everything comes off again.
   run(repo, "--uninstall")

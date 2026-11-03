@@ -1113,7 +1113,8 @@ Window {
                     SettingRow { label: "App and workspace switchers"; note: "Alt+Tab and Super+Tab"; PieceSwitch { piece: "switcher" } }
                     SettingRow { label: "Spotlight-like menu"; PieceSwitch { piece: "wide-menu" } }
                     SettingRow { label: "Volume and brightness capsule"; PieceSwitch { piece: "osd" } }
-                    SettingRow { label: "Dictation pill"; note: "For Voxtype"; last: true; PieceSwitch { piece: "dictation-hud" } }
+                    SettingRow { label: "Dictation pill"; note: "For Voxtype"; PieceSwitch { piece: "dictation-hud" } }
+                    SettingRow { label: "macOS notifications"; note: "The app's icon, a bold title with when it came, round corners"; last: true; PieceSwitch { piece: "notifications" } }
                 }
 
                 // Where each shows: the bottom middle, or the top right under
