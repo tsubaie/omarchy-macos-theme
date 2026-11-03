@@ -234,23 +234,28 @@ try {
   assert.ok(kept.some((d) => fs.existsSync(path.join(home, ".config/omarchy/macos-theme-backups", d, "backgrounds/mine.jpg"))))
   assert.doesNotMatch(fs.readFileSync(path.join(home, ".config/gtk-4.0/gtk.css"), "utf8"), /glass\.css/)
 
-  // The theme can't be removed while it is the current theme.
+  // Removing the theme while it is current switches first to the theme you
+  // had before it; with none recorded, Tokyo Night, which Omarchy ships with.
   fs.mkdirSync(themeDir, { recursive: true })
   fs.rmSync(path.join(home, "current"), { force: true })
   env.THEME = "Macos"
   s = status()
   assert.strictEqual(s.active, true)
   assert.strictEqual(s.features.theme, true)
-  const refused = run("--remove", "theme")
-  assert.strictEqual(refused.status, 1)
-  assert.match(refused.stderr, /Switch to another theme first/)
-  assert.strictEqual(status().features.theme, true)
+  assert.strictEqual(s["previous-theme"], "Tokyo Night")
+  const switched = run("--remove", "theme")
+  assert.strictEqual(switched.status, 0, switched.stderr)
+  assert.strictEqual(fs.readFileSync(path.join(home, "current"), "utf8").trim(), "Tokyo Night")
+  assert.strictEqual(status().features.theme, false)
 
   // Removing all of it while it is current switches to the theme named first, one that exists.
+  fs.mkdirSync(themeDir, { recursive: true })
+  fs.rmSync(path.join(home, "current"), { force: true })
   assert.strictEqual(run("--switch-to", "Nope", "--uninstall").status, 1)
   assert.strictEqual(status().features.theme, true)
-  const all = run("--switch-to", "Tokyo Night", "--uninstall", "--remove", "icons")
+  const all = run("--switch-to", "Tokyo Night", "--uninstall")
   assert.strictEqual(all.status, 0, all.stderr)
+  assert.match(all.stdout, /what it replaced is back/)
   s = status()
   assert.strictEqual(s.active, false)
   assert.ok(Object.values(s.features).every((on) => on === false))

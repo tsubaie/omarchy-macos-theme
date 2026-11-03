@@ -13,7 +13,9 @@
 #   ./install.sh --lock           + macOS lock screen: date, large clock, account picture, glass field
 #   ./install.sh --widgets        + desktop widgets: clock, calendar, weather, now playing
 #   ./install.sh --all            everything
-#   ./install.sh --uninstall      undo all of the above (MacTahoe icons stay)
+#   ./install.sh --uninstall      undo all of the above, the MacTahoe icons too, giving back
+#                                 what each piece replaced; while the macOS theme is
+#                                 current, switches first to the theme you had before it
 #
 #   ./install.sh --add dock       only that piece, without the theme
 #   ./install.sh --remove dock    remove only that piece
@@ -47,8 +49,8 @@
 #                                  Hyprland
 #   ./install.sh --show-widgets clock,weather  which desktop widgets show (clock, calendar,
 #                                 weather, playing); at least one
-#   ./install.sh --switch-to "Tokyo Night" --uninstall --remove icons  remove all of it,
-#                                 switching to that theme first if the macOS theme is current
+#   ./install.sh --switch-to "Tokyo Night" --uninstall  remove all of it, switching to
+#                                 that theme first if the macOS theme is current
 #
 #   Every change takes a snapshot first, so it can be undone (the first one is kept for good):
 #   ./install.sh --backups [--json]   the snapshots, newest first
@@ -56,6 +58,8 @@
 #   ./install.sh --restore <id>       put one back (taking a snapshot of now first); shell.json,
 #                                     looknfeel.lua and gtk.css come back whole, so edits you
 #                                     made to them since go too
+#   ./install.sh --restore-original   go back to before the macOS theme: the first snapshot,
+#                                     taken before its first change, and the icons gone
 #   ./install.sh --export <file|dir>  your choices in one file, for another computer or a new install
 #   ./install.sh --import <file>      apply an export here
 #   Pieces: theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets
@@ -80,6 +84,8 @@ BAR_REMEMBERED="$BACKUP_DIR/bar-layout.json"
 # the menu bar, so removing them gives back exactly that.
 BEFORE_THEME="$BACKUP_DIR/plugins-before-theme.json"
 BAR_BEFORE="$BACKUP_DIR/bar-before-menubar.json"
+# The Omarchy theme that was current then, to switch back to when the theme goes.
+THEME_BEFORE="$BACKUP_DIR/theme-before-theme.txt"
 PLUGINS_DIR="$CONFIG/omarchy/plugins"
 LOOKNFEEL="$CONFIG/hypr/looknfeel.lua"
 GTK_CSS="$CONFIG/gtk-4.0/gtk.css"
@@ -121,7 +127,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false preview=false legacy=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets=""
+status=false json=false preview=false legacy=false uninstall=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets=""
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -140,7 +146,6 @@ while (( $# )); do
       [[ " $FEATURES " == *" ${2:-} "* ]] || { echo "Unknown feature: ${2:-} (one of: $FEATURES)" >&2; exit 1; }
       if [[ $1 == --add ]]; then add[$2]=1; else remove[$2]=1; fi
       shift ;;
-    # MacTahoe stays, as it always has: it may serve other themes too.
     --set)
       if [[ ${2:-} =~ ^clock=(left|center|right)$ ]]; then
         settings[clock]=${BASH_REMATCH[1]}
@@ -158,7 +163,7 @@ while (( $# )); do
       settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       shift ;;
     --switch-to) switch_to=${2:-}; [[ -n $switch_to ]] || { echo "--switch-to needs a theme name" >&2; exit 1; }; shift ;;
-    --uninstall) for f in $FEATURES; do [[ $f == icons ]] || remove[$f]=1; done ;;
+    --uninstall) for f in $FEATURES; do remove[$f]=1; done; uninstall=true ;;
     --status) status=true ;;
     --backups) mode=backups ;;
     --bar) mode=bar ;;
@@ -175,6 +180,7 @@ while (( $# )); do
       done
       shift ;;
     --backup) mode=backup ;;
+    --restore-original) mode=restore-original ;;
     --restore|--export|--import)
       mode=${1#--}; mode_arg=${2:-}
       [[ -n $mode_arg ]] || { echo "$1 needs a value (try --help)" >&2; exit 1; }
@@ -267,6 +273,20 @@ installed() {
 }
 
 active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
+
+# The theme to switch to when the macOS theme goes while current: the one
+# current before its first piece, else the one the first snapshot was taken
+# on, else Omarchy's own default, else any other. Empty if there's none.
+previous_theme() {
+  local others t
+  others=$(omarchy theme list 2>/dev/null | grep -vxF Macos) || true
+  for t in "$(cat "$THEME_BEFORE" 2>/dev/null)" \
+    "$(snapshot_list_json | jq -r '[.[] | select(.original)][0].theme // empty')" \
+    "Tokyo Night" "$(head -n1 <<<"$others")"; do
+    [[ -n $t ]] && grep -qxF "$t" <<<"$others" && { echo "$t"; return; }
+  done
+  return 0
+}
 
 # Glass is the opacity look.lua gives every window, web-glass the one it gives
 # browsers and web and Electron apps, snapping its SNAPPING switch, and blur
@@ -474,6 +494,9 @@ apply_bar_layout() {
   say "Arranged the bar"
 }
 
+# shellcheck source=backup.sh
+source "$REPO/backup.sh"
+
 if $status; then
   if $json; then
     out=""
@@ -482,10 +505,11 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s}\n' \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
       "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
-      "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')"
+      "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
+      "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"
   else
     active && echo "The macOS theme is the current theme."
     for f in $FEATURES; do
@@ -557,7 +581,9 @@ remove_wide_menu() {
 remove_switcher() {
   omarchy plugin disable "$SWITCHER_ID" >/dev/null 2>&1 || true
   rm -rf "${PLUGINS_DIR:?}/$SWITCHER_ID"
-  say "Removed the app switcher (Alt+Tab is back to your own binding after: hyprctl reload)"
+  # Alt+Tab goes back to your own binding once Hyprland reads its config again.
+  hyprctl reload >/dev/null 2>&1 || true
+  say "Removed the app switcher; Alt+Tab is your own again"
 }
 remove_menubar() {
   local id after=omarchy.tray
@@ -627,7 +653,12 @@ remove_lock() {
 remove_dictation_hud() {
   omarchy plugin disable "$HUD_ID" >/dev/null 2>&1 || true
   rm -rf "${PLUGINS_DIR:?}/$HUD_ID"
-  say "Removed the dictation HUD (turn Voxtype's own overlay back on with: voxtype config set osd.enabled true)"
+  say "Removed the dictation HUD"
+  # The theme never turns Voxtype's overlay off itself, only says how, so it
+  # only says how to turn it back on.
+  if command -v voxtype >/dev/null && [[ $(voxtype config get osd.enabled 2>/dev/null) == false ]]; then
+    echo "    Voxtype's own overlay is off. Turn it back on with: voxtype config set osd.enabled true && systemctl --user restart voxtype" >&2
+  fi
 }
 remove_rows() {
   remove_lines "$GTK_CSS" "$ROWS_COMMENT" "$ROWS_LINE"
@@ -662,6 +693,15 @@ remove_theme() {
   say "Removed the theme (kept in $kept)"
 }
 
+# Back to before the macOS theme: the snapshot taken before its first change
+# (whose restore also takes the theme's icons away; see snapshot_restore).
+restore_original() {
+  local id
+  id=$(snapshot_list_json | jq -r '[.[] | select(.original)][0].id // empty')
+  [[ -n $id ]] || { echo "There's no backup from before the macOS theme: it was installed before backups were kept. Remove it instead with: ./install.sh --uninstall" >&2; exit 1; }
+  snapshot_restore "$id"
+}
+
 # What the running shell logged against the theme's plugins and clones: errors
 # and warnings, less the ones every shell logs (a second IPC handler, a
 # reload cutting a load short, a clone living outside the shell's folder).
@@ -689,9 +729,6 @@ doctor() {
   echo "$problems" >&2
   exit 1
 }
-
-# shellcheck source=backup.sh
-source "$REPO/backup.sh"
 
 # One run that changes things at a time (Studio and a terminal, say), or their
 # writes interleave. The lock is a folder holding the run's pid, moved into
@@ -747,11 +784,12 @@ case $mode in
   doctor) doctor ;;
   bar) if $json; then bar_json; else bar_text; fi; exit 0 ;;
   backups) if $json; then snapshot_list_json; else snapshot_list_text; fi; exit 0 ;;
-  backup|restore|import) take_lock ;;
+  backup|restore|restore-original|import) take_lock ;;
 esac
 case $mode in
   backup) say "Backed up as $(snapshot_take "Backed up by hand")"; exit 0 ;;
   restore) snapshot_restore "$mode_arg"; exit 0 ;;
+  restore-original) restore_original; exit 0 ;;
   export) export_profile "$mode_arg"; exit 0 ;;
   import) import_profile "$mode_arg"; exit 0 ;;
 esac
@@ -761,8 +799,8 @@ if [[ -n $switch_to ]] && active; then
   omarchy theme list | grep -qxF "$switch_to" || { echo "No theme called $switch_to (see: omarchy theme list)" >&2; exit 1; }
 fi
 if [[ -n ${remove[theme]:-} && -z $switch_to ]] && active; then
-  echo "Switch to another theme first (omarchy theme set <name>), then remove the theme again." >&2
-  exit 1
+  switch_to=$(previous_theme)
+  [[ -n $switch_to ]] || { echo "There's no other theme to switch to. Install one (Omarchy menu > Style > Theme), then remove the theme again." >&2; exit 1; }
 fi
 
 for k in $LOOK_SETTINGS; do
@@ -771,9 +809,10 @@ for k in $LOOK_SETTINGS; do
 done
 
 # Every change can be undone: a snapshot of how things are, first.
+snap=""
 if (( ${#add[@]} + ${#remove[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]]; then
   take_lock
-  [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snapshot_take "$(describe_changes)" >/dev/null
+  [[ -n ${MACOS_THEME_NO_SNAPSHOT:-} ]] || snap=$(snapshot_take "$(describe_changes)")
 fi
 
 # The plugins that are on, recorded once: before the theme's first piece.
@@ -782,6 +821,7 @@ if (( ${#add[@]} )) && [[ ! -s $BEFORE_THEME ]]; then
     mkdir -p "$BACKUP_DIR"
     omarchy plugin list --json 2>/dev/null |
       jq -ce '[.[] | select(.enabled) | {id, clonedFrom}]' >"$BEFORE_THEME" 2>/dev/null || rm -f "$BEFORE_THEME"
+    active || omarchy theme current >"$THEME_BEFORE" 2>/dev/null || rm -f "$THEME_BEFORE"
   fi
 fi
 
@@ -796,12 +836,16 @@ if (( ${#remove[@]} )); then
     if [[ -n ${remove[$f]:-} ]] && installed "$f"; then "remove_${f//-/_}"; fi
   done
   # All of it gone: the next install records afresh what is on then.
-  none_installed && rm -f "$BEFORE_THEME"
+  none_installed && rm -f "$BEFORE_THEME" "$THEME_BEFORE"
   if [[ -n ${remove[icons]:-} ]] && ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]]; then
     echo "    MacTahoe icons weren't installed by the theme, so they stay in ~/.local/share/icons" >&2
   fi
   if [[ -z ${remove[icons]:-} ]] && installed icons && [[ -n ${remove[theme]:-} ]]; then
     echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons" >&2
+  fi
+  if $uninstall; then
+    say "The macOS theme is gone, and what it replaced is back.${snap:+ Undo it with: ./install.sh --restore $snap}"
+    say "Its backups stay in $BACKUP_DIR; delete the folder if you won't want them."
   fi
   (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]] || exit 0
 fi

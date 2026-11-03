@@ -178,6 +178,16 @@ snapshot_restore() {
     exit 1
   fi
 
+  # Kept outside snapshots, so put in step with what came back: the lock's
+  # update hook goes with the theme's lock, and before the theme there were
+  # no MacTahoe icons of its own.
+  if [[ -n $(macos_locks) ]]; then
+    mkdir -p "$(dirname "$LOCK_HOOK")" && cp "$REPO/lock/post-update.sh" "$LOCK_HOOK"
+  else
+    rm -f "$LOCK_HOOK"
+  fi
+  if jq -e '.original == true' "$dir/meta.json" >/dev/null && installed icons; then remove_icons; fi
+
   if [[ -n $theme && $theme != "$(omarchy theme current 2>/dev/null)" ]]; then
     omarchy theme set "$theme"
   else
