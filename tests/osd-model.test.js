@@ -19,6 +19,15 @@ for (const qml of ["control-center/ControlCenter.qml", "osd/Osd.qml", "dictation
   assert.ok(m, `${qml}'s glass pattern doesn't match theme/look.lua`)
   assert.strictEqual(m[1], "0.85", `${qml} reads the wrong number from look.lua`)
 }
+// Mission Control follows the Blur setting the same way.
+{
+  const source = read("plugins/macos-theme.switcher/MissionControl.qml")
+  const found = /var m = \/(.+)\/m\.exec\(text\(\)\)/.exec(source)
+  assert.ok(found, "MissionControl.qml no longer reads the blur from look.lua")
+  const m = new RegExp(found[1], "m").exec(look)
+  assert.ok(m, "MissionControl.qml's blur pattern doesn't match theme/look.lua")
+  assert.strictEqual(m[1], "10", "MissionControl.qml reads the wrong number from look.lua")
+}
 
 // The speaker by volume, muted at 0 or when muted.
 assert.strictEqual(m.hudIconName("volume", 0), "volume-muted")

@@ -83,10 +83,10 @@ bar_glass()
 -- the bar's rule is set again once the whole config has loaded.
 package.loaded["default.hypr.glass"] = function() end
 hl.on("config.reloaded", bar_glass)
-hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher|widgets)$" }, blur = true, ignore_alpha = 0.3 })
--- The volume and dictation HUDs are light glass, as Control Center is: blur
--- under all but their clear pixels.
-hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud)$" }, blur = true, ignore_alpha = 0.01 })
+hl.layer_rule({ match = { namespace = "^omarchy-(dock|dock-apps|menu|keyboard-panel|notifications|clipboard|emojis|reminders|polkit|network-qr|switcher)$" }, blur = true, ignore_alpha = 0.3 })
+-- The volume and dictation HUDs and the desktop widgets are light glass, as
+-- Control Center is: blur under all but their clear pixels.
+hl.layer_rule({ match = { namespace = "^omarchy-(osd|dictation-hud|widgets)$" }, blur = true, ignore_alpha = 0.01 })
 -- The dock's genie overlay draws its own motion; Hyprland must not pop it in.
 hl.layer_rule({ match = { namespace = "^omarchy-dock-genie$" }, no_anim = true })
 -- Mission Control flies the windows out itself; Hyprland must not pop it in.

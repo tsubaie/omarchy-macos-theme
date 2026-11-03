@@ -712,14 +712,15 @@ Item {
     }
   }
 
-  // A widget's frosted square; Hyprland blurs what is behind it.
+  // A widget's frosted square, the wallpaper showing through as on macOS;
+  // Hyprland blurs what is behind it (theme/look.lua's light-glass rule).
   component Glass: Rectangle {
     width: root.size
     height: root.size
     radius: root.radius
-    color: Qt.rgba(0.16, 0.16, 0.18, 0.5)
+    color: Qt.rgba(0.12, 0.12, 0.14, 0.3)
     border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.12)
+    border.color: Qt.rgba(1, 1, 1, 0.16)
   }
 
   component Control: Text {

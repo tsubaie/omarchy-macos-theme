@@ -149,7 +149,7 @@ Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon
   ![App switcher](docs/screenshots/app-switcher.png)
 
 - **Super+Tab** does the same for workspaces, showing each one as a live miniature of its windows. A quick Super+Tab flips between your last two workspaces.
-- **Ctrl+Up** opens Mission Control, as on macOS: the workspace's windows fly into a spread over the dimmed wallpaper, live, with the screen's workspaces in a strip along the top.
+- **Ctrl+Up** opens Mission Control, as on macOS: the workspace's windows fly into a spread over the wallpaper, live, blurred edge to edge and dimmed (as strongly as the Blur setting says; 0 leaves it sharp), with the screen's workspaces in a strip along the top.
   - Hover a window to see its title; click it (or press Return) to bring it forward.
   - Click a workspace in the strip to go there, or "+" at its end to go to a new, empty one.
   - Ctrl+Up again, Esc or a click on the wallpaper closes it.
@@ -188,7 +188,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
   <img src="docs/screenshots/dictation-hud.png" alt="Dictation HUD" width="200">
 
 ### Desktop widgets (`--widgets`)
-- A column at the top left of the desktop, behind your windows, on frosted glass:
+- A column at the top left of the desktop, behind your windows, on light frosted glass that lets the wallpaper show through:
   - **Clock**: an analog face with a red second hand.
   - **Calendar**: the month, with today in a red disc; the week starts as your language has it.
   - **Weather**: the place, temperature, sky, and today's high and low, over a moving scene of the weather outside: a sun or a moon and stars, clouds, rain, snow, fog, lightning, and wind streaks when it blows, with a warm sky at sunrise and sunset. It uses the place you gave Omarchy's weather, or Omarchy's own lookup of your city, and [Open-Meteo](https://open-meteo.com), every 15 minutes; °F only where it is the custom.

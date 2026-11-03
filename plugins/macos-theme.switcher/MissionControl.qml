@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -33,6 +34,20 @@ Item {
   property string hovered: ""
   // What closing does once the windows are back: focus one, or go to a workspace.
   property var afterClose: null
+
+  // The theme's Blur setting (install.sh --set blur=<0-20>), read from the
+  // look Hyprland has loaded: how strongly the wallpaper blurs, 0 not at all.
+  property int blur: 10
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var m = /^local BLUR = (\d+)$/m.exec(text())
+      root.blur = m ? Math.max(0, Math.min(20, parseInt(m[1]))) : 10
+    }
+    onFileChanged: reload()
+  }
 
   ShellIpc {
     target: "macos-mission-control"
@@ -132,7 +147,9 @@ Item {
     readonly property var targets: MissionLayout.spread(root.windows, width - pad * 2,
       height - stripTop - stripHeight - Style.space(40) - pad * 2, Style.space(36))
 
-    // The wallpaper, dimmed as the windows spread.
+    // The wallpaper, blurred edge to edge and dimmed as the windows spread,
+    // as macOS has it. Drawn a little larger as it blurs, so the blur's soft
+    // rim stays off the screen.
     Image {
       anchors.fill: parent
       source: root.wallpaper ? "file://" + root.wallpaper : ""
@@ -140,6 +157,15 @@ Item {
       fillMode: Image.PreserveAspectCrop
       asynchronous: true
       opacity: root.spreadOut
+      scale: root.blur > 0 ? 1 + 0.04 * root.spreadOut : 1
+      layer.enabled: root.blur > 0 && root.spreadOut > 0
+      layer.effect: MultiEffect {
+        autoPaddingEnabled: false
+        blurEnabled: true
+        // Blur 10, the theme's own, blurs as strongly as the lock screen does.
+        blurMax: Math.round(6.4 * root.blur)
+        blur: root.spreadOut
+      }
     }
     Rectangle { anchors.fill: parent; color: "black"; opacity: 0.28 * root.spreadOut }
 
