@@ -844,7 +844,8 @@ if (( ${#remove[@]} )); then
     echo "    MacTahoe icons are still installed. Remove them with: ./install.sh --remove icons" >&2
   fi
   if $uninstall; then
-    say "The macOS theme is gone, and what it replaced is back.${snap:+ Undo it with: ./install.sh --restore $snap}"
+    # Backups don't hold the icons, so undoing needs --add icons too.
+    say "The macOS theme is gone, and what it replaced is back.${snap:+ Undo it with: ./install.sh --restore $snap, then ./install.sh --add icons}"
     say "Its backups stay in $BACKUP_DIR; delete the folder if you won't want them."
   fi
   (( ${#add[@]} + ${#settings[@]} )) || [[ -n $bar_layout$show_widgets ]] || exit 0

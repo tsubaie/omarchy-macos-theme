@@ -302,7 +302,7 @@ Window {
             title: "Remove the macOS theme?",
             text: "The theme and all its pieces go, its icons too, and what each one replaced comes back: Omarchy's dock, bar, menu and lock screen, or your own."
                 + (back ? "\n\nOmarchy switches to " + back + " first." : "")
-                + "\n\nYour setup now is backed up first, so you can undo this."
+                + "\n\nYour setup now is backed up first, so you can undo this; the icons then come back from General > MacTahoe icons."
                 + (original ? "\n\nGo Back puts everything as it was on " + when(original.created) + ", before the macOS theme, instead. "
                     + "shell.json, looknfeel.lua and gtk.css come back whole, so edits you made to them since go too." : "")
                 + droppedNote(),
@@ -1191,7 +1191,8 @@ Window {
                                     title: "Restore the backup from " + window.when(modelData.created) + "?",
                                     text: "These go back to how they were then, whole, so edits you made to them since (a keybinding, a bar change) go too:\n"
                                         + "  ·  ~/.config/omarchy/shell.json\n  ·  ~/.config/hypr/looknfeel.lua\n  ·  ~/.config/gtk-4.0/gtk.css\n"
-                                        + "  ·  ~/.config/omarchy/themes/macos/\n  ·  the theme's plugins in ~/.config/omarchy/plugins/\n\n"
+                                        + "  ·  ~/.config/omarchy/themes/macos/\n  ·  the theme's plugins in ~/.config/omarchy/plugins/\n"
+                                        + (modelData.original ? "  ·  the theme's MacTahoe icons are removed\n" : "") + "\n"
                                         + "Your setup now is backed up first, so you can undo this." + window.droppedNote(),
                                     button: "Restore",
                                     destructive: true,
@@ -1461,11 +1462,14 @@ Window {
                 Row {
                     anchors.right: parent.right
                     spacing: 10
-                    // Tab goes between the two and nowhere else while it asks.
+                    // Tab goes between its buttons and nowhere else while it asks.
                     // A third choice, as "Don't Save" is, when the question has one.
                     MacButton {
+                        id: sheetAlternate
                         visible: !!window.confirm && !!window.confirm.alternate
                         text: window.confirm && window.confirm.alternate ? window.confirm.alternate : ""
+                        KeyNavigation.tab: sheetCancel
+                        KeyNavigation.backtab: sheetAction
                         onClicked: { const then = window.confirm.alternateAction; window.confirm = null; then() }
                     }
                     MacButton {
@@ -1473,7 +1477,7 @@ Window {
                         text: "Cancel"
                         primary: !!window.confirm && !!window.confirm.destructive
                         KeyNavigation.tab: sheetAction
-                        KeyNavigation.backtab: sheetAction
+                        KeyNavigation.backtab: sheetAlternate.visible ? sheetAlternate : sheetAction
                         onClicked: window.confirm = null
                     }
                     MacButton {
@@ -1481,7 +1485,7 @@ Window {
                         text: window.confirm ? window.confirm.button : ""
                         primary: !window.confirm || !window.confirm.destructive
                         destructive: !!window.confirm && !!window.confirm.destructive
-                        KeyNavigation.tab: sheetCancel
+                        KeyNavigation.tab: sheetAlternate.visible ? sheetAlternate : sheetCancel
                         KeyNavigation.backtab: sheetCancel
                         onClicked: window.acceptSheet()
                     }

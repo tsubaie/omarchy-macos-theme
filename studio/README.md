@@ -89,7 +89,7 @@ Turning off **macOS theme** while it's your current Omarchy theme shows a **Swit
 
 **Remove macOS Theme…** at the bottom of About takes it all away in one step, after asking:
 
-- **Remove** turns every piece off in one Apply, the MacTahoe icons too, and gives back what each one replaced: Omarchy's dock, bar, menu and lock screen, or your own. While the macOS theme is current, Omarchy switches first to the theme you had before it, which the question names. Your other changes since stay. **Undo** in the green note puts it all back.
+- **Remove** turns every piece off in one Apply, the MacTahoe icons too, and gives back what each one replaced: Omarchy's dock, bar, menu and lock screen, or your own. While the macOS theme is current, Omarchy switches first to the theme you had before it, which the question names. Your other changes since stay. **Undo** in the green note puts it all back but the icons, which backups don't hold; turn **MacTahoe icons** on again in General for those.
 - **Go Back**, offered when there is a backup from before the theme, restores that backup instead: everything as it was that day, whole, so edits to `shell.json`, `looknfeel.lua` and `gtk.css` since go too.
 
 Studio itself stays installed, so you can install the theme again from General.

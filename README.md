@@ -264,7 +264,7 @@ Or in [macOS Theme Studio](studio/): **Remove macOS Theme…** on its About page
 
 **`--restore-original`** puts back the backup taken before the theme's first change: `shell.json`, `looknfeel.lua` and `gtk.css` whole, the plugins as they were, and the theme that was current, with the theme's icons gone. Edits you made to those three files since, a keybinding or a bar widget, go too. Undoing it brings the theme back but not the icons, which backups don't hold; `--add icons` does. A computer where the theme was installed before backups were kept has no such backup; use `--uninstall` there.
 
-Either way, the theme folder is kept in `~/.config/omarchy/macos-theme-backups/`, wallpapers of yours included, and every backup stays, so it can be undone with `--restore` (the installer prints the backup to restore). Delete that folder once you're sure. If you had turned Voxtype's own overlay off for the dictation pill, the installer says how to turn it back on.
+Either way, the theme folder is kept in `~/.config/omarchy/macos-theme-backups/`, wallpapers of yours included, and every backup stays, so it can be undone with `--restore` (the installer prints the backup to restore), all but the MacTahoe icons, which backups don't hold: `--add icons` brings them back. Delete that folder once you're sure. If you had turned Voxtype's own overlay off for the dictation pill, the installer says how to turn it back on.
 
 ## Customize
 

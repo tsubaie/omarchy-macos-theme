@@ -332,6 +332,13 @@ try {
   const hook = path.join(o.home, ".config/omarchy/hooks/post-update.d/macos-theme-lock")
   fs.mkdirSync(path.dirname(hook), { recursive: true })
   fs.writeFileSync(hook, "")
+  // The theme's lock, a marked clone of Omarchy's: gone with the restore,
+  // back with its undo, and its update hook with it.
+  const lockClone = o.config("omarchy/plugins/me.lock")
+  fs.mkdirSync(lockClone, { recursive: true })
+  fs.writeFileSync(path.join(lockClone, "manifest.json"), '{ "omarchy": { "clonedFrom": "omarchy.lock" } }')
+  fs.writeFileSync(path.join(lockClone, ".macos-theme"), "")
+  assert.strictEqual(o.json("--status", "--json").features.lock, true)
   const back = o.run("--restore-original")
   assert.strictEqual(back.status, 0, back.out)
   assert.ok(Object.values(o.json("--status", "--json").features).every((on) => on === false))
@@ -342,6 +349,8 @@ try {
   assert.strictEqual(o.run("--restore", undo.id).status, 0)
   assert.strictEqual(o.json("--status", "--json").features.dock, true)
   assert.strictEqual(o.json("--status", "--json").features.rows, true)
+  assert.strictEqual(o.json("--status", "--json").features.lock, true)
+  assert.ok(fs.existsSync(hook))
 
   // Installed before backups were kept, there's no snapshot from before the
   // theme: --restore-original refuses and changes nothing.
