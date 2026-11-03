@@ -1654,6 +1654,17 @@ Window {
                                 font.pixelSize: 13
                             }
                         }
+                        // Who made it, with a link to his site, as an About panel names its maker.
+                        Text {
+                            text: 'By Talal A. Alsubaie · <a href="https://www.ta.sa">www.ta.sa</a>'
+                            textFormat: Text.StyledText
+                            color: Qt.rgba(1, 1, 1, 0.6)
+                            linkColor: "#0a84ff"
+                            font.pixelSize: 13
+                            onLinkActivated: link => Qt.openUrlExternally(link)
+                            Accessible.name: "By Talal A. Alsubaie, www.ta.sa"
+                            HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                        }
                     }
                     Column {
                         id: useTheme
@@ -2020,16 +2031,18 @@ Window {
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             sourceSize.width: 900
-            visible: !scene.frosted
-        }
-        MultiEffect {
-            anchors.fill: parent
-            visible: scene.frosted
-            source: wallpaperImage
-            blurEnabled: true
-            blur: 1
-            blurMax: 48
-            brightness: -0.15
+            // Frosted: blurred as it's drawn here, cropped to the card (the
+            // picture's own texture would land squeezed, leaving the card part
+            // dark), and a little larger so the blur's soft rim stays off it.
+            scale: scene.frosted ? 1.08 : 1
+            layer.enabled: scene.frosted
+            layer.effect: MultiEffect {
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blur: 1
+                blurMax: 48
+                brightness: -0.15
+            }
         }
         Item { id: stage; anchors.fill: parent }
     }
