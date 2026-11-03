@@ -23,6 +23,7 @@ fn main() {
         "assets/icons/windows.svg",
         "assets/icons/lock.svg",
         "assets/icons/widgets.svg",
+        "assets/icons/backgrounds.svg",
         "assets/icons/menubar.svg",
         "assets/icons/backups.svg",
         "assets/icons/about.svg",

@@ -29,6 +29,10 @@
         "id": "LBSGcgVt8pkY",
         "commonName": "application-window"
       },
+      "backgrounds": {
+        "id": "yF8LPIFelJU7",
+        "commonName": "image"
+      },
       "backups": {
         "id": "MpN00l6F80aB",
         "commonName": "time-machine"

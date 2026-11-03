@@ -17,6 +17,8 @@ pub mod qobject {
         #[qproperty(QString, status_json, cxx_name = "statusJson")]
         #[qproperty(QString, backups_json, cxx_name = "backupsJson")]
         #[qproperty(QString, bar_json, cxx_name = "barJson")]
+        // The one showing, yours and the theme's, as install.sh --backgrounds lists them.
+        #[qproperty(QString, backgrounds_json, cxx_name = "backgroundsJson")]
         #[qproperty(bool, busy)]
         #[qproperty(bool, downloaded)]
         // Asking GitHub whether the theme has new commits, right now.
@@ -90,6 +92,17 @@ pub mod qobject {
         #[cxx_name = "importFrom"]
         fn import_from(self: Pin<&mut Self>, file: &QString);
 
+        /// Shows a background and has the theme remember it; snapshotted first.
+        #[qinvokable]
+        #[cxx_name = "setBackground"]
+        fn set_background(self: Pin<&mut Self>, file: &QString);
+
+        /// Copies pictures into the user's backgrounds folder, given as a
+        /// JSON array of paths.
+        #[qinvokable]
+        #[cxx_name = "addBackgrounds"]
+        fn add_backgrounds(self: Pin<&mut Self>, files: &QString);
+
         /// Downloads the theme, when it isn't there yet.
         #[qinvokable]
         fn download(self: Pin<&mut Self>);
@@ -152,6 +165,7 @@ pub struct ThemeBackendRust {
     status_json: QString,
     backups_json: QString,
     bar_json: QString,
+    backgrounds_json: QString,
     busy: bool,
     downloaded: bool,
     checking: bool,
@@ -193,6 +207,7 @@ impl Default for ThemeBackendRust {
             status_json: QString::from("{}"),
             backups_json: QString::from("[]"),
             bar_json: QString::from("{}"),
+            backgrounds_json: QString::from("{}"),
             busy: false,
             downloaded: install::is_downloaded(&dir),
             checking: false,
@@ -228,6 +243,7 @@ struct Outcome {
     backups: Result<Vec<Backup>>,
     version: Option<String>,
     bar: Option<String>,
+    backgrounds: Option<String>,
     incoming: Vec<String>,
     error: Option<String>,
     error_details: String,
@@ -292,6 +308,7 @@ impl qobject::ThemeBackend {
             let status = install::status(&dir);
             let bar = install::bar(&dir).ok();
             let backups = install::backups(&dir).ok();
+            let backgrounds = install::backgrounds(&dir).ok();
             let queued = qt_thread.queue(move |mut backend| {
                 backend.as_mut().rust_mut().rereading = false;
                 // An action since reads it again itself, and newer.
@@ -308,6 +325,9 @@ impl qobject::ThemeBackend {
                 }
                 if let Some(json) = backups.and_then(|b| serde_json::to_string(&b).ok()) {
                     backend.as_mut().set_backups_json(QString::from(json.as_str()));
+                }
+                if let Some(backgrounds) = backgrounds {
+                    backend.as_mut().set_backgrounds_json(QString::from(backgrounds.as_str()));
                 }
             });
             if let Err(error) = queued {
@@ -382,6 +402,18 @@ impl qobject::ThemeBackend {
     pub fn import_from(self: Pin<&mut Self>, file: &QString) {
         let file = PathBuf::from(file.to_string());
         self.run(move |dir| install::import(dir, &file));
+    }
+
+    pub fn set_background(self: Pin<&mut Self>, file: &QString) {
+        let file = PathBuf::from(file.to_string());
+        self.run(move |dir| install::set_background(dir, &file));
+    }
+
+    pub fn add_backgrounds(self: Pin<&mut Self>, files: &QString) {
+        match serde_json::from_str::<Vec<PathBuf>>(&files.to_string()) {
+            Ok(files) => self.run(move |dir| install::add_backgrounds(dir, &files)),
+            Err(error) => self.set_error(QString::from(format!("reading the pictures to add: {error}").as_str())),
+        }
     }
 
     pub fn download(self: Pin<&mut Self>) {
@@ -487,6 +519,7 @@ impl qobject::ThemeBackend {
                 backups,
                 version: install::version(&dir),
                 bar: downloaded.then(|| install::bar(&dir).ok()).flatten(),
+                backgrounds: downloaded.then(|| install::backgrounds(&dir).ok()).flatten(),
                 incoming: if downloaded { install::incoming(&dir) } else { Vec::new() },
                 error,
                 error_details,
@@ -527,6 +560,10 @@ impl qobject::ThemeBackend {
         // A theme older than the bar settings lists no bar; updating brings it.
         self.as_mut().set_bar_json(QString::from(
             outcome.bar.unwrap_or_else(|| "{}".to_owned()).as_str(),
+        ));
+        // Likewise a theme older than the Backgrounds page lists none.
+        self.as_mut().set_backgrounds_json(QString::from(
+            outcome.backgrounds.unwrap_or_else(|| "{}".to_owned()).as_str(),
         ));
         // A theme older than backups lists none; updating it brings them.
         let backups = outcome.backups.unwrap_or_default();

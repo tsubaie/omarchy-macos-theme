@@ -91,7 +91,7 @@ Use the script rather than `omarchy theme install <url>`. Themes installed from 
   ![Notification](docs/screenshots/notification.png)
 
 - **Inter** for text, the closest free match to Apple's SF Pro, in Regular weight with 13px semibold window titles. Install it with `sudo pacman -S inter-font`. With `--menubar` the bar and popups use it too; terminals keep your Omarchy font.
-- **Wallpapers**: two full-resolution (6000×4000) photos, by Pawel Czerwinski (the default) and Martin Martz. Cycle between them with `omarchy theme bg next`.
+- **Wallpapers**: three photos, by Pawel Czerwinski (the default for a new Omarchy), Martin Martz and Clark Van Der Beken. Installing keeps the background you have; choose one in Studio's Backgrounds page, or cycle with `omarchy theme bg next`.
 
 ### Floating windows
 
@@ -300,7 +300,7 @@ Most tests run the real `install.sh` in a throwaway home with a fake `omarchy`, 
 
 ## Credits
 
-- Wallpapers: [photo by Pawel Czerwinski on Unsplash](https://unsplash.com/photos/ZkzobNDayXo) and [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4), used under the [Unsplash License](https://unsplash.com/license).
+- Wallpapers: [photo by Pawel Czerwinski on Unsplash](https://unsplash.com/photos/ZkzobNDayXo), [photo by Martin Martz on Unsplash](https://unsplash.com/photos/DI0lpZocxl4) and [photo by Clark Van Der Beken on Unsplash](https://unsplash.com/photos/S6ZZulF-Qno), used under the [Unsplash License](https://unsplash.com/license).
 - The dock, volume capsule and wide menu are modified copies of Omarchy's own dock, on-screen display and menu ([Omarchy](https://github.com/basecamp/omarchy), MIT License).
 - Icons: [MacTahoe icon theme](https://github.com/vinceliuice/MacTahoe-icon-theme) by vinceliuice (GPL-3.0), downloaded from its own repository by `--icons`, not bundled here.
 - Colors follow Apple's published dark-mode system colors. This project isn't affiliated with or endorsed by Apple. macOS and Liquid Glass are trademarks of Apple Inc.
