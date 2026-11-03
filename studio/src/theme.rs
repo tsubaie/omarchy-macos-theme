@@ -24,6 +24,8 @@ pub mod qobject {
         #[qproperty(QString, theme_dir, cxx_name = "themeDir")]
         #[qproperty(QString, theme_version, cxx_name = "themeVersion")]
         #[qproperty(i32, updates, cxx_name = "updates")]
+        // Why the last check for updates failed (offline, say); empty when it worked.
+        #[qproperty(QString, update_error, cxx_name = "updateError")]
         #[qproperty(QString, app_version, cxx_name = "appVersion")]
         #[qproperty(QString, omarchy_version, cxx_name = "omarchyVersion")]
         #[qproperty(QString, omarchy_logo, cxx_name = "omarchyLogo")]
@@ -116,6 +118,7 @@ pub struct ThemeBackendRust {
     theme_dir: QString,
     theme_version: QString,
     updates: i32,
+    update_error: QString,
     app_version: QString,
     omarchy_version: QString,
     omarchy_logo: QString,
@@ -133,7 +136,8 @@ struct Previews {
 
 impl Default for ThemeBackendRust {
     fn default() -> Self {
-        let dir = install::theme_dir();
+        // main() has checked there is one, and exits if not.
+        let dir = install::theme_dir().unwrap_or_default();
         Self {
             status_json: QString::from("{}"),
             backups_json: QString::from("[]"),
@@ -145,6 +149,7 @@ impl Default for ThemeBackendRust {
             theme_dir: QString::from(dir.display().to_string().as_str()),
             theme_version: QString::default(),
             updates: 0,
+            update_error: QString::default(),
             app_version: QString::from(env!("CARGO_PKG_VERSION")),
             omarchy_version: QString::from(install::omarchy_version().unwrap_or_default().as_str()),
             // Omarchy's own logo, read where Omarchy keeps it rather than
@@ -168,13 +173,27 @@ struct Outcome {
 }
 
 impl qobject::ThemeBackend {
-    pub fn refresh(self: Pin<&mut Self>) {
-        // Also asks GitHub for the theme's new commits.
-        self.run(|dir| {
-            if install::is_downloaded(dir) {
-                install::fetch(dir);
+    /// Reads the status, then asks GitHub for the theme's new commits on a
+    /// thread of its own, so a slow or absent network keeps nothing waiting.
+    pub fn refresh(mut self: Pin<&mut Self>) {
+        self.as_mut().run(|_| Ok(install::Warnings::new()));
+        let dir = self.rust().dir.clone();
+        let qt_thread = self.qt_thread();
+        thread::spawn(move || {
+            if !install::is_downloaded(&dir) {
+                return;
             }
-            Ok(install::Warnings::new())
+            let checked = install::fetch(&dir).map(|()| install::updates_behind(&dir));
+            let queued = qt_thread.queue(move |mut backend| match checked {
+                Ok(updates) => {
+                    backend.as_mut().set_updates(i32::try_from(updates).unwrap_or(i32::MAX));
+                    backend.as_mut().set_update_error(QString::default());
+                }
+                Err(error) => backend.as_mut().set_update_error(QString::from(format!("{error:#}").as_str())),
+            });
+            if let Err(error) = queued {
+                eprintln!("the window closed before GitHub answered: {error}");
+            }
         });
     }
 
@@ -190,6 +209,12 @@ impl qobject::ThemeBackend {
     }
 
     pub fn preview(self: Pin<&mut Self>, key: &QString, value: f64) {
+        // Not while Apply, Update or a restore writes the theme: a preview
+        // then could land between their writes. The slider shows again once
+        // they are done.
+        if *self.busy() {
+            return;
+        }
         let setting = match Setting::try_new(&key.to_string(), value) {
             Ok(setting) => setting,
             Err(error) => return eprintln!("not previewing: {error:#}"),

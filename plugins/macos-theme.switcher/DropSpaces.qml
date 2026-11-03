@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "HyprQuery.js" as HyprQuery
 
 // The workspaces a dragged window can be dropped onto, as on macOS: drag a
 // window to the middle of the top edge and they slide down in a strip, with a
@@ -50,6 +51,8 @@ Item {
     root.hinting = false
     root.monitorName = monitor
     root.target = -1
+    // A drag begun before the last query finished: that query fills it.
+    if (query.running) return
     root.collect = []
     query.running = true
   }
@@ -92,15 +95,12 @@ Item {
 
   function load(text) {
     if (!root.opened) return
-    var parts = text.split("\n@@\n")
-    var clients = [], monitors = [], workspaces = []
-    try { clients = JSON.parse(parts[0]) } catch (e) {}
-    try { monitors = JSON.parse(parts[1]) } catch (e) {}
-    try { workspaces = JSON.parse(parts[2]) } catch (e) {}
-    root.wallpaper = String(parts[3] || "").trim()
+    var got = HyprQuery.parse(text)
+    var clients = got.clients, monitors = got.monitors, workspaces = got.workspaces
+    root.wallpaper = got.wallpaper
     var monitor = monitors.filter(function(m) { return m.name === root.monitorName })[0]
     if (!monitor) { root.close(); return }
-    var seen = function(c) { return c.mapped && !c.hidden && c.workspace && c.workspace.id > 0 }
+    var seen = HyprQuery.seen
     root.activeSpace = monitor.activeWorkspace ? monitor.activeWorkspace.id : 0
     root.lastSpace = workspaces.reduce(function(last, w) { return Math.max(last, w.id) }, 0)
     root.spaces = workspaces.filter(function(w) { return w.id > 0 && w.monitorID === monitor.id })
@@ -116,7 +116,7 @@ Item {
 
   Process {
     id: query
-    command: ["sh", "-c", "hyprctl clients -j; echo; echo @@; hyprctl monitors -j; echo; echo @@; hyprctl workspaces -j; echo; echo @@; readlink -f \"$HOME/.local/state/omarchy/current/background\""]
+    command: HyprQuery.COMMAND
     stdout: SplitParser {
       splitMarker: ""
       onRead: function(data) { root.collect.push(data) }

@@ -626,15 +626,16 @@ BarWidget {
 
   // How see-through windows are, the theme's Glass setting (the app's
   // Windows page, install.sh --set glass): the opacity look.lua gives every
-  // window, read from the look Hyprland has loaded and followed as it changes.
-  property real windowGlass: 0.7
+  // window but the active one (the rule's second number), read from the look
+  // Hyprland has loaded and followed as it changes.
+  property real windowGlass: 0.85
   FileView {
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/look.lua"
     blockLoading: true
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var m = /o\.window\("\.\*", \{ opacity = "([0-9.]+)/.exec(text())
+      var m = /o\.window\("\.\*", \{ opacity = "[0-9.]+ ([0-9.]+)/.exec(text())
       if (m) root.windowGlass = Math.max(0.3, Math.min(1, parseFloat(m[1])))
     }
     onFileChanged: reload()

@@ -42,8 +42,10 @@ Item {
         Rectangle {
           anchors.fill: parent
           gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.38) }
-            GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, 0.16) }
+            // Dark enough where the bar's white text sits (the top third) for
+            // 4.5:1 on a white wallpaper.
+            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.62) }
+            GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, 0.42) }
             GradientStop { position: 1.0; color: "transparent" }
           }
         }

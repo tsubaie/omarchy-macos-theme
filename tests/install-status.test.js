@@ -1,7 +1,7 @@
 // install.sh --add, --remove and --status --json, in a throwaway home with a fake
 // omarchy command. Run with: node tests/install-status.test.js
 const assert = require("assert")
-const { execFileSync, spawnSync } = require("child_process")
+const { execFileSync, spawn, spawnSync } = require("child_process")
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
@@ -16,6 +16,8 @@ fs.writeFileSync(path.join(bin, "omarchy"), `#!/bin/sh
 [ "$1 $2" = "theme current" ] && { cat "$HOME/current" 2>/dev/null || echo "$THEME"; }
 [ "$1 $2" = "theme list" ] && printf 'Macos\\nTokyo Night\\n'
 [ "$1 $2" = "theme set" ] && echo "$3" > "$HOME/current"
+# A plugin Omarchy refuses to enable, as $FAIL_ENABLE names it.
+[ "$1 $2" = "plugin enable" ] && [ "$3" = "$FAIL_ENABLE" ] && exit 1
 if [ "$1 $2" = "plugin clone" ]; then
   dir="$XDG_CONFIG_HOME/omarchy/plugins/$USER.\${3#omarchy.}"
   mkdir -p "$dir" && touch "$dir/Menu.qml"
@@ -85,7 +87,7 @@ try {
   assert.deepStrictEqual(Object.keys(s.features), pieces)
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(s.active, false)
-  assert.deepStrictEqual(s.settings, { glass: 0.7, "web-glass": 1, snapping: 1, "drop-follow": 1, blur: 10, "title-bars": 1, "traffic-lights": 14, magnification: 1.75, "dock-size": 48 })
+  assert.deepStrictEqual(s.settings, { glass: 0.85, "web-glass": 1, snapping: 1, "drop-follow": 1, blur: 10, "title-bars": 1, "traffic-lights": 14, magnification: 1.75, "dock-size": 48 })
 
   // --add installs only what it names.
   assert.strictEqual(run("--add", "rows", "--add", "dock").status, 0)
@@ -107,9 +109,47 @@ try {
   assert.match(fs.readFileSync(path.join(lockDir, "LockView.qml"), "utf8"), /The macOS lock screen/)
   assert.strictEqual(run("--add", "lock").status, 0)
   assert.strictEqual(fs.readdirSync(path.dirname(lockDir)).filter((d) => d.endsWith(".lock")).length, 1)
+  // After omarchy-update, a hook brings Omarchy's new lock code into the clone, keeping the macOS view.
+  const hook = path.join(home, ".config/omarchy/hooks/post-update.d/macos-theme-lock")
+  const omarchyLock = path.join(home, "omarchy/shell/plugins/lock")
+  fs.mkdirSync(omarchyLock, { recursive: true })
+  fs.writeFileSync(path.join(omarchyLock, "Service.qml"), "new auth")
+  fs.writeFileSync(path.join(omarchyLock, "LockView.qml"), "Omarchy's view")
+  assert.strictEqual(spawnSync("bash", [hook], { env: { ...env, OMARCHY_PATH: path.join(home, "omarchy") } }).status, 0)
+  assert.strictEqual(fs.readFileSync(path.join(lockDir, "Service.qml"), "utf8"), "new auth")
+  assert.match(fs.readFileSync(path.join(lockDir, "LockView.qml"), "utf8"), /The macOS lock screen/)
   assert.strictEqual(run("--remove", "lock").status, 0)
   assert.strictEqual(status().features.lock, false)
   assert.ok(!fs.existsSync(lockDir))
+  assert.ok(!fs.existsSync(hook))
+
+  // A plugin that won't enable is left out; the others still install, and the run fails naming it.
+  const unenabled = spawnSync("bash", [script, "--add", "osd", "--add", "widgets"], { env: { ...env, FAIL_ENABLE: "macos-theme.osd" }, encoding: "utf8" })
+  assert.strictEqual(unenabled.status, 1)
+  assert.match(unenabled.stderr, /Could not install macos-theme\.osd/)
+  assert.strictEqual(status().features.osd, false)
+  assert.strictEqual(status().features.widgets, true)
+  assert.strictEqual(run("--remove", "widgets").status, 0)
+
+  // One run at a time: a live run's lock turns this one away before it changes anything;
+  // a killed run's lock is taken over, also when its pid now belongs to another program.
+  const backups = path.join(home, ".config/omarchy/macos-theme-backups")
+  const lock = path.join(backups, ".lock")
+  fs.mkdirSync(lock)
+  const other = spawn("sleep", ["30"], { argv0: "install.sh" })
+  fs.writeFileSync(path.join(lock, "pid"), String(other.pid))
+  const busy = run("--add", "switcher")
+  other.kill()
+  assert.strictEqual(busy.status, 1)
+  assert.match(busy.stderr, /Another run of install\.sh/)
+  assert.strictEqual(status().features.switcher, false)
+  for (const dead of ["999999999", String(process.pid)]) {
+    fs.mkdirSync(lock, { recursive: true })
+    fs.writeFileSync(path.join(lock, "pid"), dead)
+    assert.strictEqual(run("--add", "switcher").status, 0, dead)
+    assert.ok(!fs.existsSync(lock))
+  }
+  assert.strictEqual(run("--remove", "switcher").status, 0)
 
   // --remove takes out only that piece.
   assert.strictEqual(run("--remove", "rows").status, 0)
@@ -125,15 +165,31 @@ try {
   assert.strictEqual(run("--add", "theme").status, 0)
   assert.ok(fs.existsSync(path.join(themeDir, "backgrounds/mine.jpg")))
   assert.ok(fs.existsSync(path.join(themeDir, "look.lua")))
+  // A reinstall leaves no copy of the old theme behind: its snapshot has it.
+  assert.deepStrictEqual(fs.readdirSync(backups).filter((d) => d.startsWith("macos.")), [])
+  // GTK's blur comes from the current theme's folder, so it goes when another theme is current;
+  // the global import older versions added is replaced.
+  const gtkCss = path.join(home, ".config/gtk-4.0/gtk.css")
+  assert.match(fs.readFileSync(path.join(themeDir, "glass.css"), "utf8"), /default\/gtk\/glass\.css/)
+  fs.writeFileSync(gtkCss, '/* macOS theme: blur behind see-through GTK windows. Added by omarchy-macos-theme. */\n@import url("file:///usr/share/omarchy/default/gtk/glass.css");\n')
+  assert.strictEqual(run("--add", "theme").status, 0)
+  const gtk = fs.readFileSync(gtkCss, "utf8")
+  assert.match(gtk, /current\/theme\/glass\.css/)
+  assert.doesNotMatch(gtk, /default\/gtk\/glass\.css/)
 
   // Settings: glass goes into look.lua and stays through a reinstall; magnification
   // goes into the dock's section of shell.json, next to what was there.
   const shellJson = path.join(home, ".config/omarchy/shell.json")
   fs.writeFileSync(shellJson, JSON.stringify({ dock: { position: "left" } }))
-  assert.strictEqual(run("--set", "glass=0.85", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "drop-follow=0", "--set", "blur=15", "--set", "magnification=1.2", "--set", "dock-size=60", "--set", "title-bars=0", "--set", "traffic-lights=18").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
+  assert.strictEqual(run("--set", "glass=0.9", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "drop-follow=0", "--set", "blur=15", "--set", "magnification=1.2", "--set", "dock-size=60", "--set", "title-bars=0", "--set", "traffic-lights=18").status, 0)
+  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
   const look = fs.readFileSync(path.join(themeDir, "look.lua"), "utf8")
-  assert.match(look, /o\.window\("\.\*", \{ opacity = "0\.85 0\.85" \}\)/)
+  // Glass is for the windows you aren't using: the active one stays solid.
+  assert.match(look, /o\.window\("\.\*", \{ opacity = "1 0\.9" \}\)/)
+  // The shell's panels, menus, launcher and notifications take the same glass.
+  const shellToml = fs.readFileSync(path.join(themeDir, "shell.toml"), "utf8")
+  for (const section of ["popups", "launcher", "menu", "notifications"])
+    assert.match(shellToml, new RegExp(`^\\[${section}\\][^]*?^background-alpha *= *0\\.9$`, "m"), section)
   assert.match(look, /brave-browser\|.*", \{ opacity = "0\.9 0\.9" \}\)/)
   assert.match(look, /^local SNAPPING = 0$/m)
   assert.match(look, /^local BLUR = 15$/m)
@@ -141,8 +197,17 @@ try {
   assert.match(look, /^local LIGHTS = 18$/m)
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).dock.position, "left")
   assert.strictEqual(run("--add", "theme").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.85, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
-  for (const bad of ["glass=0.2", "glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "blur=0.5", "blur=21", "blur=-1", "web-glass=0.1", "dock-size=31", "dock-size=81", "dock-size=50.5", "title-bars=2", "drop-follow=2", "drop-follow=0.5", "traffic-lights=9", "traffic-lights=21", "traffic-lights=14.5"]) {
+  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, magnification: 1.2, "dock-size": 60 })
+  // A look.lua from before (the same glass for every window, as low as 0.5) is
+  // kept through a reinstall in the new form, raised to the least glass now takes.
+  const lookPath = path.join(themeDir, "look.lua")
+  fs.writeFileSync(lookPath, fs.readFileSync(lookPath, "utf8").replace('opacity = "1 0.9"', 'opacity = "0.7 0.7"'))
+  assert.strictEqual(status().settings.glass, 0.7)
+  assert.strictEqual(run("--add", "theme").status, 0)
+  assert.strictEqual(status().settings.glass, 0.75)
+  assert.match(fs.readFileSync(lookPath, "utf8"), /o\.window\("\.\*", \{ opacity = "1 0\.75" \}\)/)
+  assert.strictEqual(run("--set", "glass=0.9").status, 0)
+  for (const bad of ["glass=0.2", "glass=0.7","glass=2", "magnification=3", "magnification=", "size=1", "glass=1.2.3", "snapping=0.5", "snapping=2", "blur=0.5", "blur=21", "blur=-1", "web-glass=0.1", "dock-size=31", "dock-size=81", "dock-size=50.5", "title-bars=2", "drop-follow=2", "drop-follow=0.5", "traffic-lights=9", "traffic-lights=21", "traffic-lights=14.5"]) {
     assert.strictEqual(run("--set", bad).status, 1, bad)
   }
   // A preview writes the settings as --set does, for a slider being dragged;
@@ -166,6 +231,7 @@ try {
   assert.strictEqual(run("--remove", "theme").status, 0)
   const kept = fs.readdirSync(path.join(home, ".config/omarchy/macos-theme-backups"))
   assert.ok(kept.some((d) => fs.existsSync(path.join(home, ".config/omarchy/macos-theme-backups", d, "backgrounds/mine.jpg"))))
+  assert.doesNotMatch(fs.readFileSync(path.join(home, ".config/gtk-4.0/gtk.css"), "utf8"), /glass\.css/)
 
   // The theme can't be removed while it is the current theme.
   fs.mkdirSync(themeDir, { recursive: true })
@@ -223,6 +289,33 @@ try {
   fs.rmSync(shellJson)
   assert.strictEqual(run("--show-widgets", "calendar").status, 0)
   assert.deepStrictEqual(status().widgets, ["calendar"])
+  // With a removal in the same run, the widgets change still happens.
+  assert.strictEqual(run("--remove", "dock", "--show-widgets", "clock").status, 0)
+  assert.deepStrictEqual(status().widgets, ["clock"])
+
+  // An update whose menu bar part Omarchy won't enable takes the whole menu bar out, and
+  // puts the bar back as it was before it: Network back out of the tray drawer.
+  const unbarred = { left: [{ id: "omarchy.workspaces" }], right: [{ id: "omarchy.network" }] }
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: unbarred } }))
+  assert.strictEqual(run("--add", "menubar").status, 0)
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: { left: [{ id: "omarchy.workspaces" }], right: [{ id: "macos-theme.control-center" }], tray: [{ id: "omarchy.network" }] } } }))
+  const halfBar = spawnSync("bash", [script, "--add", "menubar"], { env: { ...env, FAIL_ENABLE: "macos-theme.control-center" }, encoding: "utf8" })
+  assert.strictEqual(halfBar.status, 1)
+  assert.match(halfBar.stderr, /Could not install macos-theme\.control-center/)
+  assert.strictEqual(status().features.menubar, false)
+  assert.ok(!fs.existsSync(path.join(home, ".config/omarchy/plugins/macos-theme.app-name")))
+  const afterHalf = JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout
+  assert.deepStrictEqual(afterHalf.right, [{ id: "omarchy.network" }])
+  assert.deepStrictEqual(afterHalf.tray ?? [], [])
+  // A first install that fails leaves the bar and the arrangement that removal remembered,
+  // so adding it again brings that arrangement back.
+  const remembered = { left: [{ id: "omarchy.workspaces" }], right: [{ id: "macos-theme.control-center" }], tray: [{ id: "omarchy.network" }] }
+  const firstTry = spawnSync("bash", [script, "--add", "menubar"], { env: { ...env, FAIL_ENABLE: "macos-theme.app-name" }, encoding: "utf8" })
+  assert.strictEqual(firstTry.status, 1)
+  assert.strictEqual(status().features.menubar, false)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout, afterHalf)
+  assert.strictEqual(run("--add", "menubar").status, 0)
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout, remembered)
 
   // The menu bar removed and added again gets back the bar you arranged.
   const arranged = { left: [{ id: "omarchy.workspaces" }], center: [], right: [{ id: "omarchy.clock" }, { id: "omarchy.network" }] }
@@ -243,6 +336,10 @@ try {
   // Unknown pieces are refused.
   assert.strictEqual(run("--remove", "everything").status, 1)
   assert.strictEqual(run("--add").status, 1)
+
+  // Edits to looknfeel.lua and gtk.css leave no .bak files: snapshots hold the old ones.
+  const leftovers = ["hypr", "gtk-4.0"].flatMap((d) => fs.readdirSync(path.join(home, ".config", d)).filter((f) => f.includes(".bak.")))
+  assert.deepStrictEqual(leftovers, [])
 } finally {
   fs.rmSync(home, { recursive: true, force: true })
 }

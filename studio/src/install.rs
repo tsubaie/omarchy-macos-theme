@@ -54,7 +54,7 @@ impl fmt::Display for Piece {
 /// The settings Studio sets, each with the range `install.sh --set` accepts
 /// and whether it takes whole numbers only (a switch, a size in points).
 const SETTINGS: [(&str, f64, f64, bool); 8] = [
-    ("glass", 0.5, 1.0, false),
+    ("glass", 0.75, 1.0, false),
     ("web-glass", 0.5, 1.0, false),
     ("magnification", 1.0, 2.0, false),
     ("dock-size", 32.0, 80.0, true),
@@ -202,15 +202,20 @@ const PANEL_PLACES: [&str; 2] = ["bottom", "top"];
 /// The theme's folder: `$OMARCHY_MACOS_THEME_DIR` when set (for working on a
 /// checkout), else `omarchy-macos-theme` in the user's data folder, where
 /// Omarchy Sync keeps it too.
-pub fn theme_dir() -> PathBuf {
+///
+/// # Errors
+///
+/// Fails with neither `$XDG_DATA_HOME` nor `$HOME` set, rather than putting
+/// the theme wherever the app happened to start.
+pub fn theme_dir() -> Result<PathBuf> {
     if let Some(dir) = env::var_os("OMARCHY_MACOS_THEME_DIR") {
-        return PathBuf::from(dir);
+        return Ok(PathBuf::from(dir));
     }
     let data = env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| Path::new(&home).join(".local/share")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    data.join("omarchy-macos-theme")
+        .context("neither XDG_DATA_HOME nor HOME is set, so there is nowhere to keep the theme")?;
+    Ok(data.join("omarchy-macos-theme"))
 }
 
 /// Whether the theme has been downloaded to `dir`.
@@ -337,7 +342,7 @@ impl Changes {
     }
 
     /// The arguments for one `install.sh` call.
-    fn args(&self) -> Vec<String> {
+    fn args(&self) -> Result<Vec<String>> {
         let mut args = Vec::new();
         for piece in &self.remove {
             args.extend(["--remove".to_owned(), piece.to_string()]);
@@ -355,13 +360,13 @@ impl Changes {
             args.extend(["--set".to_owned(), format!("{panel}={place}")]);
         }
         if let Some(bar) = &self.bar {
-            let json = serde_json::to_string(bar).expect("a bar layout is plain JSON");
+            let json = serde_json::to_string(bar).context("writing the bar layout")?;
             args.extend(["--bar-layout".to_owned(), json]);
         }
         if let Some(widgets) = &self.widgets {
             args.extend(["--show-widgets".to_owned(), widgets.join(",")]);
         }
-        args
+        Ok(args)
     }
 }
 
@@ -392,7 +397,7 @@ pub fn apply(dir: &Path, changes: &Changes) -> Result<Warnings> {
     if changes.is_empty() {
         return Ok(Warnings::new());
     }
-    let args = changes.args();
+    let args = changes.args()?;
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     run(dir, &args).map(|ran| ran.warnings)
 }
@@ -407,35 +412,63 @@ pub fn download(dir: &Path) -> Result<Warnings> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
     }
-    let output = Command::new("git")
-        .args(["clone", "--depth", "1", REPO_URL])
-        .arg(dir)
-        .output()
-        .context("running git")?;
-    if !output.status.success() {
-        bail!(
-            "{}",
-            last_line(&output.stderr, "git could not download the theme")
-        );
+    // Into a folder beside it, then renamed: a download cut short leaves no
+    // half a theme that looks downloaded, nor a folder the next one can't use.
+    let partial = dir.with_extension("download");
+    let _ = std::fs::remove_dir_all(&partial);
+    // An older version cloned straight into the folder; one cut short left
+    // only .git there, which is safe to clear.
+    let only_git = std::fs::read_dir(dir).is_ok_and(|entries| entries.flatten().all(|e| e.file_name() == ".git"));
+    if only_git {
+        std::fs::remove_dir_all(dir).with_context(|| format!("clearing {}", dir.display()))?;
     }
+    git(None, &["clone", "--depth", "1", REPO_URL, &partial.to_string_lossy()], 300)
+        .context("downloading the theme")?;
+    std::fs::rename(&partial, dir).with_context(|| format!("moving the theme into {}", dir.display()))?;
     Ok(Warnings::new())
 }
 
-/// Asks GitHub for the theme's new commits. Offline or without git, it
-/// quietly leaves things as they were: the next check catches up.
-pub fn fetch(dir: &Path) {
-    let _ = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["fetch", "--quiet"])
-        .output();
+/// Runs git, in `dir` when given, for `seconds` at most, and never stopping
+/// to ask for a password (there is no terminal to ask in).
+fn git(dir: Option<&Path>, args: &[&str], seconds: u32) -> Result<()> {
+    let mut command = Command::new("timeout");
+    command.arg(seconds.to_string()).arg("git");
+    if let Some(dir) = dir {
+        command.arg("-C").arg(dir);
+    }
+    let output = command
+        .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()
+        .context("running git")?;
+    match output.status.code() {
+        Some(0) => Ok(()),
+        // What `timeout` exits with when it stopped the command.
+        Some(124) => bail!("git took over {seconds} seconds; is the network down?"),
+        _ => bail!("{}", last_line(&output.stderr, "git failed")),
+    }
+}
+
+/// Asks GitHub for the theme's new commits.
+///
+/// # Errors
+///
+/// Fails offline, or when GitHub doesn't answer in time.
+pub fn fetch(dir: &Path) -> Result<()> {
+    git(Some(dir), &["fetch", "--quiet"], 30).context("couldn't check for updates")
+}
+
+/// Left in .git while an update has pulled but not installed yet, so the
+/// update stays offered until an install goes through.
+fn needs_install(dir: &Path) -> PathBuf {
+    dir.join(".git/studio-needs-install")
 }
 
 /// How many commits the theme on GitHub is ahead of the one here, as last
 /// fetched; 0 when that can't be told. Commits that touch only Studio, which
 /// lives in the same repository, don't count: they change nothing installed.
 pub fn updates_behind(dir: &Path) -> u32 {
-    Command::new("git")
+    let behind = Command::new("git")
         .arg("-C")
         .arg(dir)
         .args(["rev-list", "--count", "HEAD..@{upstream}", "--", ".", ":(exclude)studio"])
@@ -444,7 +477,9 @@ pub fn updates_behind(dir: &Path) -> u32 {
         .filter(|output| output.status.success())
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .and_then(|count| count.trim().parse().ok())
-        .unwrap_or(0)
+        .unwrap_or(0);
+    // Pulled but not installed: the update isn't done, so it is still offered.
+    if needs_install(dir).exists() { behind.max(1) } else { behind }
 }
 
 /// Pieces an update reinstalls: what is installed, but not the MacTahoe
@@ -468,25 +503,20 @@ fn reinstall(status: &Status) -> Vec<Piece> {
 /// own), or with `install.sh`'s own message.
 pub fn update(dir: &Path) -> Result<Warnings> {
     let installed = reinstall(&status(dir)?);
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["pull", "--ff-only", "--quiet"])
-        .output()
-        .context("running git")?;
-    if !output.status.success() {
-        bail!(
-            "{}",
-            last_line(&output.stderr, "git could not update the theme")
-        );
-    }
-    apply(
+    git(Some(dir), &["pull", "--ff-only", "--quiet"], 120).context("updating the theme")?;
+    // Until the install goes through, the update stays offered, so a failed
+    // one can be tried again rather than vanishing with the pulled commits.
+    let marker = needs_install(dir);
+    let _ = std::fs::write(&marker, "");
+    let warnings = apply(
         dir,
         &Changes {
             add: installed,
             ..Changes::default()
         },
-    )
+    )?;
+    let _ = std::fs::remove_file(&marker);
+    Ok(warnings)
 }
 
 /// Where Omarchy is installed: `$OMARCHY_PATH`, else `/usr/share/omarchy`.
@@ -497,14 +527,25 @@ pub fn omarchy_dir() -> PathBuf {
 /// Omarchy's own green, the color of its icon.
 pub const OMARCHY_GREEN: &str = "#9ECE6A";
 
-/// Omarchy's logo recolored from its black to its green, written next to the
-/// app's other runtime files, as a `file://` URL. None when the logo can't be read.
+/// Omarchy's logo recolored from its black to its green, as a `data:` URL the
+/// window shows as it is: no file written anywhere. None when the logo can't
+/// be read.
 pub fn green_omarchy_logo() -> Option<String> {
     let logo = std::fs::read_to_string(omarchy_dir().join("logo.svg")).ok()?;
-    let green = recolor_logo(&logo);
-    let file = env::temp_dir().join("omarchy-macos-studio-logo.svg");
-    std::fs::write(&file, green).ok()?;
-    Some(format!("file://{}", file.display()))
+    Some(data_url(&recolor_logo(&logo)))
+}
+
+/// An SVG as a `data:` URL, escaped byte by byte where a URL needs it.
+fn data_url(svg: &str) -> String {
+    let mut url = String::from("data:image/svg+xml;charset=utf-8,");
+    for byte in svg.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.~ =:/;,'()".contains(&byte) {
+            url.push(char::from(byte));
+        } else {
+            url.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    url
 }
 
 /// The logo with its black fills in Omarchy's green; anything else unchanged.
@@ -735,7 +776,7 @@ mod tests {
         )
         .expect("valid changes");
         assert_eq!(
-            changes.args(),
+            changes.args().expect("args"),
             [
                 "--remove",
                 "osd",
@@ -759,7 +800,7 @@ mod tests {
         )
         .expect("a layout");
         assert_eq!(
-            changes.args(),
+            changes.args().expect("args"),
             [
                 "--bar-layout",
                 r#"{"sections":{"right":["omarchy.clock","netmojo.omdrop"]},"hidden":["omarchy.weather"]}"#
@@ -778,7 +819,7 @@ mod tests {
             Changes::from_json(r#"{"places":{"volume-hud":"top","dictation-hud":"bottom"}}"#)
                 .expect("places");
         assert_eq!(
-            changes.args(),
+            changes.args().expect("args"),
             ["--set", "dictation-hud=bottom", "--set", "volume-hud=top"]
         );
         assert!(Changes::from_json(r#"{"places":{"volume-hud":"middle"}}"#).is_err());
@@ -795,7 +836,7 @@ mod tests {
     #[test]
     fn the_clock_goes_to_one_of_three_places() {
         let changes = Changes::from_json(r#"{"clock":"center"}"#).expect("a place");
-        assert_eq!(changes.args(), ["--set", "clock=center"]);
+        assert_eq!(changes.args().expect("args"), ["--set", "clock=center"]);
         assert!(!changes.is_empty());
         assert!(Changes::from_json(r#"{"clock":"top; rm -rf ~"}"#).is_err());
         let status = parse_status(r#"{"active":true,"features":{},"settings":{},"clock":"left"}"#)
@@ -808,7 +849,7 @@ mod tests {
     #[test]
     fn the_shown_widgets_are_checked_and_passed_together() {
         let changes = Changes::from_json(r#"{"widgets":["clock","playing"]}"#).expect("widgets");
-        assert_eq!(changes.args(), ["--show-widgets", "clock,playing"]);
+        assert_eq!(changes.args().expect("args"), ["--show-widgets", "clock,playing"]);
         assert!(!changes.is_empty());
         assert!(Changes::from_json(r#"{"widgets":[]}"#).is_err());
         assert!(Changes::from_json(r#"{"widgets":["clock,dock"]}"#).is_err());
@@ -867,6 +908,24 @@ mod tests {
             .expect("valid report");
         let names: Vec<String> = reinstall(&status).iter().map(ToString::to_string).collect();
         assert_eq!(names, ["dock", "theme"]);
+    }
+
+    #[test]
+    fn the_logo_is_a_data_url_with_what_urls_need_escaped() {
+        let url = data_url("<svg fill=\"#9ECE6A\">100%\n</svg>");
+        assert_eq!(url, "data:image/svg+xml;charset=utf-8,%3Csvg fill=%22%239ECE6A%22%3E100%25%0A%3C/svg%3E");
+        assert!(!url.contains('#'), "a # would end the URL there");
+    }
+
+    #[test]
+    fn an_update_pulled_but_not_installed_stays_offered() {
+        let dir = env::temp_dir().join(format!("studio-marker-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(Command::new("git").args(["init", "-q"]).arg(&dir).status().expect("git").success());
+        assert_eq!(updates_behind(&dir), 0);
+        std::fs::write(needs_install(&dir), "").expect("the marker");
+        assert_eq!(updates_behind(&dir), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -999,7 +1058,7 @@ mod contract {
                 "widgets": ["clock", "weather"]}"#,
         )
         .expect("changes the window can send");
-        let args = changes.args();
+        let args = changes.args().expect("args");
         home.ok(&args.iter().map(String::as_str).collect::<Vec<_>>());
 
         // What it reports back, read by Studio's own readers.

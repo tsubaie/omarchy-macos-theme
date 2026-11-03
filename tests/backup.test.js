@@ -174,6 +174,15 @@ try {
   assert.match(linked.out, /links/)
   assert.ok(!fs.existsSync(c.config("omarchy/themes/macos/backgrounds/a.jpg")))
 
+  // An export from a version that let glass go lower still imports, at the least glass now takes.
+  const oldGlass = path.join(evil, "old-glass")
+  fs.mkdirSync(oldGlass)
+  fs.writeFileSync(path.join(oldGlass, "profile.json"), JSON.stringify({ format: 1, pieces: ["theme"], settings: { glass: 0.6 } }))
+  spawnSync("tar", ["-C", oldGlass, "-czf", path.join(evil, "old-glass.tar.gz"), "profile.json"])
+  const lowered = c.run("--import", path.join(evil, "old-glass.tar.gz"))
+  assert.strictEqual(lowered.status, 0, lowered.out)
+  assert.strictEqual(c.json("--status", "--json").settings.glass, 0.75)
+
   // A restore that fails half-way puts back how things were, the theme's own
   // wallpapers too. A file where gtk-4.0 should be makes the move fail.
   const e = makeHome()
@@ -211,7 +220,7 @@ try {
   const previewed = d.run("--preview", "--set", "glass=0.9")
   assert.strictEqual(previewed.status, 0, previewed.out)
   assert.strictEqual(fs.readFileSync(d.config("omarchy/themes/macos/look.lua"), "utf8"), lookBefore)
-  assert.match(fs.readFileSync(path.join(shown, "look.lua"), "utf8"), /0\.9 0\.9/)
+  assert.match(fs.readFileSync(path.join(shown, "look.lua"), "utf8"), /opacity = "1 0\.9"/)
   assert.strictEqual(d.json("--backups", "--json").length, count)
 } finally {
   for (const home of homes) fs.rmSync(home, { recursive: true, force: true })

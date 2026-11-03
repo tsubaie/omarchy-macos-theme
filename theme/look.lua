@@ -86,9 +86,10 @@ hl.layer_rule({ match = { namespace = "^omarchy-snap-preview$" }, no_anim = true
 hl.animation({ leaf = "layersIn", enabled = true, speed = 4.5, bezier = "macSpring", style = "popin 92%" })
 hl.animation({ leaf = "layersOut", enabled = true, speed = 2, bezier = "easeOutQuint", style = "popin 95%" })
 
--- Every app fades to frosted glass like Files (apps draw solid backgrounds,
--- so the whole window fades). GTK apps get their blur from gtk.css.
-o.window(".*", { opacity = "0.7 0.7" })
+-- The window you are using stays solid, so its text reads; the others fade
+-- to frosted glass like Files (apps draw solid backgrounds, so the whole
+-- window fades). GTK apps get their blur from gtk.css.
+o.window(".*", { opacity = "1 0.85" })
 -- Ghostty has its own glass background with solid text; keep it as is.
 o.window("^(com\\.mitchellh\\.ghostty|TUI\\..*)$", { opacity = "1 1" })
 -- Files draws its own glass (see-through sidebar, solid list) from gtk.css.
