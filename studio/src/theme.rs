@@ -79,6 +79,15 @@ pub mod qobject {
         #[qinvokable]
         fn download(self: Pin<&mut Self>);
 
+        /// Puts Studio's newest release in place of this one.
+        #[qinvokable]
+        #[cxx_name = "updateStudio"]
+        fn update_studio(self: Pin<&mut Self>);
+
+        /// Opens Studio again, from where its updates go; the window then quits.
+        #[qinvokable]
+        fn reopen(&self) -> bool;
+
         /// Stops the running action: its command, and what that started.
         #[qinvokable]
         fn cancel(self: Pin<&mut Self>);
@@ -288,6 +297,22 @@ impl qobject::ThemeBackend {
 
     pub fn download(self: Pin<&mut Self>) {
         self.run(install::download);
+    }
+
+    pub fn update_studio(self: Pin<&mut Self>) {
+        self.run(install::update_studio);
+    }
+
+    pub fn reopen(&self) -> bool {
+        let Some(binary) = install::studio_binary() else { return false };
+        // On the page shown now, as it was left.
+        match Command::new(&binary).spawn() {
+            Ok(_) => true,
+            Err(error) => {
+                eprintln!("could not reopen {}: {error}", binary.display());
+                false
+            }
+        }
     }
 
     pub fn cancel(self: Pin<&mut Self>) {

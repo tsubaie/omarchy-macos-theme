@@ -610,6 +610,35 @@ pub fn update(dir: &Path) -> Result<Warnings> {
     Ok(warnings)
 }
 
+/// Where `studio/get.sh` puts Studio, and where it is reopened from.
+pub fn studio_binary() -> Option<PathBuf> {
+    env::var_os("XDG_BIN_HOME")
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| Path::new(&home).join(".local/bin")))
+        .map(|dir| dir.join("omarchy-macos-studio"))
+}
+
+/// Puts Studio's newest release in place of this one, with the theme's own
+/// `studio/get.sh`, as it was installed. The running program carries on
+/// until it is reopened.
+///
+/// # Errors
+///
+/// Fails when the theme here is too old to have `studio/get.sh`, or with
+/// its own message (offline, say).
+pub fn update_studio(dir: &Path) -> Result<Warnings> {
+    if !dir.join("studio/get.sh").is_file() {
+        bail!("Update the theme first: this copy of it is too old to update Studio");
+    }
+    // get.sh says what it is doing in plain lines; curl's progress bar goes to stderr.
+    run_script(dir, "studio/get.sh", &[], |line| {
+        let line = line.trim();
+        (!line.is_empty()).then(|| line.to_owned())
+    })
+    .map(|ran| ran.warnings)
+}
+
 /// Where Omarchy is installed: `$OMARCHY_PATH`, else `/usr/share/omarchy`.
 pub fn omarchy_dir() -> PathBuf {
     env::var_os("OMARCHY_PATH").map_or_else(|| PathBuf::from("/usr/share/omarchy"), PathBuf::from)
@@ -784,13 +813,19 @@ struct Ran {
 /// Runs `install.sh`. It writes what it did to stdout, and warnings and
 /// errors to stderr, so stderr on success is its warnings.
 fn run(dir: &Path, args: &[&str]) -> Result<Ran> {
-    let script = dir.join("install.sh");
+    run_script(dir, "install.sh", args, install_step)
+}
+
+/// Runs a script of the theme's, `install.sh` or `studio/get.sh`, the same way.
+fn run_script(dir: &Path, script: &str, args: &[&str], progress: Progress) -> Result<Ran> {
+    let script = dir.join(script);
     let mut command = Command::new("bash");
     command.arg(&script).args(args).current_dir(dir);
-    let output = watched_output(command, Some(install_step), None)
+    let output = watched_output(command, Some(progress), None)
         .with_context(|| format!("running {}", script.display()))?;
     if !output.status.success() {
-        return Err(Failed::new(&output.stderr, "install.sh failed").into());
+        let name = script.file_name().map_or_else(|| "it".into(), |n| n.to_string_lossy());
+        return Err(Failed::new(&output.stderr, &format!("{name} failed")).into());
     }
     Ok(Ran {
         out: String::from_utf8(output.stdout).context("install.sh printed something that isn't text")?,
@@ -1173,6 +1208,15 @@ mod tests {
         assert_eq!(older.previous_theme, None);
         let status = parse_status(r#"{"active":true,"features":{},"settings":{},"previous-theme":"Nord"}"#).expect("valid");
         assert_eq!(status.previous_theme.as_deref(), Some("Nord"));
+    }
+
+    #[test]
+    fn studio_updates_need_the_themes_get_sh() {
+        let dir = env::temp_dir().join(format!("studio-no-get-sh-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let error = update_studio(&dir).expect_err("no get.sh to run");
+        assert!(error.to_string().contains("Update the theme first"), "{error}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
