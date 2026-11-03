@@ -60,6 +60,10 @@ cd omarchy-macos-theme
 
 [macOS Theme Studio](studio/), in this repository, is a window shaped like macOS System Settings for all of this: a switch for each piece, sliders, Apply, backups and Update. It runs the same `install.sh`.
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/tsubaie/omarchy-macos-theme/main/studio/get.sh | bash
+```
+
 [Omarchy Sync](https://github.com/tsubaie/OmaSync) has a **macOS Theme** page that does all of this without a terminal: a switch for each piece, sliders for the glass and the dock's magnification, **Apply** to install, remove or set what changed, and **Update** to get the latest version. It downloads this repository to `~/.local/share/omarchy-macos-theme` and runs the same `install.sh` (`--add`, `--remove`, `--set` and `--status --json`), so the page and the script always agree.
 
 Use the script rather than `omarchy theme install <url>`. Themes installed from git have their `.lua` files and `ghostty.conf` removed for safety, and those carry the glass, title bars and gaps. Re-running the script updates everything in place and keeps your wallpaper.

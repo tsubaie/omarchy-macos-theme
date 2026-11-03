@@ -167,7 +167,9 @@ impl Default for ThemeBackendRust {
             updates: 0,
             update_notes: QString::default(),
             update_error: QString::default(),
-            app_version: QString::from(env!("CARGO_PKG_VERSION")),
+            // A release build carries its release's date name (from CI); a local
+            // build, Cargo's version.
+            app_version: QString::from(option_env!("STUDIO_RELEASE").unwrap_or(env!("CARGO_PKG_VERSION"))),
             omarchy_version: QString::from(install::omarchy_version().unwrap_or_default().as_str()),
             // Omarchy's own logo, read where Omarchy keeps it rather than
             // copied in, in its green.

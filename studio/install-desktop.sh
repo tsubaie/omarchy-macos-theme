@@ -6,6 +6,9 @@
 #   ./install-desktop.sh                     the app manages ~/.local/share/omarchy-macos-theme
 #   ./install-desktop.sh ..                  it manages the theme in this checkout instead
 #   ./install-desktop.sh --remove            take the entry and icon away
+#
+# OMARCHY_MACOS_STUDIO_BIN points the entry at a binary elsewhere, as get.sh
+# does for the one it downloads.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")" && pwd)"
@@ -26,7 +29,7 @@ if [[ ${1:-} == --remove ]]; then
   exit 0
 fi
 
-binary="$repo/target/release/$id"
+binary="${OMARCHY_MACOS_STUDIO_BIN:-$repo/target/release/$id}"
 [[ -x $binary ]] || { echo "Build it first: cargo build --release" >&2; exit 1; }
 
 # One argument of Exec=, quoted as the Desktop Entry spec asks: in double

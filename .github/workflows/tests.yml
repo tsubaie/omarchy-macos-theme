@@ -7,6 +7,8 @@ name: tests
 on:
   push:
   pull_request:
+  # Run by hand on main to publish a release of Studio (see the release job).
+  workflow_dispatch:
 
 jobs:
   test:
@@ -44,3 +46,41 @@ jobs:
           restore-keys: cargo-${{ steps.versions.outputs.key }}-
       - name: Run the tests
         run: tests/run.sh
+
+  # Run by hand on main ("Run workflow", or gh workflow run tests.yml), and
+  # once the tests pass this publishes a release of Studio named for the day,
+  # 2026.11.03, or 2026.11.03.2 for a second one that day. The name is built
+  # into the program, so it can tell whether the latest release is newer.
+  # It links Arch's Qt, so it is built on Arch, as Omarchy is.
+  release:
+    needs: test
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install what the build uses
+        run: pacman -Syu --noconfirm --needed base-devel rust qt6-base qt6-declarative github-cli
+      - uses: actions/checkout@v4
+      - name: Name the release for today
+        run: |
+          name=$(date -u +%Y.%m.%d)
+          n=1
+          while gh release view "$name" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; do
+            n=$((n + 1)); name=$(date -u +%Y.%m.%d).$n
+          done
+          echo "STUDIO_RELEASE=$name" >> "$GITHUB_ENV"
+      - name: Build
+        run: cd studio && cargo build --profile dist --locked
+      - name: Package
+        run: |
+          d=dist/omarchy-macos-studio
+          mkdir -p "$d/assets"
+          cp studio/target/dist/omarchy-macos-studio studio/install-desktop.sh studio/LICENSE "$d/"
+          cp studio/assets/icon-omarchy.svg "$d/assets/"
+          tar -czf dist/omarchy-macos-studio-x86_64.tar.gz -C dist omarchy-macos-studio
+      - name: Publish the release
+        run: gh release create "$STUDIO_RELEASE" dist/omarchy-macos-studio-x86_64.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "macOS Theme Studio $STUDIO_RELEASE" --generate-notes

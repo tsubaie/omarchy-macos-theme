@@ -45,6 +45,14 @@ Made for Omarchy 4 and later. Open source, MIT.
 
 ## Install
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/tsubaie/omarchy-macos-theme/main/studio/get.sh | bash
+```
+
+This downloads the latest [release](https://github.com/tsubaie/omarchy-macos-theme/releases) to `~/.local/bin/omarchy-macos-studio` and puts it in the app launcher. Run it again to update. To remove it: `rm ~/.local/bin/omarchy-macos-studio ~/.local/share/applications/omarchy-macos-studio.desktop ~/.local/share/icons/hicolor/scalable/apps/omarchy-macos-studio.svg`.
+
+### From source
+
 The app needs Omarchy and Rust. Omarchy already has Qt 6, which the app uses.
 
 ```bash
@@ -225,6 +233,16 @@ cargo test
 `../tests/run.sh` runs these and the theme's tests in one go. The Rust tests include a contract with the real `../install.sh`: the pieces, settings and ranges Studio sends are ones it takes, and Studio reads what it reports. `node tests/bar-model.test.js` tests the menu bar's Left, Center and Right groups, `node tests/labels.test.js` the backups' labels, and `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml` drives real presses, drags and releases on its rows: moving within and between groups, hiding and showing, dropping into an empty group, letting go over nothing, the page holding still under a drag and scrolling at its edges, and several drags in a row.
 
 The Rust tests cover what can go wrong between the window and the installer: piece names, settings and their ranges, how changes combine into one installer call (a theme to switch to first included), refusing bad changes before anything runs, reading the installer's status and backups, backup ids, which pieces an update reinstalls, reading progress from git and the installer, Stop ending a command and what it started, keeping all a failed command said, and recoloring Omarchy's logo.
+
+### Making a release
+
+Releases are named for the day they're made: `2026.11.03`, or `2026.11.03.2` for a second one that day. From `main`, press **Run workflow** on the [tests workflow](https://github.com/tsubaie/omarchy-macos-theme/actions/workflows/tests.yml), or:
+
+```bash
+gh workflow run tests.yml --ref main
+```
+
+Once the tests pass, CI builds the program on Arch with the release's name as its version (About shows it), tags the commit and publishes `omarchy-macos-studio-x86_64.tar.gz`, which `get.sh` downloads. The latest release's name is at `https://api.github.com/repos/tsubaie/omarchy-macos-theme/releases/latest` (`tag_name`): a name other than the app's own means there is an update. A local build shows `Cargo.toml`'s version instead.
 
 ### The app icon
 
