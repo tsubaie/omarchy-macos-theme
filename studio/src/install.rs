@@ -134,6 +134,17 @@ pub struct Status {
     /// The desktop widgets shown. Older themes don't report them.
     #[serde(default)]
     pub widgets: Option<Vec<String>>,
+    /// Your own desktop widgets, as `{id, name}`. Older themes don't report them.
+    #[serde(default, rename = "custom-widgets")]
+    pub custom_widgets: Vec<serde_json::Value>,
+    /// The workspaces the desktop widgets show on: "all" or their numbers.
+    /// Older themes don't report it.
+    #[serde(default, rename = "widget-workspaces")]
+    pub widget_workspaces: Option<serde_json::Value>,
+    /// The workspaces on the widgets' screen, to choose from. Older themes
+    /// don't report them.
+    #[serde(default, rename = "widget-workspaces-there")]
+    pub widget_workspaces_there: Vec<u64>,
     /// Where the volume panel shows: "bottom" or "top". Older themes don't
     /// report it.
     #[serde(default, rename = "volume-hud")]
@@ -293,6 +304,20 @@ pub fn status(dir: &Path) -> Result<Status> {
 /// icons. A change there from outside Studio (a widget removed on the
 /// desktop, a theme switched in Omarchy, install.sh run from a terminal)
 /// moves it. Each folder and what's directly in it, followed through links.
+/// The workspaces Hyprland has, by number: made or closed outside Studio
+/// without any file changing, yet the status lists them (the widgets' Show
+/// On). Empty when Hyprland doesn't answer.
+#[must_use]
+pub fn workspace_ids() -> Vec<i64> {
+    let Ok(output) = Command::new("hyprctl").args(["workspaces", "-j"]).output() else {
+        return Vec::new();
+    };
+    let list: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout).unwrap_or_default();
+    let mut ids: Vec<i64> = list.iter().filter_map(|w| w.get("id")?.as_i64()).filter(|id| *id > 0).collect();
+    ids.sort_unstable();
+    ids
+}
+
 // shortcut: only one level deep; a change deeper in (inside one plugin's folder, say) waits for the next action or launch.
 #[must_use]
 pub fn changed_outside() -> Option<SystemTime> {
@@ -338,8 +363,24 @@ pub struct Changes {
     clock: Option<&'static str>,
     places: Vec<(&'static str, &'static str)>,
     bar: Option<BarLayout>,
-    widgets: Option<Vec<&'static str>>,
+    widgets: Option<Vec<String>>,
+    /// Where the desktop widgets show, as `--widget-workspaces` takes it.
+    widget_workspaces: Option<String>,
     switch_to: Option<String>,
+}
+
+/// Checks where the widgets show: "all", or workspace numbers (1 and up), as
+/// `--widget-workspaces` takes them: `all` or `1,2`.
+fn widget_workspaces(value: serde_json::Value) -> Result<String> {
+    match value {
+        serde_json::Value::String(all) if all == "all" => Ok(all),
+        serde_json::Value::Array(list) if !list.is_empty() => list
+            .iter()
+            .map(|n| n.as_u64().filter(|n| *n >= 1).map(|n| n.to_string()).with_context(|| format!("not a workspace: {n}")))
+            .collect::<Result<Vec<_>>>()
+            .map(|numbers| numbers.join(",")),
+        other => bail!("the desktop widgets can't show on {other}"),
+    }
 }
 
 /// The changes as the window sends them, before they are checked.
@@ -359,6 +400,8 @@ struct RawChanges {
     bar: Option<BarLayout>,
     #[serde(default)]
     widgets: Option<Vec<String>>,
+    #[serde(default, rename = "widgetWorkspaces")]
+    widget_workspaces: Option<serde_json::Value>,
     /// The theme to switch to first, when the current one is removed.
     #[serde(default, rename = "switchTo")]
     switch_to: Option<String>,
@@ -424,6 +467,7 @@ impl Changes {
                 .collect::<Result<_>>()?,
             bar: raw.bar.map(BarLayout::check).transpose()?,
             widgets: raw.widgets.map(shown_widgets).transpose()?,
+            widget_workspaces: raw.widget_workspaces.map(widget_workspaces).transpose()?,
             switch_to: raw.switch_to.map(theme_name).transpose()?,
         };
         if let Some(piece) = changes
@@ -445,6 +489,7 @@ impl Changes {
             && self.places.is_empty()
             && self.bar.is_none()
             && self.widgets.is_none()
+            && self.widget_workspaces.is_none()
     }
 
     /// The arguments for one `install.sh` call.
@@ -475,26 +520,28 @@ impl Changes {
         if let Some(widgets) = &self.widgets {
             args.extend(["--show-widgets".to_owned(), widgets.join(",")]);
         }
+        if let Some(workspaces) = &self.widget_workspaces {
+            args.extend(["--widget-workspaces".to_owned(), workspaces.clone()]);
+        }
         Ok(args)
     }
 }
 
-/// Checks the widgets to show: known ones, at least one, as the desktop
-/// always keeps one.
-fn shown_widgets(names: Vec<String>) -> Result<Vec<&'static str>> {
+/// Checks the widgets to show: at least one, as the desktop always keeps one,
+/// each the theme's own or named as a widget of your own can be (its folder's
+/// name: lowercase letters, digits and dashes), which `install.sh` then finds.
+fn shown_widgets(names: Vec<String>) -> Result<Vec<String>> {
     if names.is_empty() {
         bail!("at least one desktop widget stays shown");
     }
-    names
-        .iter()
-        .map(|name| {
-            DESKTOP_WIDGETS
-                .iter()
-                .copied()
-                .find(|known| known == name)
-                .with_context(|| format!("unknown desktop widget {name:?}"))
-        })
-        .collect()
+    for name in &names {
+        let own = name.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !DESKTOP_WIDGETS.contains(&name.as_str()) && !own {
+            bail!("unknown desktop widget {name:?}");
+        }
+    }
+    Ok(names)
 }
 
 /// Applies the changes in one `install.sh` call, and returns its warnings.
@@ -1314,6 +1361,25 @@ mod tests {
         assert!(!changes.is_empty());
         assert!(Changes::from_json(r#"{"widgets":[]}"#).is_err());
         assert!(Changes::from_json(r#"{"widgets":["clock,dock"]}"#).is_err());
+        // One of your own, by its folder's name; nothing that could be more than a name.
+        let own = Changes::from_json(r#"{"widgets":["clock","my-quotes"]}"#).expect("your own");
+        assert_eq!(own.args().expect("args"), ["--show-widgets", "clock,my-quotes"]);
+        for bad in ["My", "-x", "a b", "../x", "x;y", ""] {
+            assert!(Changes::from_json(&format!(r#"{{"widgets":["{bad}"]}}"#)).is_err(), "{bad}");
+        }
+        let custom = parse_status(r#"{"active":true,"features":{},"settings":{},"custom-widgets":[{"id":"my-quotes","name":"Quotes"}]}"#)
+            .expect("valid");
+        assert_eq!(custom.custom_widgets.len(), 1);
+
+        // Where they show: all, or workspace numbers; nothing else reaches install.sh.
+        let some = Changes::from_json(r#"{"widgetWorkspaces":[1,3]}"#).expect("some");
+        assert_eq!(some.args().expect("args"), ["--widget-workspaces", "1,3"]);
+        assert!(!some.is_empty());
+        let all = Changes::from_json(r#"{"widgetWorkspaces":"all"}"#).expect("all");
+        assert_eq!(all.args().expect("args"), ["--widget-workspaces", "all"]);
+        for bad in [r#""some""#, "[]", "[0]", "[-1]", "[1.5]", r#"["1"]"#, "3"] {
+            assert!(Changes::from_json(&format!(r#"{{"widgetWorkspaces":{bad}}}"#)).is_err(), "{bad}");
+        }
         let status =
             parse_status(r#"{"active":true,"features":{},"settings":{},"widgets":["weather"]}"#)
                 .expect("valid");

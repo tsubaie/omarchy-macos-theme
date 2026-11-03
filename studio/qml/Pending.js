@@ -25,7 +25,9 @@ function forgetMet(pending, now) {
         }),
         places: unmet(pending.places, function(panel, place) { return place === now.place(panel) }),
         bar: pending.bar && same(pending.bar, now.bar) ? null : pending.bar,
-        widgets: pending.widgets && same(pending.widgets, now.widgets) ? null : pending.widgets
+        widgets: pending.widgets && same(pending.widgets, now.widgets) ? null : pending.widgets,
+        // "all" or workspace numbers; null while unchanged.
+        workspaces: pending.workspaces == null || same(pending.workspaces, now.workspaces) ? null : pending.workspaces
     }
 }
 

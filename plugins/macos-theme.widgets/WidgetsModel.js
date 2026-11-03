@@ -125,14 +125,17 @@ function occupied(layout, col, row) {
 // shell.json saved. Unknown ids and repeats are dropped, a widget on a taken
 // cell moves to a free one, and nothing saved (or nothing usable) means all
 // of them down the left edge, so the desktop never loses every widget.
-function normalizeLayout(saved) {
+// known: the ids that can show, the theme's own and yours (the theme's own
+// alone when left out); with nothing saved, the theme's own show.
+function normalizeLayout(saved, known) {
+  known = known || WIDGETS
   var out = []
   if (Array.isArray(saved)) {
     var later = []
     for (var i = 0; i < saved.length; i++) {
       var w = saved[i] || {}
       var id = String(w.id || "")
-      if (WIDGETS.indexOf(id) < 0 || find(out, id) || later.indexOf(id) >= 0) continue
+      if (known.indexOf(id) < 0 || find(out, id) || later.indexOf(id) >= 0) continue
       var col = Number(w.col), row = Number(w.row)
       if (Number.isInteger(col) && Number.isInteger(row) && col >= 0 && row >= 0 && !occupied(out, col, row))
         out.push({ id: id, col: col, row: row })
@@ -153,9 +156,9 @@ function find(layout, id) {
   return null
 }
 
-// The widgets not shown, in their usual order.
-function hidden(layout) {
-  return WIDGETS.filter(function(id) { return !find(layout, id) })
+// The widgets not shown, in their usual order, yours after the theme's own.
+function hidden(layout, known) {
+  return (known || WIDGETS).filter(function(id) { return !find(layout, id) })
 }
 
 // The first free cell, down each column from the left; null when all are taken.
@@ -197,10 +200,18 @@ function remove(layout, id) {
   return layout.length <= 1 ? layout : layout.filter(function(w) { return w.id !== id })
 }
 
-function add(layout, id, cols, rows) {
-  if (WIDGETS.indexOf(id) < 0 || find(layout, id)) return layout
+function add(layout, id, cols, rows, known) {
+  if ((known || WIDGETS).indexOf(id) < 0 || find(layout, id)) return layout
   var cell = freeCell(layout, cols, rows)
   return cell ? layout.concat([{ id: id, col: cell.col, row: cell.row }]) : layout
+}
+
+// Whether the widgets show on a workspace (its number): on every one, unless
+// shell.json's widgets.workspaces lists some ([1, 2]); "all", an empty list or
+// anything else is every one, so they can't end up shown nowhere.
+function showsOn(workspaces, id) {
+  if (!Array.isArray(workspaces) || workspaces.length === 0) return true
+  return workspaces.indexOf(Number(id)) >= 0
 }
 
 // The cell nearest a position, kept on the grid.
@@ -211,4 +222,4 @@ function snap(x, y, cell, cols, rows) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, fitLayout: fitLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap }
+if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, fitLayout: fitLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap, showsOn: showsOn }

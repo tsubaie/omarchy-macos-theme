@@ -104,4 +104,27 @@ assert.strictEqual(withSun.sunrise, 1793502010000)
 assert.strictEqual(withSun.sunset, 1793542395000)
 assert.match(m.forecastUrl(1, 2), /sunrise,sunset.*timeformat=unixtime/)
 
+// Widgets of your own: known, they keep their place and can be added; unknown
+// (its folder gone), they're dropped; with nothing saved, the theme's own show.
+{
+  const known = m.WIDGETS.concat(["my-quotes"])
+  const saved = [{ id: "clock", col: 0, row: 0 }, { id: "my-quotes", col: 1, row: 0 }]
+  assert.deepStrictEqual(m.normalizeLayout(saved, known), saved)
+  assert.deepStrictEqual(m.normalizeLayout(saved), [{ id: "clock", col: 0, row: 0 }])
+  assert.deepStrictEqual(m.normalizeLayout(undefined, known).map((w) => w.id), m.WIDGETS)
+  assert.deepStrictEqual(m.hidden(saved, known), ["calendar", "weather", "playing"])
+  assert.deepStrictEqual(m.hidden([{ id: "clock", col: 0, row: 0 }], known), ["calendar", "weather", "playing", "my-quotes"])
+  const added = m.add([{ id: "clock", col: 0, row: 0 }], "my-quotes", 4, 4, known)
+  assert.deepStrictEqual(added, [{ id: "clock", col: 0, row: 0 }, { id: "my-quotes", col: 0, row: 1 }])
+  assert.deepStrictEqual(m.add([{ id: "clock", col: 0, row: 0 }], "my-quotes", 4, 4), [{ id: "clock", col: 0, row: 0 }])
+}
+
+// Which workspaces show the widgets: all unless some are named; never none.
+assert.strictEqual(m.showsOn(undefined, 3), true)
+assert.strictEqual(m.showsOn("all", 3), true)
+assert.strictEqual(m.showsOn([], 3), true)
+assert.strictEqual(m.showsOn([1, 2], 1), true)
+assert.strictEqual(m.showsOn([1, 2], 3), false)
+assert.strictEqual(m.showsOn([1, 2], "2"), true)
+
 console.log("widgets model: ok")

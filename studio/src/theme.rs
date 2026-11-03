@@ -132,6 +132,12 @@ pub mod qobject {
         #[cxx_name = "minimizeWindow"]
         fn minimize_window(&self) -> bool;
 
+        /// Makes a folder (and those above it) if it isn't there, so it can be
+        /// opened: the one your own desktop widgets go in.
+        #[qinvokable]
+        #[cxx_name = "makeFolder"]
+        fn make_folder(&self, path: &QString) -> bool;
+
         /// Fills the screen with the window, or puts it back.
         #[qinvokable]
         #[cxx_name = "zoomWindow"]
@@ -186,6 +192,8 @@ pub struct ThemeBackendRust {
     watch: Arc<Mutex<install::Watch>>,
     /// The newest change outside Studio, as last looked at.
     outside_seen: Option<SystemTime>,
+    /// Hyprland's workspaces, as last looked at.
+    workspaces_seen: Vec<i64>,
     rereading: bool,
     /// Actions started, so a reread an action overtook is dropped.
     runs: u64,
@@ -231,6 +239,7 @@ impl Default for ThemeBackendRust {
             previews: Arc::default(),
             watch: Arc::default(),
             outside_seen: install::changed_outside(),
+            workspaces_seen: install::workspace_ids(),
             rereading: false,
             runs: 0,
         }
@@ -295,12 +304,14 @@ impl qobject::ThemeBackend {
             return;
         }
         let changed = install::changed_outside();
-        if changed == self.rust().outside_seen {
+        let workspaces = install::workspace_ids();
+        if changed == self.rust().outside_seen && workspaces == self.rust().workspaces_seen {
             return;
         }
         let runs = self.rust().runs;
         let mut rust = self.as_mut().rust_mut();
         rust.outside_seen = changed;
+        rust.workspaces_seen = workspaces;
         rust.rereading = true;
         let dir = self.rust().dir.clone();
         let qt_thread = self.qt_thread();
@@ -449,6 +460,10 @@ impl qobject::ThemeBackend {
         }
     }
 
+    pub fn make_folder(&self, path: &QString) -> bool {
+        std::fs::create_dir_all(path.to_string()).is_ok()
+    }
+
     pub fn minimize_window(&self) -> bool {
         crate::window::minimize()
     }
@@ -544,6 +559,7 @@ impl qobject::ThemeBackend {
     fn finish(mut self: Pin<&mut Self>, outcome: Outcome) {
         // What the action itself changed was just read; no need to read it again.
         self.as_mut().rust_mut().outside_seen = install::changed_outside();
+        self.as_mut().rust_mut().workspaces_seen = install::workspace_ids();
         self.as_mut().set_incoming(&outcome.incoming);
         self.as_mut()
             .set_theme_version(QString::from(outcome.version.unwrap_or_default().as_str()));

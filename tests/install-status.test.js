@@ -46,6 +46,8 @@ echo "  WARN scene: QML Thing at $P/someone.else/Thing.qml[1:1]: Binding loop de
 `, { mode: 0o755 })
 // Inter installed, whatever this machine has, so a warning about it can't show up.
 fs.writeFileSync(path.join(bin, "fc-list"), "#!/bin/sh\necho Inter\n", { mode: 0o755 })
+// Hyprland's workspaces, as $HOME/workspaces.json says; every other call succeeds quietly.
+fs.writeFileSync(path.join(bin, "hyprctl"), '#!/bin/sh\n[ "$1" = workspaces ] && cat "$HOME/workspaces.json" 2>/dev/null\nexit 0\n', { mode: 0o755 })
 
 const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, THEME: "Tokyo Night", USER: "me" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
@@ -298,6 +300,45 @@ try {
   // With a removal in the same run, the widgets change still happens.
   assert.strictEqual(run("--remove", "dock", "--show-widgets", "clock").status, 0)
   assert.deepStrictEqual(status().widgets, ["clock"])
+
+  // Widgets of your own: listed by their folder's name with their manifest's
+  // name; shown like the theme's own; a folder without a Widget.qml, one
+  // named like the theme's own, or a name that's no safe id isn't one.
+  const own = path.join(home, ".config/omarchy/macos-theme-widgets")
+  for (const dir of ["uptime", "my-quotes", "clock", "no-widget", "Bad Name"]) fs.mkdirSync(path.join(own, dir), { recursive: true })
+  for (const dir of ["uptime", "my-quotes", "clock", "Bad Name"]) fs.writeFileSync(path.join(own, dir, "Widget.qml"), "")
+  fs.writeFileSync(path.join(own, "my-quotes/manifest.json"), JSON.stringify({ name: "Quotes" }))
+  assert.deepStrictEqual(status()["custom-widgets"], [{ id: "my-quotes", name: "Quotes" }, { id: "uptime", name: "uptime" }])
+  const ownShown = run("--show-widgets", "clock,uptime")
+  assert.strictEqual(ownShown.status, 0, ownShown.stderr)
+  assert.deepStrictEqual(status().widgets, ["clock", "uptime"])
+  for (const bad of ["clock,no-widget", "clock,Bad Name", "clock,../uptime"]) assert.strictEqual(run("--show-widgets", bad).status, 1, bad)
+  // Which workspaces show them: all by default, then only the named ones, then
+  // all again, without touching the widgets shown; bad lists refused.
+  assert.strictEqual(status()["widget-workspaces"], "all")
+  const some = run("--widget-workspaces", "1,3")
+  assert.strictEqual(some.status, 0, some.stderr)
+  assert.deepStrictEqual(status()["widget-workspaces"], [1, 3])
+  assert.deepStrictEqual(status().widgets, ["clock", "uptime"])
+  assert.strictEqual(run("--widget-workspaces", "all").status, 0)
+  assert.strictEqual(status()["widget-workspaces"], "all")
+  assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).widgets.workspaces, undefined)
+  for (const bad of ["", "0", "1,", "1;2", "one", "-1"]) assert.strictEqual(run("--widget-workspaces", bad).status, 1, bad)
+  // The ones to choose from: every workspace Hyprland has, on any screen (the
+  // widgets follow the chosen ones), whatever screen they're set to; no special ones.
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [])
+  fs.writeFileSync(path.join(home, "workspaces.json"), JSON.stringify([
+    { id: 4, monitor: "DP-2" }, { id: 1, monitor: "DP-2" }, { id: 5, monitor: "HDMI-A-1" }, { id: -98, monitor: "DP-2" }]))
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [1, 4, 5])
+  const withScreen = JSON.parse(fs.readFileSync(shellJson, "utf8"))
+  withScreen.widgets.screen = "HDMI-A-1"
+  fs.writeFileSync(shellJson, JSON.stringify(withScreen))
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [1, 4, 5])
+  fs.rmSync(path.join(home, "workspaces.json"))
+  // Its folder gone, it's no longer shown; the theme's own stay.
+  fs.rmSync(path.join(own, "uptime"), { recursive: true })
+  assert.deepStrictEqual(status().widgets, ["clock"])
+  fs.rmSync(own, { recursive: true })
 
   // An update whose menu bar part Omarchy won't enable takes the whole menu bar out, and
   // puts the bar back as it was before it: Network back out of the tray drawer.

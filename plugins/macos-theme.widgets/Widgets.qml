@@ -127,16 +127,28 @@ Item {
       }
     }
   }
-  readonly property var targetScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
+  readonly property var homeScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
     || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
+  // The widgets show on every screen showing a workspace they show on (each
+  // window decides). This is the one whose desktop the weather watches to
+  // rest when covered: the one being worked on, else the first showing them,
+  // else their own screen (widgets.screen, else the first).
+  readonly property var targetScreen: {
+    var chosen = root.config.workspaces
+    var showing = function(screen) {
+      var monitor = Hyprland.monitorFor(screen)
+      return !!monitor && !!monitor.activeWorkspace && Model.showsOn(chosen, monitor.activeWorkspace.id)
+    }
+    var focused = Hyprland.focusedMonitor ? Quickshell.screens.find(function(each) { return each.name === Hyprland.focusedMonitor.name }) : null
+    if (focused && showing(focused)) return focused
+    return Quickshell.screens.find(showing) || root.homeScreen
+  }
 
   // The grid: each widget sits in a cell a widget plus a gap wide, from the
   // top left; dragging one snaps it to the nearest cell, and dropping it on
   // another swaps them. Where each sits is saved in shell.json.
   readonly property int cell: size + gap
-  readonly property var layout: Model.normalizeLayout(config.layout)
-  readonly property int cols: Math.max(1, Math.floor((window.width - area.x + gap) / cell))
-  readonly property int rows: Math.max(1, Math.floor((window.height - area.y + gap) / cell))
+  readonly property var layout: Model.normalizeLayout(config.layout, known)
   // Motion kept still: Omarchy's animations off, or the theme's Reduce
   // motion (install.sh --set reduce-motion=1), read from the look Hyprland has
   // loaded and followed as it changes.
@@ -152,7 +164,6 @@ Item {
   }
 
   // The layout as this screen shows it, every widget on it.
-  readonly property var shown: Model.fitLayout(layout, cols, rows)
 
   // The desktop under the widgets is in sight when the workspace on their
   // screen is empty or floating; tiled windows cover it, and the weather's
@@ -162,7 +173,10 @@ Item {
     return monitor ? monitor.activeWorkspace : null
   }
   property bool shownFloating: false
-  readonly property bool desktopSeen: !shownWorkspace || shownWorkspace.toplevels.values.length === 0 || shownFloating
+  // On every workspace, or only those "workspaces": [1, 2] in shell.json names
+  // (install.sh --widget-workspaces, Studio's Widgets page); hidden elsewhere.
+  readonly property bool onThisWorkspace: !shownWorkspace || Model.showsOn(root.config.workspaces, shownWorkspace.id)
+  readonly property bool desktopSeen: onThisWorkspace && (!shownWorkspace || shownWorkspace.toplevels.values.length === 0 || shownFloating)
   onShownWorkspaceChanged: readMode()
   // A first value sends no change, so the workspace shown at login is read here.
   Component.onCompleted: readMode()
@@ -185,7 +199,38 @@ Item {
   // the shell never reads half of it), one write at a time.
   property var pendingLayout: null
 
+  // Widgets of your own: a folder each in ~/.config/omarchy/macos-theme-widgets,
+  // named for its id, with a Widget.qml and maybe a manifest.json naming it
+  // (docs/make-a-widget/SKILL.md). Looked for at start and whenever a widget's
+  // menu opens, so a new one can be added without a restart.
+  readonly property string customDir: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/macos-theme-widgets"
+  property var custom: []
+  property bool scanned: false
+  readonly property var known: Model.WIDGETS.concat(custom.map(function(w) { return w.id }))
+  function nameOf(id) {
+    var own = custom.find(function(w) { return w.id === id })
+    return own ? own.name : (Model.NAMES[id] || id)
+  }
+  Process {
+    id: scan
+    running: true
+    // The same rule as install.sh's custom_widget: a safe name, not the theme's own.
+    command: ["sh", "-c", 'for d in "$1"/*/; do id=$(basename "$d"); '
+      + 'case "$id" in clock|calendar|weather|playing) continue ;; esac; '
+      + 'printf "%s" "$id" | grep -qE "^[a-z0-9][a-z0-9-]*$" && [ -f "$d/Widget.qml" ] || continue; '
+      + 'name=$(jq -r ".name | strings" "$d/manifest.json" 2>/dev/null); '
+      + 'jq -cn --arg id "$id" --arg name "${name:-$id}" "{id: \\$id, name: \\$name}"; done | jq -cs .', "sh", root.customDir]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.custom = JSON.parse(text) } catch (e) { root.custom = [] }
+        root.scanned = true
+      }
+    }
+  }
+
   function save(layout) {
+    // Not before your own widgets are known, or their places would be dropped.
+    if (!root.scanned) return
     root.config = Object.assign({}, root.config, { layout: layout })
     root.pendingLayout = layout
     if (!saver.running) root.writeNext()
@@ -209,9 +254,13 @@ Item {
   // The right-click menu: Remove Widget, and Add for each widget not shown.
   property string menuFor: ""
   property point menuAt: Qt.point(0, 0)
+  // The screen it opened on: only that one's window shows it.
+  property string menuScreen: ""
 
-  function openMenu(id, x, y) {
+  function openMenu(id, x, y, screen) {
+    if (!scan.running) scan.running = true
     root.menuFor = id
+    root.menuScreen = screen
     root.menuAt = Qt.point(x, y)
     menuLeave.stop()
   }
@@ -224,135 +273,175 @@ Item {
 
   readonly property var contents: ({ clock: clockContent, calendar: calendarContent, weather: weatherContent, playing: playingContent })
 
-  PanelWindow {
-    id: window
-    screen: root.targetScreen
-    color: "transparent"
-    WlrLayershell.namespace: "omarchy-widgets"
-    WlrLayershell.layer: WlrLayer.Bottom
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    exclusionMode: ExclusionMode.Normal
-    exclusiveZone: 0
-    anchors { top: true; bottom: true; left: true; right: true }
+  // One window on every screen, always mapped, as the dock's are: moving the
+  // widgets to another screen or workspace only shows them in the window
+  // that's already there, where a fresh window wouldn't be drawn until the
+  // pointer moved over it. Only the target screen's builds the widgets; while
+  // hidden, a window takes no clicks.
+  Variants {
+    model: Quickshell.screens
 
-    // Only the widgets (and the menu) take clicks; the rest of the desktop is
-    // left alone. A drag keeps the pointer past these bounds until released.
-    mask: Region {
-      x: tiles.childrenRect.x + area.x
-      y: tiles.childrenRect.y + area.y
-      width: tiles.childrenRect.width
-      height: tiles.childrenRect.height
-
-      Region { item: root.menuFor ? menu : null }
-    }
-
-    Item {
-      id: area
-      x: Math.round(20 * root.s)
-      y: root.gap
-      width: parent.width - x
-      height: parent.height - y
-
-      Item {
-        id: tiles
-        anchors.fill: parent
-
-        Repeater {
-          model: Model.WIDGETS
-
-          delegate: Glass {
-            id: tile
-            required property string modelData
-            readonly property var spot: Model.find(root.shown, modelData)
-            readonly property bool dragging: dragArea.drag.active
-
-            visible: spot !== null
-            x: spot ? spot.col * root.cell : 0
-            y: spot ? spot.row * root.cell : 0
-            z: dragging ? 10 : 0
-            scale: dragging ? 1.04 : 1
-            opacity: dragging ? 0.92 : 1
-
-            Behavior on x { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
-            Behavior on y { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
-            Behavior on scale { NumberAnimation { duration: 120 } }
-
-            // Under the content, so the media buttons still take their clicks.
-            MouseArea {
-              id: dragArea
-              anchors.fill: parent
-              acceptedButtons: Qt.LeftButton | Qt.RightButton
-              drag.target: tile
-              drag.threshold: 6
-              cursorShape: dragArea.drag.active ? Qt.ClosedHandCursor : Qt.ArrowCursor
-              onPressed: function(event) {
-                if (event.button === Qt.RightButton) {
-                  var p = mapToItem(area, event.x, event.y)
-                  root.openMenu(tile.modelData, p.x, p.y)
-                } else root.menuFor = ""
-              }
-              onReleased: {
-                if (!tile.spot) return
-                var cell = Model.snap(tile.x, tile.y, root.cell, root.cols, root.rows)
-                // Back under the layout's control, then to the cell it snapped to.
-                tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
-                tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
-                if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
-                  // From where widgets show, so a swap lands on this screen too.
-                  root.save(Model.moveTo(root.shown, tile.modelData, cell.col, cell.row))
-              }
-            }
-
-            Loader {
-              anchors.fill: parent
-              sourceComponent: root.contents[tile.modelData]
-            }
-          }
-        }
+    PanelWindow {
+      id: window
+      required property var modelData
+      screen: modelData
+      // Shown on every screen showing a workspace they show on, each screen
+      // laying them out on its own grid; their own screen when Hyprland
+      // doesn't say which workspace a screen shows.
+      readonly property var monitor: Hyprland.monitorFor(modelData)
+      readonly property bool showing: monitor && monitor.activeWorkspace
+        ? Model.showsOn(root.config.workspaces, monitor.activeWorkspace.id)
+        : modelData === root.homeScreen
+      readonly property int cols: Math.max(1, Math.floor((width - area.x + root.gap) / root.cell))
+      readonly property int rows: Math.max(1, Math.floor((height - area.y + root.gap) / root.cell))
+      readonly property var shown: Model.fitLayout(root.layout, cols, rows)
+      color: "transparent"
+      WlrLayershell.namespace: "omarchy-widgets"
+      WlrLayershell.layer: WlrLayer.Bottom
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      exclusionMode: ExclusionMode.Normal
+      exclusiveZone: 0
+      anchors { top: true; bottom: true; left: true; right: true }
+  
+      // Only the widgets (and the menu) take clicks; the rest of the desktop is
+      // left alone. A drag keeps the pointer past these bounds until released.
+      mask: Region {
+        x: tiles.childrenRect.x + area.x
+        y: tiles.childrenRect.y + area.y
+        width: window.showing ? tiles.childrenRect.width : 0
+        height: window.showing ? tiles.childrenRect.height : 0
+  
+        Region { item: root.menuFor && root.menuScreen === window.modelData.name && window.showing ? menu : null }
       }
-
-      Rectangle {
-        id: menu
-        visible: root.menuFor !== ""
-        x: Math.min(root.menuAt.x, area.width - width - root.gap)
-        y: Math.min(root.menuAt.y, area.height - height - root.gap)
-        z: 20
-        width: Math.max(Math.round(170 * root.s), menuColumn.implicitWidth + Math.round(12 * root.s))
-        height: menuColumn.implicitHeight + Math.round(12 * root.s)
-        radius: Math.round(10 * root.s)
-        color: Qt.rgba(0.16, 0.16, 0.18, 0.92)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.14)
-
-        HoverHandler {
-          onHoveredChanged: hovered ? menuLeave.stop() : menuLeave.restart()
-        }
-
-        Column {
-          id: menuColumn
-          anchors.centerIn: parent
-          width: parent.width - Math.round(12 * root.s)
-
-          MenuRow {
-            label: "Remove Widget"
-            enabled: root.layout.length > 1
-            onChosen: root.save(Model.remove(root.layout, root.menuFor))
-          }
-
-          Rectangle {
-            visible: Model.hidden(root.layout).length > 0
-            width: parent.width
-            height: visible ? Math.round(9 * root.s) : 0
-            color: "transparent"
-            Rectangle { anchors.centerIn: parent; width: parent.width - Math.round(12 * root.s); height: 1; color: Qt.rgba(1, 1, 1, 0.14) }
-          }
-
+  
+      Item {
+        id: area
+        visible: window.showing
+        x: Math.round(20 * root.s)
+        y: root.gap
+        width: parent.width - x
+        height: parent.height - y
+  
+        Item {
+          id: tiles
+          anchors.fill: parent
+  
           Repeater {
-            model: Model.hidden(root.layout)
-            delegate: MenuRow {
+            model: window.showing ? root.known : []
+  
+            delegate: Glass {
+              id: tile
               required property string modelData
-              label: "Add " + Model.NAMES[modelData]
-              onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows))
+              readonly property var spot: Model.find(window.shown, modelData)
+              readonly property bool dragging: dragArea.drag.active
+  
+              visible: spot !== null
+              x: spot ? spot.col * root.cell : 0
+              y: spot ? spot.row * root.cell : 0
+              z: dragging ? 10 : 0
+              scale: dragging ? 1.04 : 1
+              opacity: dragging ? 0.92 : 1
+  
+              Behavior on x { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+              Behavior on y { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+              Behavior on scale { NumberAnimation { duration: 120 } }
+  
+              // Under the content, so the media buttons still take their clicks.
+              MouseArea {
+                id: dragArea
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                drag.target: tile
+                drag.threshold: 6
+                cursorShape: dragArea.drag.active ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                onPressed: function(event) {
+                  if (event.button === Qt.RightButton) {
+                    var p = mapToItem(area, event.x, event.y)
+                    root.openMenu(tile.modelData, p.x, p.y, window.modelData.name)
+                  } else root.menuFor = ""
+                }
+                onReleased: {
+                  if (!tile.spot) return
+                  var cell = Model.snap(tile.x, tile.y, root.cell, window.cols, window.rows)
+                  // Back under the layout's control, then to the cell it snapped to.
+                  tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
+                  tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
+                  if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
+                    // From where widgets show, so a swap lands on this screen too.
+                    root.save(Model.moveTo(window.shown, tile.modelData, cell.col, cell.row))
+                }
+              }
+  
+              Loader {
+                anchors.fill: parent
+                active: !!root.contents[tile.modelData]
+                sourceComponent: root.contents[tile.modelData]
+              }
+              // One of yours: its Widget.qml, filling the card. One that doesn't
+              // load says so in its card, and the others carry on.
+              Loader {
+                id: own
+                anchors.fill: parent
+                active: !root.contents[tile.modelData]
+                source: active ? "file://" + root.customDir + "/" + tile.modelData + "/Widget.qml" : ""
+              }
+              Text {
+                visible: own.active && own.status === Loader.Error
+                anchors.fill: parent
+                anchors.margins: Math.round(16 * root.s)
+                text: root.nameOf(tile.modelData) + " couldn't load. Its Widget.qml has an error; the shell's log says which."
+                color: Qt.rgba(1, 1, 1, 0.7)
+                font.pixelSize: Math.round(12 * root.s)
+                wrapMode: Text.WordWrap
+                verticalAlignment: Text.AlignVCenter
+              }
+            }
+          }
+        }
+  
+        Rectangle {
+          id: menu
+          visible: root.menuFor !== "" && root.menuScreen === window.modelData.name
+          x: Math.min(root.menuAt.x, area.width - width - root.gap)
+          y: Math.min(root.menuAt.y, area.height - height - root.gap)
+          z: 20
+          width: Math.max(Math.round(170 * root.s), menuColumn.implicitWidth + Math.round(12 * root.s))
+          height: menuColumn.implicitHeight + Math.round(12 * root.s)
+          radius: Math.round(10 * root.s)
+          color: Qt.rgba(0.16, 0.16, 0.18, 0.92)
+          border.width: 1
+          border.color: Qt.rgba(1, 1, 1, 0.14)
+  
+          HoverHandler {
+            onHoveredChanged: hovered ? menuLeave.stop() : menuLeave.restart()
+          }
+  
+          Column {
+            id: menuColumn
+            anchors.centerIn: parent
+            width: parent.width - Math.round(12 * root.s)
+  
+            MenuRow {
+              label: "Remove Widget"
+              enabled: root.layout.length > 1
+              onChosen: root.save(Model.remove(root.layout, root.menuFor))
+            }
+  
+            Rectangle {
+              visible: Model.hidden(root.layout, root.known).length > 0
+              width: parent.width
+              height: visible ? Math.round(9 * root.s) : 0
+              color: "transparent"
+              Rectangle { anchors.centerIn: parent; width: parent.width - Math.round(12 * root.s); height: 1; color: Qt.rgba(1, 1, 1, 0.14) }
+            }
+  
+            Repeater {
+              model: Model.hidden(root.layout, root.known)
+              delegate: MenuRow {
+                required property string modelData
+                label: "Add " + root.nameOf(modelData)
+                onChosen: root.save(Model.add(root.layout, modelData, window.cols, window.rows, root.known))
+              }
             }
           }
         }

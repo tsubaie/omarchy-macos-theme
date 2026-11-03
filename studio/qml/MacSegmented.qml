@@ -23,8 +23,16 @@ Item {
     Keys.onLeftPressed: step(-1)
     Keys.onRightPressed: step(1)
 
-    implicitWidth: options.length * 64
+    // Equal segments, each wide enough for the longest label, as macOS sizes them.
+    implicitWidth: options.length * Math.max(64, widest.width + 24)
     implicitHeight: 22
+    Text {
+        id: widest
+        visible: false
+        font.pixelSize: 12
+        font.weight: Font.Medium
+        text: root.options.reduce((a, o) => o.label.length > a.length ? o.label : a, "")
+    }
     opacity: enabled ? 1 : 0.4
 
     FocusRing { controlRadius: 6 }

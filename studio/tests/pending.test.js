@@ -8,6 +8,7 @@ const now = {
   place: () => "bottom",
   bar: { left: ["menu"], center: [], right: [], hidden: [] },
   widgets: ["clock"],
+  workspaces: [1, 2],
 }
 const pending = {
   // The dock turned on outside Studio; the lock still to come.
@@ -18,6 +19,8 @@ const pending = {
   bar: { left: ["menu"], center: [], right: [], hidden: [] },
   // The weather removed on the desktop, as marked here.
   widgets: ["clock"],
+  // Workspaces 1 and 2 chosen in a terminal, as marked here.
+  workspaces: [1, 2],
 }
 
 assert.deepStrictEqual(m.forgetMet(pending, now), {
@@ -26,7 +29,11 @@ assert.deepStrictEqual(m.forgetMet(pending, now), {
   places: { "dictation-hud": "top" },
   bar: null,
   widgets: null,
+  workspaces: null,
 })
+// A different choice of workspaces, or "all" while some are set, still waits.
+assert.deepStrictEqual(m.forgetMet({ ...pending, workspaces: [3] }, now).workspaces, [3])
+assert.strictEqual(m.forgetMet({ ...pending, workspaces: "all" }, now).workspaces, "all")
 
 // Nothing met: the very same objects back, so QML sees no change.
 const waiting = { pieces: { lock: true }, settings: { blur: 5 }, places: {}, bar: null, widgets: ["calendar"] }

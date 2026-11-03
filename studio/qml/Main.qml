@@ -108,6 +108,8 @@ Window {
             lines.push(Labels.setting(panel, "at the " + pendingPlaces[panel]))
         if (pendingBar) lines.push("Rearrange the menu bar")
         if (pendingWidgets) lines.push("Show " + pendingWidgets.map(w => (desktopWidgets.find(d => d.id === w) || { name: w }).name).join(", "))
+        if (pendingWorkspaces !== null) lines.push(pendingWorkspaces === "all" ? "Show the widgets on every workspace"
+            : "Show the widgets on workspace" + (pendingWorkspaces.length > 1 ? "s " : " ") + pendingWorkspaces.join(", ") + " only")
         if (pendingSwitchTo) lines.push("Switch to " + pendingSwitchTo + " first")
         return lines
     }
@@ -212,7 +214,20 @@ Window {
     readonly property var desktopWidgets: [
         { id: "clock", name: "Clock" }, { id: "calendar", name: "Calendar" },
         { id: "weather", name: "Weather" }, { id: "playing", name: "Now Playing" }
-    ]
+    ].concat(status["custom-widgets"] || [])
+    // Your own widgets' folder (docs/make-a-widget/SKILL.md), and the prompt
+    // that has an AI agent make one from that guide.
+    readonly property string customWidgetsFolder: localPath(StandardPaths.writableLocation(StandardPaths.ConfigLocation)) + "/omarchy/macos-theme-widgets"
+    readonly property string widgetPrompt: "Make me a desktop widget for the macOS theme for Omarchy, following the guide at "
+        + "https://github.com/tsubaie/omarchy-macos-theme/blob/main/docs/make-a-widget/SKILL.md "
+        + "Save it in " + customWidgetsFolder + "/<its-id>/ as that guide says. It should show: "
+    // Text onto the clipboard, through an unseen text field (QML has no clipboard of its own).
+    function copy(text) {
+        clipboardField.text = text
+        clipboardField.selectAll()
+        clipboardField.copy()
+    }
+    TextEdit { id: clipboardField; visible: false }
     readonly property var widgetsNow: status.widgets || null
     property var pendingWidgets: null
     readonly property var widgetsShown: pendingWidgets || widgetsNow || []
@@ -221,6 +236,29 @@ Window {
     function markWidget(id, on) {
         const next = desktopWidgets.map(w => w.id).filter(w => w === id ? on : widgetsShown.includes(w))
         pendingWidgets = JSON.stringify(next) === JSON.stringify(widgetsNow) ? null : next
+    }
+
+    // The workspaces the widgets show on: "all", or their numbers; waiting for
+    // Apply, or null while unchanged. An older theme reports none: all.
+    readonly property var workspacesNow: status["widget-workspaces"] || "all"
+    property var pendingWorkspaces: null
+    readonly property var workspacesShown: pendingWorkspaces !== null ? pendingWorkspaces : workspacesNow
+    function markWorkspaces(next) {
+        pendingWorkspaces = JSON.stringify(next) === JSON.stringify(workspacesNow) ? null : next
+    }
+    // The workspaces to choose from: every one Hyprland has (the widgets follow
+    // the chosen ones to their screen), and any
+    // already chosen (so it can be taken off), in order.
+    readonly property var workspaceChoices: {
+        const there = status["widget-workspaces-there"] || []
+        const chosen = Array.isArray(workspacesShown) ? workspacesShown : []
+        return there.concat(chosen.filter(n => !there.includes(n))).sort((a, b) => a - b)
+    }
+    // One workspace in or out of the list, kept in order, never down to none.
+    function toggleWorkspace(n) {
+        const list = Array.isArray(workspacesShown) ? workspacesShown : []
+        const next = list.includes(n) ? list.filter(w => w !== n) : list.concat([n]).sort((a, b) => a - b)
+        if (next.length > 0) markWorkspaces(next)
     }
 
     // Where the volume and dictation panels show ("bottom" or "top"), and
@@ -245,19 +283,20 @@ Window {
     // stops waiting; the rest stay marked.
     function forgetMet() {
         const left = Pending.forgetMet(
-            { pieces: pendingPieces, settings: pendingSettings, places: pendingPlaces, bar: pendingBar, widgets: pendingWidgets },
-            { installed: installed, setting: key => (status.settings || {})[key], place: placeNow, bar: barNow, widgets: widgetsNow })
+            { pieces: pendingPieces, settings: pendingSettings, places: pendingPlaces, bar: pendingBar, widgets: pendingWidgets, workspaces: pendingWorkspaces },
+            { installed: installed, setting: key => (status.settings || {})[key], place: placeNow, bar: barNow, widgets: widgetsNow, workspaces: workspacesNow })
         if (left.pieces !== pendingPieces) pendingPieces = left.pieces
         if (left.settings !== pendingSettings) pendingSettings = left.settings
         if (left.places !== pendingPlaces) pendingPlaces = left.places
         if (left.bar !== pendingBar) pendingBar = left.bar
         if (left.widgets !== pendingWidgets) pendingWidgets = left.widgets
+        if (left.workspaces !== pendingWorkspaces) pendingWorkspaces = left.workspaces
     }
     onStatusChanged: forgetMet()
     onBarNowChanged: forgetMet()
 
     readonly property int pendingCount: Object.keys(pendingPieces).length + Object.keys(pendingSettings).length
-        + Object.keys(pendingPlaces).length + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0)
+        + Object.keys(pendingPlaces).length + (pendingBar ? 1 : 0) + (pendingWidgets ? 1 : 0) + (pendingWorkspaces !== null ? 1 : 0)
 
 
     property bool applying: false
@@ -322,6 +361,7 @@ Window {
     function revert() {
         pendingBar = null
         pendingWidgets = null
+        pendingWorkspaces = null
         pendingSwitchTo = null
         pendingPieces = {}
         pendingSettings = {}
@@ -471,6 +511,7 @@ Window {
         if (needsSwitchTo && pendingSwitchTo) changes.switchTo = pendingSwitchTo
         if (pendingBar) changes.bar = BarModel.layout(bar, pendingBar)
         if (pendingWidgets) changes.widgets = pendingWidgets
+        if (pendingWorkspaces !== null) changes.widgetWorkspaces = pendingWorkspaces
         for (const piece in pendingPieces) (pendingPieces[piece] ? changes.add : changes.remove).push(piece)
         applying = true
         backend.apply(JSON.stringify(changes))
@@ -1333,6 +1374,73 @@ Window {
                                 reason: !window.pieceOn("widgets") ? window.why("widgets")
                                     : shown && window.widgetsShown.length === 1 ? "One widget always stays shown" : ""
                                 onToggled: on => window.markWidget(modelData.id, on)
+                            }
+                        }
+                    }
+                }
+
+                // Which workspaces show them: every one, or the ones chosen.
+                Group {
+                    title: "Workspaces"
+                    visible: window.widgetsNow !== null && window.status["widget-workspaces"] !== undefined
+                    SettingRow {
+                        label: "Show On"
+                        note: "Every workspace, or only the ones you choose; they show on every screen showing one"
+                        last: !Array.isArray(window.workspacesShown)
+                        MacSegmented {
+                            // Choosing needs two workspaces.
+                            readonly property bool oneThere: window.workspaceChoices.length < 2 && !Array.isArray(window.workspacesShown)
+                            readonly property bool changed: window.pendingWorkspaces !== null
+                            options: [{ value: "all", label: "All Workspaces" }, { value: "some", label: "Some" }]
+                            value: Array.isArray(window.workspacesShown) ? "some" : "all"
+                            enabled: !backend.busy && window.pieceOn("widgets") && !oneThere
+                            reason: !window.pieceOn("widgets") ? window.why("widgets")
+                                : oneThere ? (window.workspaceChoices.length === 1 ? "There's only workspace " + window.workspaceChoices[0] : "Hyprland reports no workspaces") : ""
+                            onPicked: v => window.markWorkspaces(v === "all" ? "all"
+                                : Array.isArray(window.workspacesNow) ? window.workspacesNow : [window.workspaceChoices[0] || 1])
+                        }
+                    }
+                    SettingRow {
+                        visible: Array.isArray(window.workspacesShown)
+                        label: "Workspaces"
+                        note: "Click to add or take one away; one always stays"
+                        last: true
+                        Row {
+                            spacing: 4
+                            Repeater {
+                                model: window.workspaceChoices
+                                MacButton {
+                                    required property var modelData
+                                    readonly property int number: modelData
+                                    text: String(number)
+                                    primary: Array.isArray(window.workspacesShown) && window.workspacesShown.includes(number)
+                                    enabled: !backend.busy && window.pieceOn("widgets")
+                                    Accessible.name: "Workspace " + number + (primary ? ", widgets show" : "")
+                                    onClicked: window.toggleWorkspace(number)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Your own: any AI agent can make one from the guide, and the
+                // folder they go in.
+                Group {
+                    title: "Make Your Own"
+                    SettingRow {
+                        label: "A widget of your own"
+                        note: "Copy the prompt, paste it into your AI agent with what the widget should show, and it makes one from the theme's guide. Put it in the widgets folder, then switch it on above. A widget runs with your account's rights: only add ones you trust."
+                        last: true
+                        Row {
+                            spacing: 8
+                            MacButton {
+                                text: "Open Folder"
+                                onClicked: { backend.makeFolder(window.customWidgetsFolder); Qt.openUrlExternally("file://" + window.customWidgetsFolder) }
+                            }
+                            MacButton {
+                                text: copiedPrompt.running ? "Copied" : "Copy Prompt"
+                                onClicked: { window.copy(window.widgetPrompt); copiedPrompt.restart() }
+                                Timer { id: copiedPrompt; interval: 2000 }
                             }
                         }
                     }
