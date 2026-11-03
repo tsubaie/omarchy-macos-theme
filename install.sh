@@ -524,14 +524,12 @@ shown_widgets() {
 widget_workspaces() {
   jq -c '.widgets.workspaces | if type == "array" and length > 0 then . else "all" end' "$SHELL_JSON" 2>/dev/null || echo '"all"'
 }
-# The workspaces there are to choose from, by number: those Hyprland has on the
-# widgets' screen (shell.json's widgets.screen), or on every screen when none
-# is named. Hyprland not answering: none.
+# The workspaces there are to choose from, by number: every one Hyprland has,
+# on any screen, as the widgets follow the chosen ones to theirs. Hyprland not
+# answering: none.
 widget_workspaces_there() {
-  local screen list
-  screen=$(jq -r '.widgets.screen // empty | strings' "$SHELL_JSON" 2>/dev/null) || screen=""
-  list=$(hyprctl workspaces -j 2>/dev/null | jq -c --arg screen "$screen" \
-    '[.[] | select(.id > 0 and ($screen == "" or .monitor == $screen)) | .id] | unique' 2>/dev/null) || list=""
+  local list
+  list=$(hyprctl workspaces -j 2>/dev/null | jq -c '[.[] | select(.id > 0) | .id] | unique' 2>/dev/null) || list=""
   echo "${list:-[]}"
 }
 # Your own widgets, as [{id, name}]: the name from its manifest.json, else its id.

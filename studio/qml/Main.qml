@@ -246,7 +246,8 @@ Window {
     function markWorkspaces(next) {
         pendingWorkspaces = JSON.stringify(next) === JSON.stringify(workspacesNow) ? null : next
     }
-    // The workspaces to choose from: those on the widgets' screen, and any
+    // The workspaces to choose from: every one Hyprland has (the widgets follow
+    // the chosen ones to their screen), and any
     // already chosen (so it can be taken off), in order.
     readonly property var workspaceChoices: {
         const there = status["widget-workspaces-there"] || []
@@ -1384,17 +1385,17 @@ Window {
                     visible: window.widgetsNow !== null && window.status["widget-workspaces"] !== undefined
                     SettingRow {
                         label: "Show On"
-                        note: "The widgets show behind your windows on every workspace, or only on the ones you choose"
+                        note: "Every workspace, on the widgets' own screen; or only the ones you choose, on whichever screen shows them"
                         last: !Array.isArray(window.workspacesShown)
                         MacSegmented {
-                            // Choosing needs two workspaces on the widgets' screen.
+                            // Choosing needs two workspaces.
                             readonly property bool oneThere: window.workspaceChoices.length < 2 && !Array.isArray(window.workspacesShown)
                             readonly property bool changed: window.pendingWorkspaces !== null
                             options: [{ value: "all", label: "All Workspaces" }, { value: "some", label: "Some" }]
                             value: Array.isArray(window.workspacesShown) ? "some" : "all"
                             enabled: !backend.busy && window.pieceOn("widgets") && !oneThere
                             reason: !window.pieceOn("widgets") ? window.why("widgets")
-                                : oneThere ? "The widgets' screen has " + (window.workspaceChoices.length === 1 ? "only workspace " + window.workspaceChoices[0] : "no workspaces Hyprland reports") : ""
+                                : oneThere ? (window.workspaceChoices.length === 1 ? "There's only workspace " + window.workspaceChoices[0] : "Hyprland reports no workspaces") : ""
                             onPicked: v => window.markWorkspaces(v === "all" ? "all"
                                 : Array.isArray(window.workspacesNow) ? window.workspacesNow : [window.workspaceChoices[0] || 1])
                         }
@@ -1402,7 +1403,7 @@ Window {
                     SettingRow {
                         visible: Array.isArray(window.workspacesShown)
                         label: "Workspaces"
-                        note: "The workspaces on the widgets' screen. Click to add or take one away; one always stays"
+                        note: "Click to add or take one away; one always stays"
                         last: true
                         Row {
                             spacing: 4

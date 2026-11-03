@@ -127,8 +127,22 @@ Item {
       }
     }
   }
-  readonly property var targetScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
+  readonly property var homeScreen: Quickshell.screens.find(function(each) { return each.name === String(root.config.screen || "") })
     || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
+  // With chosen workspaces ("workspaces": [1, 5]), the widgets follow them:
+  // they show on the screen showing one, the one being worked on when both
+  // are; else on their own screen, as with every workspace.
+  readonly property var targetScreen: {
+    var chosen = root.config.workspaces
+    if (!Array.isArray(chosen) || chosen.length === 0) return root.homeScreen
+    var showing = function(screen) {
+      var monitor = Hyprland.monitorFor(screen)
+      return !!monitor && !!monitor.activeWorkspace && Model.showsOn(chosen, monitor.activeWorkspace.id)
+    }
+    var focused = Hyprland.focusedMonitor ? Quickshell.screens.find(function(each) { return each.name === Hyprland.focusedMonitor.name }) : null
+    if (focused && showing(focused)) return focused
+    return Quickshell.screens.find(showing) || root.homeScreen
+  }
 
   // The grid: each widget sits in a cell a widget plus a gap wide, from the
   // top left; dragging one snaps it to the nearest cell, and dropping it on

@@ -324,7 +324,8 @@ try {
   assert.strictEqual(status()["widget-workspaces"], "all")
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).widgets.workspaces, undefined)
   for (const bad of ["", "0", "1,", "1;2", "one", "-1"]) assert.strictEqual(run("--widget-workspaces", bad).status, 1, bad)
-  // The ones to choose from: Hyprland's, on the widgets' screen when one is named.
+  // The ones to choose from: every workspace Hyprland has, on any screen (the
+  // widgets follow the chosen ones), whatever screen they're set to; no special ones.
   assert.deepStrictEqual(status()["widget-workspaces-there"], [])
   fs.writeFileSync(path.join(home, "workspaces.json"), JSON.stringify([
     { id: 4, monitor: "DP-2" }, { id: 1, monitor: "DP-2" }, { id: 5, monitor: "HDMI-A-1" }, { id: -98, monitor: "DP-2" }]))
@@ -332,7 +333,7 @@ try {
   const withScreen = JSON.parse(fs.readFileSync(shellJson, "utf8"))
   withScreen.widgets.screen = "HDMI-A-1"
   fs.writeFileSync(shellJson, JSON.stringify(withScreen))
-  assert.deepStrictEqual(status()["widget-workspaces-there"], [5])
+  assert.deepStrictEqual(status()["widget-workspaces-there"], [1, 4, 5])
   fs.rmSync(path.join(home, "workspaces.json"))
   // Its folder gone, it's no longer shown; the theme's own stay.
   fs.rmSync(path.join(own, "uptime"), { recursive: true })
