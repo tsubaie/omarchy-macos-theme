@@ -87,6 +87,8 @@ An Arch package (AUR) is planned.
 
 Each switch is one part ("piece") of the theme. Flip the ones you want, then press **Apply** in the toolbar at the top. While it works, the toolbar shows a spinner, what the installer or git says it is doing (the piece it is on, how much of a download has come) and, after a few seconds, how long it has taken, with **Stop** to end it. Once it is done, the switches show what is really installed and a note at the top, marked with a green ✓, says what was done, with **Undo**, which restores the backup the installer took just before. That note goes by itself after 8 seconds: a ring around its × empties as the time runs out, and holds while the pointer or the keyboard is on the note. If the installer refuses something, its message stays at the top, marked with a red !, with what to do next and **Show Details** for all it said, and your changes stay marked so you can fix them and apply again.
 
+Changes made outside Studio show in it when you come back to its window or open another page, and every 30 seconds otherwise: a widget removed or moved on the desktop, a theme switched in Omarchy, the menu bar rearranged, `install.sh` run from a terminal. Changes you've marked and not applied stay marked, unless the desktop now has them anyway.
+
 Turning off **macOS theme** while it's your current Omarchy theme shows a **Switch to** row of your other themes: pick one, and Apply switches to it before the macOS theme goes.
 
 ### Removing the theme
@@ -244,7 +246,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-`../tests/run.sh` runs these and the theme's tests in one go. The Rust tests include a contract with the real `../install.sh`: the pieces, settings and ranges Studio sends are ones it takes, and Studio reads what it reports. `node tests/bar-model.test.js` tests the menu bar's Left, Center and Right groups, `node tests/labels.test.js` the backups' labels, and `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml` drives real presses, drags and releases on its rows: moving within and between groups, hiding and showing, dropping into an empty group, letting go over nothing, the page holding still under a drag and scrolling at its edges, and several drags in a row.
+`../tests/run.sh` runs these and the theme's tests in one go. The Rust tests include a contract with the real `../install.sh`: the pieces, settings and ranges Studio sends are ones it takes, and Studio reads what it reports. `node tests/bar-model.test.js` tests the menu bar's Left, Center and Right groups, `node tests/labels.test.js` the backups' labels, `node tests/pending.test.js` which waiting changes stop waiting once the desktop has them, and `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml` drives real presses, drags and releases on its rows: moving within and between groups, hiding and showing, dropping into an empty group, letting go over nothing, the page holding still under a drag and scrolling at its edges, and several drags in a row.
 
 The Rust tests cover what can go wrong between the window and the installer: piece names, settings and their ranges, how changes combine into one installer call (a theme to switch to first included), refusing bad changes before anything runs, reading the installer's status and backups, backup ids, which pieces an update reinstalls, reading progress from git and the installer, Stop ending a command and what it started, keeping all a failed command said, and recoloring Omarchy's logo.
 

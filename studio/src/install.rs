@@ -5,12 +5,14 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt;
+use std::fs;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
+use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -245,6 +247,43 @@ pub fn is_downloaded(dir: &Path) -> bool {
 pub fn status(dir: &Path) -> Result<Status> {
     let report = run(dir, &["--status", "--json"])?.out;
     parse_status(&report)
+}
+
+/// The newest change to anything `install.sh --status`, `--bar` and the
+/// backups read, by install.sh's own rules for where they are: Omarchy's
+/// config with `shell.json` and the plugins, the installed theme, the
+/// backups, Hyprland's and GTK's config, the current Omarchy theme and the
+/// icons. A change there from outside Studio (a widget removed on the
+/// desktop, a theme switched in Omarchy, install.sh run from a terminal)
+/// moves it. Each folder and what's directly in it, followed through links.
+// shortcut: only one level deep; a change deeper in (inside one plugin's folder, say) waits for the next action or launch.
+#[must_use]
+pub fn changed_outside() -> Option<SystemTime> {
+    let home = PathBuf::from(env::var_os("HOME")?);
+    let config = env::var_os("XDG_CONFIG_HOME").map_or_else(|| home.join(".config"), PathBuf::from);
+    changed_under(&home, &config)
+}
+
+fn changed_under(home: &Path, config: &Path) -> Option<SystemTime> {
+    let folders = [
+        config.join("omarchy"),
+        config.join("omarchy/plugins"),
+        config.join("omarchy/themes/macos"),
+        config.join("omarchy/macos-theme-backups"),
+        config.join("hypr"),
+        config.join("gtk-4.0"),
+        home.join(".local/state/omarchy/current"),
+        home.join(".local/share/icons"),
+    ];
+    let changed = |path: &Path| fs::metadata(path).and_then(|m| m.modified()).ok();
+    folders
+        .iter()
+        .flat_map(|folder| {
+            let inside = fs::read_dir(folder).into_iter().flatten().flatten().map(|entry| entry.path());
+            std::iter::once(folder.clone()).chain(inside)
+        })
+        .filter_map(|path| changed(&path))
+        .max()
 }
 
 fn parse_status(report: &str) -> Result<Status> {
@@ -994,6 +1033,36 @@ fn last_line(stderr: &[u8], fallback: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_change_outside_studio_is_seen() {
+        let home = env::temp_dir().join(format!("studio-outside-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&home);
+        let config = home.join(".config");
+        fs::create_dir_all(config.join("omarchy/plugins")).expect("a throwaway config");
+        let shell = config.join("omarchy/shell.json");
+        fs::write(&shell, "{}").expect("shell.json");
+        let set = |path: &Path, at: SystemTime| {
+            fs::File::open(path).and_then(|f| f.set_modified(at)).expect("a change time");
+        };
+        let before = changed_under(&home, &config).expect("a change time to start from");
+
+        // A widget removed on the desktop rewrites shell.json.
+        let later = before + std::time::Duration::from_secs(10);
+        set(&shell, later);
+        assert_eq!(changed_under(&home, &config), Some(later));
+
+        // A plugin added from a terminal.
+        let plugin = config.join("omarchy/plugins/someone.else");
+        fs::create_dir(&plugin).expect("a plugin");
+        let latest = later + std::time::Duration::from_secs(10);
+        set(&plugin, latest);
+        assert_eq!(changed_under(&home, &config), Some(latest));
+
+        // Folders that aren't there are no reason to fail.
+        assert_eq!(changed_under(&home.join("none"), &home.join("none")), None);
+        let _ = fs::remove_dir_all(&home);
+    }
 
     #[test]
     fn progress_is_read_from_git_and_install_sh() {
