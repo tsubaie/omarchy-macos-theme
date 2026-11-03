@@ -686,12 +686,13 @@ take_lock() {
   mkdir -p "$BACKUP_DIR"
   new=$(mktemp -d "$BACKUP_DIR/.lock.XXXXXX")
   echo $$ >"$new/pid"
-  # A lock left by a run that was killed is taken over.
+  # A lock left by a run that was killed is taken over; its pid may belong to
+  # another program by now (after a reboot), so it must still be install.sh.
   # shortcut: two runs taking over the same dead run's lock at once can both get it; needs a crash and a race together.
   if ! mv -T "$new" "$lock" 2>/dev/null &&
-    { kill -0 "$(cat "$lock/pid" 2>/dev/null)" 2>/dev/null || ! { rm -rf "$lock" && mv -T "$new" "$lock" 2>/dev/null; }; }; then
+    { grep -qs install.sh "/proc/$(cat "$lock/pid" 2>/dev/null)/cmdline" || ! { rm -rf "$lock" && mv -T "$new" "$lock" 2>/dev/null; }; }; then
     rm -rf "$new"
-    echo "Another run of install.sh is changing the theme; try again when it has finished." >&2
+    echo "Another run of install.sh is changing the theme; try again when it has finished (its lock: $lock)." >&2
     exit 1
   fi
   trap 'rm -rf "$BACKUP_DIR/.lock"' EXIT
@@ -915,13 +916,8 @@ if want menubar; then
   fi
   menubar_ok=true
   for id in $MENUBAR_IDS; do install_plugin "$id" || menubar_ok=false; done
-  # Half a menu bar is no menu bar: the parts that did enable go too.
-  if ! $menubar_ok; then
-    for id in $MENUBAR_IDS; do
-      omarchy plugin disable "$id" >/dev/null 2>&1 || true
-      rm -rf "${PLUGINS_DIR:?}/$id"
-    done
-  fi
+  # Half a menu bar is no menu bar: it all goes, and the bar is put back as it was.
+  $menubar_ok || remove_menubar
 fi
 if want menubar && $menubar_ok; then
   # The workspaces: a click goes there, a right-click picks the layout, as a

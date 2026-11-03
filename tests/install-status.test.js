@@ -1,7 +1,7 @@
 // install.sh --add, --remove and --status --json, in a throwaway home with a fake
 // omarchy command. Run with: node tests/install-status.test.js
 const assert = require("assert")
-const { execFileSync, spawnSync } = require("child_process")
+const { execFileSync, spawn, spawnSync } = require("child_process")
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
@@ -132,18 +132,23 @@ try {
   assert.strictEqual(run("--remove", "widgets").status, 0)
 
   // One run at a time: a live run's lock turns this one away before it changes anything;
-  // a killed run's lock is taken over.
+  // a killed run's lock is taken over, also when its pid now belongs to another program.
   const backups = path.join(home, ".config/omarchy/macos-theme-backups")
   const lock = path.join(backups, ".lock")
   fs.mkdirSync(lock)
-  fs.writeFileSync(path.join(lock, "pid"), String(process.pid))
+  const other = spawn("sleep", ["30"], { argv0: "install.sh" })
+  fs.writeFileSync(path.join(lock, "pid"), String(other.pid))
   const busy = run("--add", "switcher")
+  other.kill()
   assert.strictEqual(busy.status, 1)
   assert.match(busy.stderr, /Another run of install\.sh/)
   assert.strictEqual(status().features.switcher, false)
-  fs.writeFileSync(path.join(lock, "pid"), "999999999")
-  assert.strictEqual(run("--add", "switcher").status, 0)
-  assert.ok(!fs.existsSync(lock))
+  for (const dead of ["999999999", String(process.pid)]) {
+    fs.mkdirSync(lock, { recursive: true })
+    fs.writeFileSync(path.join(lock, "pid"), dead)
+    assert.strictEqual(run("--add", "switcher").status, 0, dead)
+    assert.ok(!fs.existsSync(lock))
+  }
   assert.strictEqual(run("--remove", "switcher").status, 0)
 
   // --remove takes out only that piece.
@@ -166,7 +171,7 @@ try {
   // the global import older versions added is replaced.
   const gtkCss = path.join(home, ".config/gtk-4.0/gtk.css")
   assert.match(fs.readFileSync(path.join(themeDir, "glass.css"), "utf8"), /default\/gtk\/glass\.css/)
-  fs.writeFileSync(gtkCss, fs.readFileSync(gtkCss, "utf8").replace("current/theme/glass.css", "x").replace(/@import url\("file:\/\/.*x"\);/, '@import url("file:///usr/share/omarchy/default/gtk/glass.css");'))
+  fs.writeFileSync(gtkCss, '/* macOS theme: blur behind see-through GTK windows. Added by omarchy-macos-theme. */\n@import url("file:///usr/share/omarchy/default/gtk/glass.css");\n')
   assert.strictEqual(run("--add", "theme").status, 0)
   const gtk = fs.readFileSync(gtkCss, "utf8")
   assert.match(gtk, /current\/theme\/glass\.css/)
@@ -273,6 +278,21 @@ try {
   // With a removal in the same run, the widgets change still happens.
   assert.strictEqual(run("--remove", "dock", "--show-widgets", "clock").status, 0)
   assert.deepStrictEqual(status().widgets, ["clock"])
+
+  // An update whose menu bar part Omarchy won't enable takes the whole menu bar out, and
+  // puts the bar back as it was before it: Network back out of the tray drawer.
+  const unbarred = { left: [{ id: "omarchy.workspaces" }], right: [{ id: "omarchy.network" }] }
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: unbarred } }))
+  assert.strictEqual(run("--add", "menubar").status, 0)
+  fs.writeFileSync(shellJson, JSON.stringify({ bar: { layout: { left: [{ id: "omarchy.workspaces" }], right: [{ id: "macos-theme.control-center" }], tray: [{ id: "omarchy.network" }] } } }))
+  const halfBar = spawnSync("bash", [script, "--add", "menubar"], { env: { ...env, FAIL_ENABLE: "macos-theme.control-center" }, encoding: "utf8" })
+  assert.strictEqual(halfBar.status, 1)
+  assert.match(halfBar.stderr, /Could not install macos-theme\.control-center/)
+  assert.strictEqual(status().features.menubar, false)
+  assert.ok(!fs.existsSync(path.join(home, ".config/omarchy/plugins/macos-theme.app-name")))
+  const afterHalf = JSON.parse(fs.readFileSync(shellJson, "utf8")).bar.layout
+  assert.deepStrictEqual(afterHalf.right, [{ id: "omarchy.network" }])
+  assert.deepStrictEqual(afterHalf.tray ?? [], [])
 
   // The menu bar removed and added again gets back the bar you arranged.
   const arranged = { left: [{ id: "omarchy.workspaces" }], center: [], right: [{ id: "omarchy.clock" }, { id: "omarchy.network" }] }
