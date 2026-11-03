@@ -7,10 +7,11 @@
 set -euo pipefail
 
 id=omarchy-macos-studio
-url=${OMARCHY_MACOS_STUDIO_URL:-https://github.com/tsubaie/omarchy-macos-theme/releases/latest/download/$id-x86_64.tar.gz}
+arch=$(uname -m)
+[[ $arch == x86_64 || $arch == aarch64 ]] || { echo "Studio's releases are for x86_64 and aarch64, not $arch; build it from source instead" >&2; exit 1; }
+url=${OMARCHY_MACOS_STUDIO_URL:-https://github.com/tsubaie/omarchy-macos-theme/releases/latest/download/$id-$arch.tar.gz}
 bin="${XDG_BIN_HOME:-$HOME/.local/bin}/$id"
 
-[[ $(uname -m) == x86_64 ]] || { echo "Studio's release is built for x86_64 only; build it from source instead" >&2; exit 1; }
 command -v pacman >/dev/null || { echo "Studio is built for Omarchy (Arch Linux)" >&2; exit 1; }
 
 tmp=$(mktemp -d)

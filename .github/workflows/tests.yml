@@ -47,40 +47,131 @@ jobs:
       - name: Run the tests
         run: tests/run.sh
 
-  # Run by hand on main ("Run workflow", or gh workflow run tests.yml), and
-  # once the tests pass this publishes a release of Studio named for the day,
-  # 2026.11.03, or 2026.11.03.2 for a second one that day. The name is built
-  # into the program, so it can tell whether the latest release is newer.
-  # It links Arch's Qt, so it is built on Arch, as Omarchy is.
-  release:
+  # Run by hand ("Run workflow", or gh workflow run tests.yml --ref main), and
+  # once the tests pass this builds Studio for x86_64 and aarch64; on main it
+  # also publishes them as a release named for the day, 2026.11.03, or
+  # 2026.11.03.2 for a second one that day. Run on another branch, it only
+  # builds, to try the builds out. The name is built into the program, so it
+  # can tell whether the latest release is newer. Studio links Arch's Qt, so
+  # it is built on Arch, as Omarchy is.
+  release-name:
     needs: test
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    container: archlinux:latest
-    permissions:
-      contents: write
+    outputs:
+      name: ${{ steps.name.outputs.name }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Install what the build uses
-        run: pacman -Syu --noconfirm --needed base-devel rust qt6-base qt6-declarative github-cli
-      - uses: actions/checkout@v4
-      - name: Name the release for today
+      - id: name
         run: |
           name=$(date -u +%Y.%m.%d)
           n=1
           while gh release view "$name" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; do
             n=$((n + 1)); name=$(date -u +%Y.%m.%d).$n
           done
-          echo "STUDIO_RELEASE=$name" >> "$GITHUB_ENV"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+  build-x86_64:
+    needs: release-name
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      STUDIO_RELEASE: ${{ needs.release-name.outputs.name }}
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Install what the build uses
+        run: pacman -Syu --noconfirm --needed base-devel rust qt6-base qt6-declarative
+      - uses: actions/checkout@v4
+      - name: Versions the build depends on
+        id: versions
+        run: echo "key=rust-$(rustc -V | cut -d' ' -f2)-qt-$(qmake6 -query QT_VERSION)" >> "$GITHUB_OUTPUT"
+      # The release build's own cache: its profile shares nothing with the tests'.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            studio/target
+          key: dist-x86_64-${{ steps.versions.outputs.key }}-${{ hashFiles('studio/Cargo.lock') }}
+          restore-keys: dist-x86_64-${{ steps.versions.outputs.key }}-
       - name: Build
         run: cd studio && cargo build --profile dist --locked
-      - name: Package
+      - run: studio/package.sh studio/target/dist/omarchy-macos-studio x86_64 dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x86_64
+          path: dist/*.tar.gz
+
+  # There's no official Arch image for ARM, so this unpacks Arch Linux ARM's
+  # own root filesystem, checked against its build key, on a native ARM
+  # runner and builds inside it. The checkout and Cargo's folders are mounted
+  # in from outside, so the cache sees them.
+  build-aarch64:
+    needs: release-name
+    runs-on: ubuntu-24.04-arm
+    env:
+      STUDIO_RELEASE: ${{ needs.release-name.outputs.name }}
+      # Arch Linux ARM Build System; the download is plain HTTP, so this is what vouches for it.
+      ALARM_KEY: 68B3537F39A313B3E574D06777193F152BDBE6A6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack Arch Linux ARM
         run: |
-          d=dist/omarchy-macos-studio
-          mkdir -p "$d/assets"
-          cp studio/target/dist/omarchy-macos-studio studio/install-desktop.sh studio/LICENSE "$d/"
-          cp studio/assets/icon-omarchy.svg "$d/assets/"
-          tar -czf dist/omarchy-macos-studio-x86_64.tar.gz -C dist omarchy-macos-studio
+          sudo apt-get install -y -qq libarchive-tools
+          curl -fsSLO http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
+          curl -fsSLO http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz.sig
+          gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$ALARM_KEY"
+          gpg --batch --status-fd 1 --verify ArchLinuxARM-aarch64-latest.tar.gz.sig ArchLinuxARM-aarch64-latest.tar.gz | grep -q "^\[GNUPG:\] VALIDSIG $ALARM_KEY "
+          sudo mkdir /alarm
+          sudo bsdtar -xpf ArchLinuxARM-aarch64-latest.tar.gz -C /alarm
+          sudo mount --bind /alarm /alarm
+          for d in proc sys dev; do sudo mount --rbind /$d /alarm/$d; done
+          # The runner's own resolv.conf names a local stub that doesn't answer
+          # from inside; resolved's list has the real servers.
+          sudo rm -f /alarm/etc/resolv.conf
+          sudo cp -L /run/systemd/resolve/resolv.conf /alarm/etc/resolv.conf
+          sudo chroot /alarm getent hosts mirror.archlinuxarm.org || { echo "No DNS inside Arch Linux ARM"; cat /alarm/etc/resolv.conf; exit 1; }
+          mkdir -p ~/.cargo/registry ~/.cargo/git
+          sudo mkdir -p /alarm/build /alarm/root/.cargo/registry /alarm/root/.cargo/git
+          sudo mount --bind "$GITHUB_WORKSPACE" /alarm/build
+          sudo mount --bind ~/.cargo/registry /alarm/root/.cargo/registry
+          sudo mount --bind ~/.cargo/git /alarm/root/.cargo/git
+          sudo chroot /alarm bash -c 'pacman-key --init && pacman-key --populate archlinuxarm && pacman -Syu --noconfirm --needed base-devel rust qt6-base qt6-declarative'
+      - name: Versions the build depends on
+        id: versions
+        run: echo "key=rust-$(sudo chroot /alarm rustc -V | cut -d' ' -f2)-qt-$(sudo chroot /alarm qmake6 -query QT_VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            studio/target
+          key: dist-aarch64-${{ steps.versions.outputs.key }}-${{ hashFiles('studio/Cargo.lock') }}
+          restore-keys: dist-aarch64-${{ steps.versions.outputs.key }}-
+      - name: Build
+        run: sudo chroot /alarm env STUDIO_RELEASE="$STUDIO_RELEASE" CARGO_INCREMENTAL=0 bash -c 'cd /build/studio && cargo build --profile dist --locked'
+      # The build ran as root; the cache saves as the runner's user.
+      - run: sudo chown -R "$(id -u):$(id -g)" studio/target ~/.cargo
+      - run: studio/package.sh studio/target/dist/omarchy-macos-studio aarch64 dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aarch64
+          path: dist/*.tar.gz
+
+  release:
+    needs: [release-name, build-x86_64, build-aarch64]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NAME: ${{ needs.release-name.outputs.name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
       - name: Publish the release
-        run: gh release create "$STUDIO_RELEASE" dist/omarchy-macos-studio-x86_64.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "macOS Theme Studio $STUDIO_RELEASE" --generate-notes
+        run: gh release create "$NAME" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "macOS Theme Studio $NAME" --generate-notes

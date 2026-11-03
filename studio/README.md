@@ -242,7 +242,7 @@ Releases are named for the day they're made: `2026.11.03`, or `2026.11.03.2` for
 gh workflow run tests.yml --ref main
 ```
 
-Once the tests pass, CI builds the program on Arch with the release's name as its version (About shows it), tags the commit and publishes `omarchy-macos-studio-x86_64.tar.gz`, which `get.sh` downloads. The latest release's name is at `https://api.github.com/repos/tsubaie/omarchy-macos-theme/releases/latest` (`tag_name`): a name other than the app's own means there is an update. A local build shows `Cargo.toml`'s version instead.
+Once the tests pass, CI builds the program on Arch for x86_64 and on Arch Linux ARM for aarch64, with the release's name as its version (About shows it), tags the commit and publishes `omarchy-macos-studio-x86_64.tar.gz` and `omarchy-macos-studio-aarch64.tar.gz`, packed by `package.sh`; `get.sh` downloads the one for the machine. Run on another branch, the workflow builds both without publishing, to try a change to the builds. The latest release's name is at `https://api.github.com/repos/tsubaie/omarchy-macos-theme/releases/latest` (`tag_name`): a name other than the app's own means there is an update. A local build shows `Cargo.toml`'s version instead.
 
 ### The app icon
 
