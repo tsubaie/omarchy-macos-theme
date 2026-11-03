@@ -124,7 +124,7 @@ Omarchy's dock, which appears on floating workspaces, reworked to behave like th
 
 ### macOS icons (`--icons`)
 
-Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from its GitHub repository (default color, into your home folder, no password) and switches to it. App icons, Files, and the dock's Trash and Downloads then look like macOS. As in Finder, Files lists show small blue folders and paper document icons (PDF, images, zip and so on), and the sidebar uses gray outlines. MacTahoe draws small icons as outlines and flat glyphs, so the script swaps in its large icons at those sizes.
+Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon theme from its GitHub repository, at a commit the installer pins (default color, into your home folder, no password) and switches to it. App icons, Files, and the dock's Trash and Downloads then look like macOS. As in Finder, Files lists show small blue folders and paper document icons (PDF, images, zip and so on), and the sidebar uses gray outlines. MacTahoe draws small icons as outlines and flat glyphs, so the script swaps in its large icons at those sizes.
 
 ### App and workspace switchers, and Mission Control (`--switcher`)
 
@@ -186,7 +186,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 - The date and a large clock at the top, in 12- or 24-hour time as your bar's clock shows it, over the sharp wallpaper.
 - Your account picture (`~/.face`, or your initial on a gray disc), your name and a glass password pill at the bottom, with an arrow to submit and the fingerprint icon when one is enrolled.
 - A wrong password shakes the field, as on macOS.
-- Only the look changes: it is a clone of Omarchy's lock (`omarchy plugin clone omarchy.lock`), and the installer copies this Omarchy's own locking, password and fingerprint code into it each time, then adds the macOS `LockView.qml`. Run `./install.sh --add lock` again after an Omarchy update to take in its latest lock code.
+- Only the look changes: it is a clone of Omarchy's lock (`omarchy plugin clone omarchy.lock`), and the installer copies this Omarchy's own locking, password and fingerprint code into it each time, then adds the macOS `LockView.qml`. After each `omarchy-update`, a hook (`~/.config/omarchy/hooks/post-update.d/macos-theme-lock`) copies in Omarchy's latest lock code, keeping the macOS view.
 - See it without locking: `omarchy-shell lock preview` (click to close).
 
 ## Backups
@@ -218,15 +218,16 @@ All plugins go into `~/.config/omarchy/plugins/` and are enabled for you.
 
 ### Files changed
 
-Each file is backed up first (as `*.bak.<timestamp>`; an existing `macos` theme goes to `~/.config/omarchy/macos-theme-backups/`).
+Each run takes a snapshot first (see [Backups](#backups)). A removed theme folder is kept in `~/.config/omarchy/macos-theme-backups/`.
 
 | File | Change |
 |---|---|
 | `~/.config/omarchy/themes/macos/` | The theme itself |
 | `~/.config/hypr/looknfeel.lua` | One line at the end that loads the theme's `look.lua`, so its look applies only while this theme is active |
-| `~/.config/gtk-4.0/gtk.css` | Two imports: blur for GTK apps like Files, and the theme's striped Files rows |
+| `~/.config/gtk-4.0/gtk.css` | Two imports from the current theme's folder: blur for GTK apps like Files, and the theme's striped Files rows. Both apply only while this theme is active |
 | `~/.config/omarchy/plugins/` | The plugins you chose |
 | `~/.config/omarchy/shell.json` | Turns on the plugins and turns off the Omarchy ones they replace |
+| `~/.config/omarchy/hooks/post-update.d/macos-theme-lock` | With `--lock`: refreshes the lock screen's Omarchy code after each update |
 
 ### Impact on your system
 
@@ -235,7 +236,7 @@ Each file is backed up first (as `*.bak.<timestamp>`; an existing `macos` theme 
 - **Replaced Omarchy parts** (dock, on-screen display, menu) are copies, so they don't get Omarchy's updates to those parts. Re-run `./install.sh` after a big Omarchy update; `--wide-menu` re-copies the menu from your installed Omarchy version.
 - **Performance**: blur and see-through windows cost a little GPU time. The workspace switcher captures windows live only while it is open.
 - **No sudo** is needed, and nothing outside your home folder is touched.
-- **Downloads**: `--icons` clones MacTahoe from GitHub (about 100 MB; about 220 MB once installed). Nothing else is downloaded.
+- **Downloads**: `--icons` fetches one pinned commit of MacTahoe from GitHub (about 100 MB; about 220 MB once installed). Nothing else is downloaded.
 
 ## Uninstall
 
