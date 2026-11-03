@@ -20,6 +20,9 @@ echo "Downloading macOS Theme Studio…"
 curl -fL --progress-bar -o "$tmp/studio.tar.gz" "$url"
 tar -xzf "$tmp/studio.tar.gz" -C "$tmp"
 
-install -Dm755 "$tmp/$id/$id" "$bin"
+# Beside it, then renamed over it: Studio updating itself keeps running the
+# old program until it reopens, rather than one half written.
+install -Dm755 "$tmp/$id/$id" "$bin.new"
+mv -f "$bin.new" "$bin"
 OMARCHY_MACOS_STUDIO_BIN="$bin" "$tmp/$id/install-desktop.sh"
 echo "Installed $bin. Open macOS Theme Studio from the app launcher."

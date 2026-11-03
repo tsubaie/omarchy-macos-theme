@@ -29,6 +29,31 @@ Window {
         try { return JSON.parse(backend.statusJson) } catch (e) { return {} }
     }
 
+    // Studio's own updates: its newest release on GitHub, against this one's
+    // name. A build from source isn't a release (its version is Cargo's), so
+    // it's never offered one.
+    readonly property bool releaseBuild: /^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$/.test(backend.appVersion)
+    property string studioLatest: ""
+    property bool studioCheckFailed: false
+    // Updated, but this window still runs the old one until it reopens.
+    property bool studioUpdated: false
+    readonly property bool studioUpdate: releaseBuild && !studioUpdated && studioLatest !== "" && studioLatest !== backend.appVersion
+    function checkStudio() {
+        if (!releaseBuild) return
+        const xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            let latest = ""
+            try { latest = xhr.status === 200 ? JSON.parse(xhr.responseText).tag_name || "" : "" } catch (e) {}
+            studioCheckFailed = latest === ""
+            if (latest !== "") studioLatest = latest
+        }
+        xhr.open("GET", "https://api.github.com/repos/tsubaie/omarchy-macos-theme/releases/latest")
+        xhr.setRequestHeader("Accept", "application/vnd.github+json")
+        xhr.send()
+    }
+    Component.onCompleted: checkStudio()
+
     readonly property var backups: {
         try { return JSON.parse(backend.backupsJson) } catch (e) { return [] }
     }
@@ -256,7 +281,7 @@ Window {
     readonly property var workingText: ({
         apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
         export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…",
-        remove: "Removing the macOS theme…", use: "Switching to the macOS theme…"
+        remove: "Removing the macOS theme…", use: "Switching to the macOS theme…", studio: "Updating Studio…"
     })
 
     function doneText() {
@@ -272,6 +297,7 @@ Window {
         case "undo": return "Undid the changes. How they were is backed up too, should you want them back."
         case "remove": return "Removed the macOS theme, and what it replaced is back."
         case "use": return "The macOS theme is in use."
+        case "studio": return "Updated Studio to " + actionDetail + ". Reopen it to use the new version."
         }
         return ""
     }
@@ -282,6 +308,7 @@ Window {
         case "apply": return "Your changes are still marked: fix what it says, then Apply again."
         case "update": return "The theme stays as it was, and Update is still offered to try again."
         case "download": return "Check the network, then Download again."
+        case "studio": return "Studio stays as it was; try again."
         case "restore":
         case "undo":
         case "remove":
@@ -368,6 +395,7 @@ Window {
                 return
             }
             if (backend.error === "" && !window.stopping) window.notice = window.doneText()
+            if (window.action === "studio" && backend.error === "" && !window.stopping) window.studioUpdated = true
             // Undo restores the backup this Apply took, the one new since it started.
             window.undoBackup = window.undoable.includes(window.action) && backend.error === "" && window.backups.length > 0
                 && window.backups[0].id !== window.backupBeforeApply ? window.backups[0].id : ""
@@ -393,7 +421,8 @@ Window {
     property string page: {
         const args = Qt.application.arguments
         const asked = args.indexOf("--page") >= 0 ? args[args.indexOf("--page") + 1] : prefs.lastPage
-        return pages.some(p => p.id === asked) ? asked : "overview"
+        // Before the theme is downloaded there's nothing on the other pages to set.
+        return backend.downloaded && pages.some(p => p.id === asked) ? asked : "overview"
     }
     // Written at once, so it survives the app being killed rather than closed.
     onPageChanged: { prefs.lastPage = page; prefs.sync() }
@@ -493,7 +522,7 @@ Window {
         Keys.onUpPressed: step(-1)
         Keys.onDownPressed: step(1)
         function step(by) {
-            if (window.query !== "") return
+            if (window.query !== "" || !backend.downloaded) return
             const ids = ["overview"].concat(window.listed.map(p => p.id))
             const at = ids.indexOf(window.page)
             window.page = ids[Math.max(0, Math.min(ids.length - 1, at + by))]
@@ -537,6 +566,8 @@ Window {
             SearchField {
                 id: searchField
                 width: parent.width
+                enabled: backend.downloaded
+                opacity: enabled ? 1 : 0.4
                 onTextChanged: window.query = text
                 onMove: step => {
                     if (window.results.length > 0)
@@ -630,10 +661,14 @@ Window {
                         width: parent.width
                         height: 28
                         radius: 6
-                        color: entry.selected ? Qt.rgba(1, 1, 1, 0.12) : hover.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                        // Dimmed and unclickable until the theme is downloaded.
+                        enabled: backend.downloaded
+                        opacity: enabled ? 1 : 0.35
+                        color: entry.selected ? Qt.rgba(1, 1, 1, 0.12) : hover.hovered && enabled ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
                         Accessible.role: Accessible.PageTab
                         Accessible.name: entry.modelData.title
+                        Accessible.description: enabled ? "" : "Download the theme first"
                         Accessible.selected: entry.selected
                         Accessible.onPressAction: window.open(entry.modelData.id)
 
@@ -684,6 +719,7 @@ Window {
 
     // Opens a page; from a search, the search is done.
     function open(id) {
+        if (!backend.downloaded && id !== "overview") return
         window.page = id
         window.query = ""
         searchField.clear()
@@ -1345,15 +1381,6 @@ Window {
 
                         MacButton {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: backend.updates === 0 && backend.updateError !== ""
-                            text: "Check Again"
-                            enabled: !backend.busy
-                            // No action of its own: nothing to confirm, and nothing to stop.
-                            onClicked: { window.start(""); backend.refresh() }
-                        }
-
-                        MacButton {
-                            anchors.verticalCenter: parent.verticalCenter
                             visible: backend.updates > 0
                             text: "Update"
                             primary: true
@@ -1368,8 +1395,59 @@ Window {
                         }
                     }
 
+                    Fact { text: "Studio" }
+                    Row {
+                        spacing: 10
+                        height: 18
+
+                        Value {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: !window.releaseBuild ? "Built from source"
+                                : window.studioUpdated ? "Updated; reopen to use it"
+                                : window.studioUpdate ? window.studioLatest + " available"
+                                : window.studioCheckFailed ? "Couldn't check for updates" : "Up to date"
+                            color: window.studioUpdate || window.studioUpdated ? "#0a84ff" : "white"
+                        }
+
+                        MacButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: window.studioUpdate
+                            text: "Update"
+                            primary: true
+                            enabled: !backend.busy && backend.downloaded
+                            reason: backend.downloaded ? "Wait for what's running to finish" : "Download the theme first"
+                            onClicked: window.confirm = {
+                                title: "Update Studio to " + window.studioLatest + "?",
+                                text: "The newest Studio is downloaded from GitHub and put in place of this one. Reopen it afterwards to use it; the theme isn't changed.",
+                                button: "Update",
+                                action: () => { window.start("studio", window.studioLatest); backend.updateStudio() }
+                            }
+                        }
+
+                        MacButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: window.studioUpdated
+                            text: "Reopen"
+                            primary: true
+                            // Asks first when changes wait, as closing does.
+                            onClicked: if (backend.reopen()) window.close()
+                        }
+                    }
+
                     Fact { text: "License" }
                     Value { text: "Open source, MIT" }
+                }
+
+                Item { width: 1; height: 14 }
+
+                // The theme and Studio, both asked again: new commits for the
+                // theme, a new release for Studio.
+                MacButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Check for Updates"
+                    enabled: !backend.busy
+                    reason: "Wait for what's running to finish"
+                    onClicked: { window.start(""); backend.refresh(); window.checkStudio() }
                 }
 
                 Item { width: 1; height: 22 }
