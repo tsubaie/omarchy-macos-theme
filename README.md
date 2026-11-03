@@ -179,7 +179,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 - For [Voxtype](https://voxtype.io) dictation: the same panel, the microphone and moving bars while recording, and "Transcribing" after.
 - All of them on clearer glass than your windows, as Apple's are; the Glass setting still sets how see-through, over the theme's blur.
 
-  ![Dictation HUD](docs/screenshots/dictation-hud.png)
+  <img src="docs/screenshots/dictation-hud.png" alt="Dictation HUD" width="200">
 
 ### Desktop widgets (`--widgets`)
 - A column at the top left of the desktop, behind your windows, on frosted glass:
