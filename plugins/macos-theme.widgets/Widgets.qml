@@ -149,8 +149,8 @@ Item {
   // another swaps them. Where each sits is saved in shell.json.
   readonly property int cell: size + gap
   readonly property var layout: Model.normalizeLayout(config.layout, known)
-  readonly property int cols: Math.max(1, Math.floor((window.width - area.x + gap) / cell))
-  readonly property int rows: Math.max(1, Math.floor((window.height - area.y + gap) / cell))
+  readonly property int cols: activeWindow ? Math.max(1, Math.floor((activeWindow.width - activeWindow.areaItem.x + gap) / cell)) : 1
+  readonly property int rows: activeWindow ? Math.max(1, Math.floor((activeWindow.height - activeWindow.areaItem.y + gap) / cell)) : 1
   // Motion kept still: Omarchy's animations off, or the theme's Reduce
   // motion (install.sh --set reduce-motion=1), read from the look Hyprland has
   // loaded and followed as it changes.
@@ -273,155 +273,172 @@ Item {
 
   readonly property var contents: ({ clock: clockContent, calendar: calendarContent, weather: weatherContent, playing: playingContent })
 
-  PanelWindow {
-    id: window
-    screen: root.targetScreen
-    visible: root.onThisWorkspace
-    color: "transparent"
-    WlrLayershell.namespace: "omarchy-widgets"
-    WlrLayershell.layer: WlrLayer.Bottom
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    exclusionMode: ExclusionMode.Normal
-    exclusiveZone: 0
-    anchors { top: true; bottom: true; left: true; right: true }
+  // One window on every screen, always mapped, as the dock's are: moving the
+  // widgets to another screen or workspace only shows them in the window
+  // that's already there, where a fresh window wouldn't be drawn until the
+  // pointer moved over it. Only the target screen's builds the widgets; while
+  // hidden, a window takes no clicks.
+  property var activeWindow: null
+  Variants {
+    model: Quickshell.screens
 
-    // Only the widgets (and the menu) take clicks; the rest of the desktop is
-    // left alone. A drag keeps the pointer past these bounds until released.
-    mask: Region {
-      x: tiles.childrenRect.x + area.x
-      y: tiles.childrenRect.y + area.y
-      width: tiles.childrenRect.width
-      height: tiles.childrenRect.height
-
-      Region { item: root.menuFor ? menu : null }
-    }
-
-    Item {
-      id: area
-      x: Math.round(20 * root.s)
-      y: root.gap
-      width: parent.width - x
-      height: parent.height - y
-
-      Item {
-        id: tiles
-        anchors.fill: parent
-
-        Repeater {
-          model: root.known
-
-          delegate: Glass {
-            id: tile
-            required property string modelData
-            readonly property var spot: Model.find(root.shown, modelData)
-            readonly property bool dragging: dragArea.drag.active
-
-            visible: spot !== null
-            x: spot ? spot.col * root.cell : 0
-            y: spot ? spot.row * root.cell : 0
-            z: dragging ? 10 : 0
-            scale: dragging ? 1.04 : 1
-            opacity: dragging ? 0.92 : 1
-
-            Behavior on x { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
-            Behavior on y { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
-            Behavior on scale { NumberAnimation { duration: 120 } }
-
-            // Under the content, so the media buttons still take their clicks.
-            MouseArea {
-              id: dragArea
-              anchors.fill: parent
-              acceptedButtons: Qt.LeftButton | Qt.RightButton
-              drag.target: tile
-              drag.threshold: 6
-              cursorShape: dragArea.drag.active ? Qt.ClosedHandCursor : Qt.ArrowCursor
-              onPressed: function(event) {
-                if (event.button === Qt.RightButton) {
-                  var p = mapToItem(area, event.x, event.y)
-                  root.openMenu(tile.modelData, p.x, p.y)
-                } else root.menuFor = ""
-              }
-              onReleased: {
-                if (!tile.spot) return
-                var cell = Model.snap(tile.x, tile.y, root.cell, root.cols, root.rows)
-                // Back under the layout's control, then to the cell it snapped to.
-                tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
-                tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
-                if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
-                  // From where widgets show, so a swap lands on this screen too.
-                  root.save(Model.moveTo(root.shown, tile.modelData, cell.col, cell.row))
-              }
-            }
-
-            Loader {
-              anchors.fill: parent
-              active: !!root.contents[tile.modelData]
-              sourceComponent: root.contents[tile.modelData]
-            }
-            // One of yours: its Widget.qml, filling the card. One that doesn't
-            // load says so in its card, and the others carry on.
-            Loader {
-              id: own
-              anchors.fill: parent
-              active: !root.contents[tile.modelData]
-              source: active ? "file://" + root.customDir + "/" + tile.modelData + "/Widget.qml" : ""
-            }
-            Text {
-              visible: own.active && own.status === Loader.Error
-              anchors.fill: parent
-              anchors.margins: Math.round(16 * root.s)
-              text: root.nameOf(tile.modelData) + " couldn't load. Its Widget.qml has an error; the shell's log says which."
-              color: Qt.rgba(1, 1, 1, 0.7)
-              font.pixelSize: Math.round(12 * root.s)
-              wrapMode: Text.WordWrap
-              verticalAlignment: Text.AlignVCenter
-            }
-          }
-        }
+    PanelWindow {
+      id: window
+      required property var modelData
+      screen: modelData
+      readonly property bool here: modelData === root.targetScreen
+      readonly property bool showing: here && root.onThisWorkspace
+      // The grid's size comes from the window the widgets are in.
+      readonly property Item areaItem: area
+      onHereChanged: if (here) root.activeWindow = window
+      Component.onCompleted: if (here) root.activeWindow = window
+      color: "transparent"
+      WlrLayershell.namespace: "omarchy-widgets"
+      WlrLayershell.layer: WlrLayer.Bottom
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      exclusionMode: ExclusionMode.Normal
+      exclusiveZone: 0
+      anchors { top: true; bottom: true; left: true; right: true }
+  
+      // Only the widgets (and the menu) take clicks; the rest of the desktop is
+      // left alone. A drag keeps the pointer past these bounds until released.
+      mask: Region {
+        x: tiles.childrenRect.x + area.x
+        y: tiles.childrenRect.y + area.y
+        width: window.showing ? tiles.childrenRect.width : 0
+        height: window.showing ? tiles.childrenRect.height : 0
+  
+        Region { item: root.menuFor && window.showing ? menu : null }
       }
-
-      Rectangle {
-        id: menu
-        visible: root.menuFor !== ""
-        x: Math.min(root.menuAt.x, area.width - width - root.gap)
-        y: Math.min(root.menuAt.y, area.height - height - root.gap)
-        z: 20
-        width: Math.max(Math.round(170 * root.s), menuColumn.implicitWidth + Math.round(12 * root.s))
-        height: menuColumn.implicitHeight + Math.round(12 * root.s)
-        radius: Math.round(10 * root.s)
-        color: Qt.rgba(0.16, 0.16, 0.18, 0.92)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.14)
-
-        HoverHandler {
-          onHoveredChanged: hovered ? menuLeave.stop() : menuLeave.restart()
-        }
-
-        Column {
-          id: menuColumn
-          anchors.centerIn: parent
-          width: parent.width - Math.round(12 * root.s)
-
-          MenuRow {
-            label: "Remove Widget"
-            enabled: root.layout.length > 1
-            onChosen: root.save(Model.remove(root.layout, root.menuFor))
-          }
-
-          Rectangle {
-            visible: Model.hidden(root.layout, root.known).length > 0
-            width: parent.width
-            height: visible ? Math.round(9 * root.s) : 0
-            color: "transparent"
-            Rectangle { anchors.centerIn: parent; width: parent.width - Math.round(12 * root.s); height: 1; color: Qt.rgba(1, 1, 1, 0.14) }
-          }
-
+  
+      Item {
+        id: area
+        visible: window.showing
+        x: Math.round(20 * root.s)
+        y: root.gap
+        width: parent.width - x
+        height: parent.height - y
+  
+        Item {
+          id: tiles
+          anchors.fill: parent
+  
           Repeater {
-            model: Model.hidden(root.layout, root.known)
-            delegate: MenuRow {
+            model: window.here ? root.known : []
+  
+            delegate: Glass {
+              id: tile
               required property string modelData
-              label: "Add " + root.nameOf(modelData)
-              onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows, root.known))
+              readonly property var spot: Model.find(root.shown, modelData)
+              readonly property bool dragging: dragArea.drag.active
+  
+              visible: spot !== null
+              x: spot ? spot.col * root.cell : 0
+              y: spot ? spot.row * root.cell : 0
+              z: dragging ? 10 : 0
+              scale: dragging ? 1.04 : 1
+              opacity: dragging ? 0.92 : 1
+  
+              Behavior on x { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+              Behavior on y { enabled: !tile.dragging && !root.reduceMotion; NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+              Behavior on scale { NumberAnimation { duration: 120 } }
+  
+              // Under the content, so the media buttons still take their clicks.
+              MouseArea {
+                id: dragArea
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                drag.target: tile
+                drag.threshold: 6
+                cursorShape: dragArea.drag.active ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                onPressed: function(event) {
+                  if (event.button === Qt.RightButton) {
+                    var p = mapToItem(area, event.x, event.y)
+                    root.openMenu(tile.modelData, p.x, p.y)
+                  } else root.menuFor = ""
+                }
+                onReleased: {
+                  if (!tile.spot) return
+                  var cell = Model.snap(tile.x, tile.y, root.cell, root.cols, root.rows)
+                  // Back under the layout's control, then to the cell it snapped to.
+                  tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
+                  tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
+                  if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
+                    // From where widgets show, so a swap lands on this screen too.
+                    root.save(Model.moveTo(root.shown, tile.modelData, cell.col, cell.row))
+                }
+              }
+  
+              Loader {
+                anchors.fill: parent
+                active: !!root.contents[tile.modelData]
+                sourceComponent: root.contents[tile.modelData]
+              }
+              // One of yours: its Widget.qml, filling the card. One that doesn't
+              // load says so in its card, and the others carry on.
+              Loader {
+                id: own
+                anchors.fill: parent
+                active: !root.contents[tile.modelData]
+                source: active ? "file://" + root.customDir + "/" + tile.modelData + "/Widget.qml" : ""
+              }
+              Text {
+                visible: own.active && own.status === Loader.Error
+                anchors.fill: parent
+                anchors.margins: Math.round(16 * root.s)
+                text: root.nameOf(tile.modelData) + " couldn't load. Its Widget.qml has an error; the shell's log says which."
+                color: Qt.rgba(1, 1, 1, 0.7)
+                font.pixelSize: Math.round(12 * root.s)
+                wrapMode: Text.WordWrap
+                verticalAlignment: Text.AlignVCenter
+              }
+            }
+          }
+        }
+  
+        Rectangle {
+          id: menu
+          visible: root.menuFor !== ""
+          x: Math.min(root.menuAt.x, area.width - width - root.gap)
+          y: Math.min(root.menuAt.y, area.height - height - root.gap)
+          z: 20
+          width: Math.max(Math.round(170 * root.s), menuColumn.implicitWidth + Math.round(12 * root.s))
+          height: menuColumn.implicitHeight + Math.round(12 * root.s)
+          radius: Math.round(10 * root.s)
+          color: Qt.rgba(0.16, 0.16, 0.18, 0.92)
+          border.width: 1
+          border.color: Qt.rgba(1, 1, 1, 0.14)
+  
+          HoverHandler {
+            onHoveredChanged: hovered ? menuLeave.stop() : menuLeave.restart()
+          }
+  
+          Column {
+            id: menuColumn
+            anchors.centerIn: parent
+            width: parent.width - Math.round(12 * root.s)
+  
+            MenuRow {
+              label: "Remove Widget"
+              enabled: root.layout.length > 1
+              onChosen: root.save(Model.remove(root.layout, root.menuFor))
+            }
+  
+            Rectangle {
+              visible: Model.hidden(root.layout, root.known).length > 0
+              width: parent.width
+              height: visible ? Math.round(9 * root.s) : 0
+              color: "transparent"
+              Rectangle { anchors.centerIn: parent; width: parent.width - Math.round(12 * root.s); height: 1; color: Qt.rgba(1, 1, 1, 0.14) }
+            }
+  
+            Repeater {
+              model: Model.hidden(root.layout, root.known)
+              delegate: MenuRow {
+                required property string modelData
+                label: "Add " + root.nameOf(modelData)
+                onChosen: root.save(Model.add(root.layout, modelData, root.cols, root.rows, root.known))
+              }
             }
           }
         }
