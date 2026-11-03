@@ -29,7 +29,7 @@ fs.mkdirSync(path.join(home, ".config/omarchy"), { recursive: true })
 fs.writeFileSync(path.join(home, ".config/omarchy/shell.json"), JSON.stringify({
   bar: { layout: { left: [{ id: "me.tray" }], right: [{ id: "omarchy.weather" }, { id: "omarchy.clock" }] } },
 }))
-const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, MACOS_THEME_NO_SNAPSHOT: "1" }
+const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}`, MACOS_THEME_NO_SNAPSHOT: "1" }
 const run = (...args) => spawnSync("bash", [script, ...args], { env, encoding: "utf8" })
 const calls = () => (fs.existsSync(path.join(home, "calls")) ? fs.readFileSync(path.join(home, "calls"), "utf8").trim().split("\n") : [])
 

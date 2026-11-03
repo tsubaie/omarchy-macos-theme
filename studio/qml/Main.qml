@@ -183,6 +183,23 @@ Window {
     readonly property bool omdropMissing: bar.sections !== undefined && !("netmojo.omdrop" in barNames)
     // Left, Center and Right, and the hidden ones (BarModel.groups).
     readonly property var barNow: BarModel.groups(bar)
+
+    // The backgrounds: { current, folder, yours: [paths], theme: [paths] }; an
+    // older theme lists none. The pictures at the top of the pages draw the
+    // one showing, or the theme's own until there is one.
+    readonly property var backgrounds: {
+        try { return JSON.parse(backend.backgroundsJson) } catch (e) { return {} }
+    }
+    // A video one (Omarchy takes those too) can't be drawn here: the theme's own then.
+    readonly property string backgroundSource: fileUrl(/\.(jpe?g|png|gif|bmp|webp)$/i.test(backgrounds.current || "")
+        ? backgrounds.current : backend.themeDir + "/theme/backgrounds/1-pawel-czerwinski.jpg")
+    // A path as a file:// URL, with what a URL reads otherwise (#, ?) kept in the name.
+    function fileUrl(path) { return "file://" + encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F") }
+    function chooseBackground(file) {
+        if (backend.busy || file === backgrounds.current) return
+        start("background", file.split("/").pop())
+        backend.setBackground(file)
+    }
     property var pendingBar: null
 
     // Taking the groups back to the bar as it is takes the change away.
@@ -331,7 +348,8 @@ Window {
     readonly property var workingText: ({
         apply: "Applying…", update: "Updating…", backup: "Backing up…", restore: "Restoring…",
         export: "Exporting…", import: "Importing…", download: "Downloading…", undo: "Undoing…",
-        remove: "Removing the macOS theme…", use: "Switching to the macOS theme…", studio: "Updating Studio…"
+        remove: "Removing the macOS theme…", use: "Switching to the macOS theme…", studio: "Updating Studio…",
+        background: "Setting the background…", "add-backgrounds": "Adding the pictures…"
     })
 
     function doneText() {
@@ -348,6 +366,8 @@ Window {
         case "remove": return "Removed the macOS theme, and what it replaced is back."
         case "use": return "The macOS theme is in use."
         case "studio": return "Updated Studio to " + actionDetail + ". Reopen it to use the new version."
+        case "background": return "Set the background to " + actionDetail + "."
+        case "add-backgrounds": return n === 1 ? "Added 1 picture to Yours." : "Added " + n + " pictures to Yours."
         }
         return ""
     }
@@ -365,13 +385,15 @@ Window {
         case "use":
         case "import": return "If it got as far as changing anything, Backups has how things were before it."
         case "backup":
+        case "background":
+        case "add-backgrounds":
         case "export": return "Nothing was changed; try again."
         }
         return ""
     }
 
     // The actions whose done note offers Undo: the backup each took first.
-    readonly property var undoable: ["apply", "remove", "use", "update"]
+    readonly property var undoable: ["apply", "remove", "use", "update", "background"]
 
     // Install macOS Theme, or Use macOS Theme when it is installed but another
     // theme is current: install.sh puts the theme in (your settings kept)
@@ -573,6 +595,8 @@ Window {
           keywords: "desktop widgets clock calendar weather now playing music show hide" },
         { id: "menubar", title: "Menu Bar", icon: "menubar", section: 1,
           keywords: "menu bar inter font app name control center wifi wi-fi ethernet network bluetooth sound volume display monitor symbols clock time date position left center middle right items icons widgets show hide rearrange order drag tray airdrop omdrop" },
+        { id: "backgrounds", title: "Backgrounds", icon: "backgrounds", section: 1,
+          keywords: "background backgrounds wallpaper wallpapers desktop picture pictures photo photos image add suggested" },
         { id: "backups", title: "Backups", icon: "backups", section: 2,
           keywords: "backup back up restore undo export import another computer snapshot" }
     ]
@@ -1180,6 +1204,98 @@ Window {
                 }
             }
 
+            // Backgrounds, as System Settings' Wallpaper: the one showing,
+            // yours and the theme's. A click shows one at once (no Apply), after
+            // a backup, so Undo in the note puts the last one back.
+            Column {
+                visible: backend.downloaded && window.page === "backgrounds"
+                width: parent.width
+                spacing: 18
+
+                Scene { width: parent.width; height: 220 }
+
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: !window.installed("theme") ? "Install the macOS theme first (General), then choose its background."
+                        : window.status.active === false ? "Omarchy is showing another theme. The background you choose shows once the macOS theme is in use."
+                        : window.backgrounds.current ? window.backgrounds.current.split("/").pop() : ""
+                    color: Qt.rgba(1, 1, 1, 0.6)
+                    font.pixelSize: 12
+                }
+
+                Group {
+                    title: "Yours"
+                    Item {
+                        width: parent.width
+                        height: yours.height + 24
+                        Flow {
+                            id: yours
+                            x: 12
+                            y: 12
+                            width: parent.width - 24
+                            spacing: 12
+                            Repeater {
+                                model: window.backgrounds.yours || []
+                                BackgroundTile { required property var modelData; file: modelData }
+                            }
+                            // Copied into Omarchy's folder for this theme's backgrounds.
+                            Rectangle {
+                                width: 152
+                                height: 96
+                                radius: 8
+                                color: addMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(1, 1, 1, 0.05)
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, 0.16)
+                                opacity: enabled ? 1 : 0.4
+                                enabled: !backend.busy && window.installed("theme")
+                                activeFocusOnTab: true
+                                Accessible.role: Accessible.Button
+                                Accessible.name: "Add Photos…"
+                                Accessible.onPressAction: addBackgroundsDialog.open()
+                                Keys.onSpacePressed: addBackgroundsDialog.open()
+                                Keys.onReturnPressed: addBackgroundsDialog.open()
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Add Photos…"
+                                    color: Qt.rgba(1, 1, 1, 0.85)
+                                    font.pixelSize: 13
+                                }
+                                FocusRing { controlRadius: 8 }
+                                MouseArea {
+                                    id: addMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: addBackgroundsDialog.open()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // The ones the theme comes with.
+                Group {
+                    title: "Suggested"
+                    visible: (window.backgrounds.theme || []).length > 0
+                    Item {
+                        width: parent.width
+                        height: theirs.height + 24
+                        Flow {
+                            id: theirs
+                            x: 12
+                            y: 12
+                            width: parent.width - 24
+                            spacing: 12
+                            Repeater {
+                                model: window.backgrounds.theme || []
+                                BackgroundTile { required property var modelData; file: modelData }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Widgets: the piece, then which of them show.
             Column {
                 visible: backend.downloaded && window.page === "widgets"
@@ -1589,6 +1705,19 @@ Window {
     }
 
     FileDialog {
+        id: addBackgroundsDialog
+        title: "Add Photos to Your Backgrounds"
+        fileMode: FileDialog.OpenFiles
+        nameFilters: ["Pictures (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.JPG *.JPEG *.PNG *.GIF *.BMP *.WEBP)"]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        onAccepted: {
+            const files = selectedFiles.map(f => window.localPath(f))
+            window.start("add-backgrounds", files.length)
+            backend.addBackgrounds(JSON.stringify(files))
+        }
+    }
+
+    FileDialog {
         id: importDialog
         title: "Import a macOS Theme Setup"
         fileMode: FileDialog.OpenFile
@@ -1777,8 +1906,8 @@ Window {
         Image {
             id: wallpaperImage
             anchors.fill: parent
-            // The theme's macOS-like waves, the same on every page and machine.
-            source: "file://" + backend.themeDir + "/theme/backgrounds/1-pawel-czerwinski.jpg"
+            // The background showing on the desktop, as on macOS.
+            source: window.backgroundSource
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             sourceSize.width: 900
@@ -2486,6 +2615,55 @@ Window {
                 font.pixelSize: 11
                 wrapMode: TextEdit.Wrap
             }
+        }
+    }
+
+    // A background to choose: its picture with rounded corners, ringed in
+    // blue while it's the one showing. A click, Space or Return shows it.
+    component BackgroundTile: Rectangle {
+        id: tile
+        property string file: ""
+        readonly property bool showing: file === window.backgrounds.current
+        width: 152
+        height: 96
+        radius: 8
+        color: "#1c1c1e"
+        enabled: !backend.busy && window.installed("theme")
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: file.split("/").pop() + (showing ? ", the one showing" : "")
+        Accessible.onPressAction: window.chooseBackground(file)
+        Keys.onSpacePressed: window.chooseBackground(file)
+        Keys.onReturnPressed: window.chooseBackground(file)
+
+        Image {
+            anchors.fill: parent
+            source: window.fileUrl(tile.file)
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            sourceSize.width: 320
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: ShaderEffectSource {
+                    sourceItem: Rectangle { width: tile.width; height: tile.height; radius: tile.radius }
+                }
+            }
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -4
+            radius: tile.radius + 4
+            color: "transparent"
+            border.width: 2
+            border.color: "#0a84ff"
+            visible: tile.showing
+        }
+        FocusRing { controlRadius: tile.radius }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: window.chooseBackground(tile.file)
         }
     }
 

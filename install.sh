@@ -53,6 +53,11 @@
 #   ./install.sh --switch-to "Tokyo Night" --uninstall  remove all of it, switching to
 #                                 that theme first if the macOS theme is current
 #
+#   Backgrounds (installing the theme keeps the one showing):
+#   ./install.sh --backgrounds [--json]   the one showing, yours and the theme's
+#   ./install.sh --background <file>      show it, and have the theme remember it
+#   ./install.sh --add-background <file>  copy a picture into your backgrounds (repeatable)
+#
 #   Every change takes a snapshot first, so it can be undone (the first one is kept for good):
 #   ./install.sh --backups [--json]   the snapshots, newest first
 #   ./install.sh --backup             take one now
@@ -128,7 +133,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # Each piece, by the name --add, --remove and --status use.
 FEATURES="theme rows icons wide-menu dock switcher osd dictation-hud menubar bar-icons lock widgets"
 declare -A add=() remove=() settings=()
-status=false json=false preview=false legacy=false uninstall=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets=""
+status=false json=false preview=false legacy=false uninstall=false switch_to="" mode="" mode_arg="" bar_layout="" show_widgets="" new_backgrounds=()
 (( $# )) || legacy=true
 while (( $# )); do
   case "$1" in
@@ -167,6 +172,11 @@ while (( $# )); do
     --uninstall) for f in $FEATURES; do remove[$f]=1; done; uninstall=true ;;
     --status) status=true ;;
     --backups) mode=backups ;;
+    --backgrounds) mode=backgrounds ;;
+    --add-background)
+      mode=add-backgrounds; new_backgrounds+=("${2:-}")
+      [[ -n ${2:-} ]] || { echo "--add-background needs a picture (try --help)" >&2; exit 1; }
+      shift ;;
     --bar) mode=bar ;;
     --doctor) mode=doctor ;;
     --bar-layout)
@@ -182,7 +192,7 @@ while (( $# )); do
       shift ;;
     --backup) mode=backup ;;
     --restore-original) mode=restore-original ;;
-    --restore|--export|--import)
+    --restore|--export|--import|--background)
       mode=${1#--}; mode_arg=${2:-}
       [[ -n $mode_arg ]] || { echo "$1 needs a value (try --help)" >&2; exit 1; }
       shift ;;
@@ -274,6 +284,92 @@ installed() {
 }
 
 active() { [[ $(omarchy theme current 2>/dev/null) == "Macos" ]]; }
+
+# The first switch to the theme keeps the background showing now, rather than
+# the theme's own first one: Omarchy remembers each theme's background in
+# theme-backgrounds/<theme> and picks it on a switch, so it is written there,
+# unless the theme remembers one of its own already. One that came with the
+# current theme lives in current/theme/, which the switch replaces, so that
+# theme's own copy is remembered instead. No background: the theme's own.
+keep_background() {
+  local state=$BG_STATE current="$HOME/.local/state/omarchy/current" bg dir
+  [[ -s $state ]] && return 0
+  bg=$(readlink -f "$current/background" 2>/dev/null) || return 0
+  if [[ $bg == "$current/theme/backgrounds/"* ]]; then
+    dir=$(omarchy theme dir "$(cat "$current/theme.name" 2>/dev/null)" 2>/dev/null) || return 0
+    bg="$dir/backgrounds/${bg##*/}"
+  fi
+  [[ -f $bg ]] || return 0
+  mkdir -p "${state%/*}" && printf '%s\n' "$bg" >"$state"
+}
+
+# The backgrounds: your own (Omarchy's folder for this theme, which it lists
+# first) and the theme's, stills only, and the one showing, or while another
+# theme is current, the one this theme will show.
+USER_BACKGROUNDS="$CONFIG/omarchy/backgrounds/macos"
+BG_STATE="$HOME/.local/state/omarchy/theme-backgrounds/macos"
+SHOWN_THEME="$HOME/.local/state/omarchy/current/theme"
+is_still() { [[ ${1,,} =~ \.(jpe?g|png|gif|bmp|webp)$ ]]; }
+# A theme background by its place in the theme's folder, not in the copy of it
+# Omarchy shows from, which a theme switch replaces.
+background_path() {
+  local bg="$1"
+  [[ $bg == "$SHOWN_THEME/backgrounds/"* ]] && bg="$THEME_DIR/backgrounds/${bg##*/}"
+  echo "$bg"
+}
+background_now() {
+  local bg
+  if active; then bg=$(readlink -f "$HOME/.local/state/omarchy/current/background" 2>/dev/null) || bg=""
+  else bg=$(cat "$BG_STATE" 2>/dev/null) || bg=""; fi
+  background_path "$bg"
+}
+backgrounds_json() {
+  local d list=()
+  for d in "$USER_BACKGROUNDS" "$THEME_DIR/backgrounds"; do
+    # A folder that isn't there yet lists nothing.
+    list+=("$({ find -L "$d" -maxdepth 1 -type f 2>/dev/null || true; } | sort | while read -r f; do if is_still "$f"; then echo "$f"; fi; done | jq -Rsc 'split("\n") | map(select(length > 0))')")
+  done
+  jq -n --arg current "$(background_now)" --arg folder "$USER_BACKGROUNDS" --argjson yours "${list[0]}" --argjson theme "${list[1]}" \
+    '{current: $current, folder: $folder, yours: $yours, theme: $theme}'
+}
+
+# Shows a background and has the theme remember it. A theme one is shown from
+# Omarchy's copy, as Omarchy's own switch shows it, so `omarchy theme bg next`
+# carries on from it. While another theme is current, only remembered: it
+# shows once the macOS theme is.
+show_background() {
+  local bg="$1"
+  if active; then
+    [[ $bg == "$THEME_DIR/backgrounds/"* && -f $SHOWN_THEME/backgrounds/${bg##*/} ]] && bg="$SHOWN_THEME/backgrounds/${bg##*/}"
+    omarchy theme bg set "$bg" >/dev/null
+  fi
+  mkdir -p "${BG_STATE%/*}" && printf '%s\n' "$bg" >"$BG_STATE"
+}
+set_background() {
+  local bg
+  bg=$(realpath -e "$1" 2>/dev/null) && is_still "$bg" ||
+    { echo "Not a picture that can be a background: $1 (JPEG, PNG, GIF, BMP or WebP)" >&2; exit 1; }
+  installed theme || { echo "Install the theme first (--add theme), then choose its background." >&2; exit 1; }
+  snapshot_take "Background ${bg##*/}" >/dev/null
+  show_background "$bg"
+  say "Set the background to ${bg##*/}"
+}
+
+# Copies pictures into your backgrounds folder, a new name for one whose name
+# is taken by another picture, and prints where each went.
+add_backgrounds() {
+  local f name dest n
+  for f in "$@"; do
+    [[ -f $f ]] && is_still "$f" || { echo "Not a picture that can be a background: $f (JPEG, PNG, GIF, BMP or WebP)" >&2; exit 1; }
+  done
+  mkdir -p "$USER_BACKGROUNDS"
+  for f in "$@"; do
+    name=${f##*/} dest="$USER_BACKGROUNDS/$name" n=1
+    while [[ -e $dest ]] && ! cmp -s "$f" "$dest"; do dest="$USER_BACKGROUNDS/${name%.*}-$((++n)).${name##*.}"; done
+    [[ -e $dest ]] || cp "$f" "$dest"
+    echo "$dest"
+  done
+}
 
 # The theme to switch to when the macOS theme goes while current: the one
 # current before its first piece, else the one the first snapshot was taken
@@ -790,10 +886,13 @@ case $mode in
   doctor) doctor ;;
   bar) if $json; then bar_json; else bar_text; fi; exit 0 ;;
   backups) if $json; then snapshot_list_json; else snapshot_list_text; fi; exit 0 ;;
-  backup|restore|restore-original|import) take_lock ;;
+  backgrounds) if $json; then backgrounds_json; else backgrounds_json | jq -r '"current: \(.current)", (.yours[] | "yours: \(.)"), (.theme[] | "theme: \(.)")'; fi; exit 0 ;;
+  add-backgrounds) add_backgrounds "${new_backgrounds[@]}"; exit 0 ;;
+  backup|restore|restore-original|import|background) take_lock ;;
 esac
 case $mode in
   backup) say "Backed up as $(snapshot_take "Backed up by hand")"; exit 0 ;;
+  background) set_background "$mode_arg"; exit 0 ;;
   restore) snapshot_restore "$mode_arg"; exit 0 ;;
   restore-original) restore_original; exit 0 ;;
   export) export_profile "$mode_arg"; exit 0 ;;
@@ -1159,6 +1258,7 @@ fi
 if active && { (( ${#add[@]} )) || $look_changed; }; then
   refresh
 elif want theme; then
+  keep_background
   omarchy theme set macos
 fi
 if (( ${#failed[@]} )); then

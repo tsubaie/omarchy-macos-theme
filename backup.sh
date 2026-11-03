@@ -84,10 +84,11 @@ snapshot_take() {
     original=true
     for p in $FEATURES; do installed "$p" && original=false; done
   fi
+  # The theme's background too, which lives outside these files.
   jq -n --arg id "$id" --arg created "$(date -Iseconds)" --arg note "$note" \
-    --arg theme "$(omarchy theme current 2>/dev/null)" \
+    --arg theme "$(omarchy theme current 2>/dev/null)" --arg background "$(background_now)" \
     --argjson pinned "$first" --argjson original "$original" \
-    '{id: $id, created: $created, note: $note, theme: $theme, pinned: $pinned, original: $original}' \
+    '{id: $id, created: $created, note: $note, theme: $theme, background: $background, pinned: $pinned, original: $original}' \
     > "$dir/meta.json"
   snapshot_prune
   echo "$id"
@@ -196,6 +197,10 @@ snapshot_restore() {
       omarchy restart shell >/dev/null 2>&1 || true
     fi
   fi
+  # The theme's background as it was, if the snapshot noted one that's still there.
+  local bg
+  bg=$(jq -r '.background // ""' "$dir/meta.json")
+  [[ -f $bg && $bg != "$(background_now)" ]] && show_background "$bg"
   say "Restored the backup from $(jq -r '.created[0:16] | sub("T"; " ")' "$dir/meta.json") (undo with: ./install.sh --restore $undo)"
 }
 

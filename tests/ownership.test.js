@@ -34,7 +34,7 @@ fi
 exit 0
 `, { mode: 0o755 })
   for (const quiet of ["hyprctl", "omarchy-shell"]) fs.writeFileSync(path.join(bin, quiet), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
-  const env = { ...process.env, HOME: home, USER: user, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}` }
+  const env = { ...process.env, DBUS_SESSION_BUS_ADDRESS: "", HYPRLAND_INSTANCE_SIGNATURE: "", XDG_RUNTIME_DIR: home, HOME: home, USER: user, XDG_CONFIG_HOME: path.join(home, ".config"), PATH: `${bin}:${process.env.PATH}` }
   delete env.MACOS_THEME_NO_SNAPSHOT
   const run = (...args) => {
     const r = spawnSync("bash", [script, ...args], { env, encoding: "utf8" })

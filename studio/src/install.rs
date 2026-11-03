@@ -205,6 +205,42 @@ pub fn bar(dir: &Path) -> Result<String> {
     Ok(json.trim().to_owned())
 }
 
+/// The backgrounds, as `install.sh --backgrounds --json` lists them: the one
+/// showing, yours and the theme's.
+///
+/// # Errors
+///
+/// Fails when `install.sh` can't run or its list can't be read.
+pub fn backgrounds(dir: &Path) -> Result<String> {
+    let json = run(dir, &["--backgrounds", "--json"])?.out;
+    serde_json::from_str::<serde_json::Value>(&json).context("reading the backgrounds")?;
+    Ok(json.trim().to_owned())
+}
+
+/// Shows a background and has the theme remember it, after a snapshot.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when it does (not a picture, say).
+pub fn set_background(dir: &Path, file: &Path) -> Result<Warnings> {
+    let file = file.to_str().context("the file's name isn't text")?;
+    run(dir, &["--background", file]).map(|ran| ran.warnings)
+}
+
+/// Copies pictures into the user's backgrounds folder.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when it does (not a picture, say).
+pub fn add_backgrounds(dir: &Path, files: &[PathBuf]) -> Result<Warnings> {
+    let mut args = Vec::new();
+    for file in files {
+        args.push("--add-background");
+        args.push(file.to_str().context("a file's name isn't text")?);
+    }
+    run(dir, &args).map(|ran| ran.warnings)
+}
+
 /// The desktop widgets, as `install.sh --show-widgets` takes them.
 const DESKTOP_WIDGETS: [&str; 4] = ["clock", "calendar", "weather", "playing"];
 
@@ -269,6 +305,7 @@ fn changed_under(home: &Path, config: &Path) -> Option<SystemTime> {
     let folders = [
         config.join("omarchy"),
         config.join("omarchy/plugins"),
+        config.join("omarchy/backgrounds/macos"),
         config.join("omarchy/themes/macos"),
         config.join("omarchy/macos-theme-backups"),
         config.join("hypr"),
@@ -1520,6 +1557,10 @@ mod contract {
                 .env("PATH", path)
                 .env("USER", "studio")
                 .env("OMARCHY_PATH", self.0.join("omarchy"))
+                // Away from the real desktop: gsettings and hyprctl find it through these.
+                .env("DBUS_SESSION_BUS_ADDRESS", "")
+                .env("HYPRLAND_INSTANCE_SIGNATURE", "")
+                .env("XDG_RUNTIME_DIR", &self.0)
                 .env_remove("MACOS_THEME_NO_SNAPSHOT")
                 .output()
                 .expect("bash runs install.sh")

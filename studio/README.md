@@ -33,6 +33,7 @@ Made for Omarchy 4 and later. Open source, MIT.
 | **Lock Screen** | The macOS lock screen, and a **Show** button to see it without locking |
 | **Widgets** | The desktop widgets: clock, calendar, weather and now playing |
 | **Menu Bar** | The macOS menu bar: Inter, the app's name in bold, and Control Center; and every item on the bar, in Left, Center and Right, to show or hide with a switch and drag to rearrange (the clock too). Without Omdrop, which AirDrop in Control Center works through, a row says so with **Get Omdrop** |
+| **Backgrounds** | As System Settings' Wallpaper: the background showing, large; **Yours** (Omarchy's folder for this theme's backgrounds, `~/.config/omarchy/backgrounds/macos/`) with **Add Photos…**, which copies pictures there; and **Suggested**, the three the theme comes with. A click shows one at once, no Apply needed, after a backup, so **Undo** in the note puts the last one back. While another theme is current, the one chosen shows once the macOS theme is. Installing the theme keeps the background you have; the pictures at the top of every page draw it too |
 | **Backups** | Back up now, where backups are kept, restore any backup, and export or import your setup |
 
 - **Changes wait for Apply.** Flipping switches and moving sliders changes nothing until you press **Apply** in the toolbar at the top. Then every change goes to the installer in one call, so the theme reloads once. **Revert** throws the changes away.
