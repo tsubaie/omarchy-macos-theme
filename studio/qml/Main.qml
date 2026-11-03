@@ -190,8 +190,9 @@ Window {
     readonly property var backgrounds: {
         try { return JSON.parse(backend.backgroundsJson) } catch (e) { return {} }
     }
-    readonly property string backgroundSource: fileUrl(backgrounds.current
-        || backend.themeDir + "/theme/backgrounds/1-pawel-czerwinski.jpg")
+    // A video one (Omarchy takes those too) can't be drawn here: the theme's own then.
+    readonly property string backgroundSource: fileUrl(/\.(jpe?g|png|gif|bmp|webp)$/i.test(backgrounds.current || "")
+        ? backgrounds.current : backend.themeDir + "/theme/backgrounds/1-pawel-czerwinski.jpg")
     // A path as a file:// URL, with what a URL reads otherwise (#, ?) kept in the name.
     function fileUrl(path) { return "file://" + encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F") }
     function chooseBackground(file) {
@@ -1707,7 +1708,7 @@ Window {
         id: addBackgroundsDialog
         title: "Add Photos to Your Backgrounds"
         fileMode: FileDialog.OpenFiles
-        nameFilters: ["Pictures (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.JPG *.JPEG *.PNG *.WEBP)"]
+        nameFilters: ["Pictures (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.JPG *.JPEG *.PNG *.GIF *.BMP *.WEBP)"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
         onAccepted: {
             const files = selectedFiles.map(f => window.localPath(f))
