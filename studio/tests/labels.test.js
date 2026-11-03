@@ -29,6 +29,12 @@ assert.strictEqual(m.lastChecked(null, now), "")
 assert.strictEqual(m.lastChecked(new Date(2026, 10, 3, 9, 5), now), "Last checked today at 09:05.")
 assert.strictEqual(m.lastChecked(new Date(2026, 10, 2, 23, 59), now), "Last checked 2 Nov at 23:59.")
 
+// The theme's version by its date, the commit or release after it.
+assert.strictEqual(m.themeVersion("de449a2, 2026-11-03"), "the 3 Nov 2026 version (de449a2)")
+assert.strictEqual(m.themeVersion("v1.2.0, 2026-01-09"), "v1.2.0, from 9 Jan 2026")
+assert.strictEqual(m.themeVersion(""), "")
+assert.strictEqual(m.themeVersion("something else"), "something else")
+
 // An update's commits, as a short list.
 assert.strictEqual(m.whatsNew(""), "")
 assert.strictEqual(m.whatsNew("A better dock\nFix the clock"), "What's new:\n• A better dock\n• Fix the clock")
