@@ -64,16 +64,33 @@ Item {
         for (var i = 0; i < item.children.length; i++) scan(item.children[i])
     }
 
-    // Widgets are loaded again as they move about the bar; a look now and
-    // then finds the new ones.
+    // Widgets are loaded again as they move about the bar: a look just after
+    // the bar's layout changes finds the new ones, and a slow one catches any
+    // that came back some other way.
+    Connections {
+        target: root.bar
+        ignoreUnknownSignals: true
+        function onLayoutConfigChanged() { soon.count = 0; soon.restart() }
+    }
     Timer {
-        interval: 1500
+        id: soon
+        property int count: 0
+        interval: 400
+        repeat: true
+        onTriggered: { look.triggered(); if (++count >= 4) stop() }
+    }
+    Timer {
+        id: look
+        interval: 10000
         repeat: true
         running: true
         triggeredOnStart: true
         onTriggered: {
-            root.patched = root.patched.filter(function(b) { try { return !!b.parent } catch (e) { return false } })
-            root.omdropButtons = root.omdropButtons.filter(function(o) { try { return !!o.button.parent } catch (e) { return false } })
+            // Reassigned only when one went, so nothing bound to them wakes for nothing.
+            var patched = root.patched.filter(function(b) { try { return !!b.parent } catch (e) { return false } })
+            if (patched.length !== root.patched.length) root.patched = patched
+            var omdrop = root.omdropButtons.filter(function(o) { try { return !!o.button.parent } catch (e) { return false } })
+            if (omdrop.length !== root.omdropButtons.length) root.omdropButtons = omdrop
             root.scan(root.surface())
         }
     }

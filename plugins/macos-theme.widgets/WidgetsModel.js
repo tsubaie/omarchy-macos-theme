@@ -166,6 +166,20 @@ function freeCell(layout, cols, rows) {
   return null
 }
 
+// Where each widget shows on a grid of cols × rows: a cell saved on a larger
+// screen (one since unplugged) is off this one, so that widget takes the first
+// free cell instead, or the last cell when none is free. Only for showing:
+// what was saved stays, and the larger screen gets its places back.
+function fitLayout(layout, cols, rows) {
+  var fits = function(w) { return w.col < cols && w.row < rows }
+  var out = layout.filter(fits).map(function(w) { return { id: w.id, col: w.col, row: w.row } })
+  layout.filter(function(w) { return !fits(w) }).forEach(function(w) {
+    var cell = freeCell(out, cols, rows) || { col: cols - 1, row: rows - 1 }
+    out.push({ id: w.id, col: cell.col, row: cell.row })
+  })
+  return out
+}
+
 // A widget dropped on a cell; one already there swaps into the cell it left.
 function moveTo(layout, id, col, row) {
   var moving = find(layout, id)
@@ -197,4 +211,4 @@ function snap(x, y, cell, cols, rows) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap }
+if (typeof module !== "undefined") module.exports = { monthGrid: monthGrid, condition: condition, usesImperial: usesImperial, forecastUrl: forecastUrl, parseForecast: parseForecast, parsePlace: parsePlace, WIDGETS: WIDGETS, NAMES: NAMES, scene: scene, dayPhase: dayPhase, normalizeLayout: normalizeLayout, fitLayout: fitLayout, find: find, hidden: hidden, freeCell: freeCell, moveTo: moveTo, remove: remove, add: add, snap: snap }

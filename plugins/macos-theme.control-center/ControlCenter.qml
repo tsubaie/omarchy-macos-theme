@@ -9,6 +9,8 @@ import Quickshell.Services.Mpris
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
+import Qt.labs.folderlistmodel
+import "CameraWatch.js" as CameraWatch
 
 // macOS Control Center: one icon in the bar for the system's switches, on a
 // card of frosted glass in the theme's colors, laid out as macOS has it:
@@ -37,7 +39,7 @@ BarWidget {
   }
   Timer {
     id: disarm
-    interval: 4000
+    interval: 6000
     onTriggered: root.armed = ""
   }
   readonly property color foreground: root.bar ? root.bar.barForeground : Commons.Color.foreground
@@ -112,10 +114,19 @@ BarWidget {
   PwObjectTracker { objects: root.micSource ? [root.micSource].concat(root.recording) : root.recording }
 
   // The apps using a camera: those holding a /dev/video device open, looked
-  // up every two seconds. One using it through PipeWire shows as PipeWire's
-  // own, so it is named "Camera" alone.
+  // up every two seconds, by one Control Center for all the bars (fuser reads
+  // every process's open files), and not at all without a camera. One using
+  // it through PipeWire shows as PipeWire's own, so it is named "Camera" alone.
   property var cameraApps: []
   property bool cameraInUse: false
+  Component.onCompleted: CameraWatch.join(root)
+  Component.onDestruction: CameraWatch.leave(root)
+  FolderListModel {
+    id: videoDevices
+    folder: "file:///dev"
+    nameFilters: ["video*"]
+    showDirs: false
+  }
   Process {
     id: camera
     command: ["sh", "-c", "for p in $(fuser /dev/video* 2>/dev/null); do cat /proc/$p/comm; done | sort -u"]
@@ -136,7 +147,18 @@ BarWidget {
     repeat: true
     running: true
     triggeredOnStart: true
-    onTriggered: if (!camera.running) camera.running = true
+    onTriggered: {
+      var leader = CameraWatch.leader()
+      if (leader && leader !== root) {
+        root.cameraInUse = leader.cameraInUse
+        if (leader.cameraApps.join() !== root.cameraApps.join()) root.cameraApps = leader.cameraApps
+      } else if (videoDevices.count === 0) {
+        root.cameraInUse = false
+        if (root.cameraApps.length) root.cameraApps = []
+      } else if (!camera.running) {
+        camera.running = true
+      }
+    }
   }
 
   // The apps that stopped using them in the last two minutes.
@@ -197,10 +219,24 @@ BarWidget {
     for (var i = 0; i < item.children.length; i++) hideWidgets(item.children[i])
   }
 
-  // Widgets are loaded again as they move about the bar; a look now and then
-  // finds the new ones.
+  // Widgets are loaded again as they move about the bar: a look just after
+  // the bar's layout changes finds the new ones, and a slow one catches any
+  // that came back some other way.
+  Connections {
+    target: root.bar
+    ignoreUnknownSignals: true
+    function onLayoutConfigChanged() { soon.count = 0; soon.restart() }
+  }
   Timer {
-    interval: 1500
+    id: soon
+    property int count: 0
+    interval: 400
+    repeat: true
+    onTriggered: { look.triggered(); if (++count >= 4) stop() }
+  }
+  Timer {
+    id: look
+    interval: 10000
     repeat: true
     running: true
     triggeredOnStart: true
@@ -567,6 +603,18 @@ BarWidget {
           }
         }
       }
+
+      // Said in words, not only by the red: what the second click does.
+      Text {
+        visible: root.armed !== ""
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Style.space(72)
+        textFormat: Text.PlainText
+        text: "Click " + ({ logout: "Log Out", reboot: "Restart", shutdown: "Shut Down" })[root.armed] + " again to confirm"
+        color: root.ink
+        font.family: "Inter"
+        font.pixelSize: Style.font.caption
+      }
     }
   }
 
@@ -744,7 +792,7 @@ BarWidget {
             required property string modelData
             readonly property var info: root.pillInfo(modelData)
             width: modelData === "power" && root.powerOpen ? content.width : content.half
-            height: root.pillHeight + (modelData === "power" && root.powerOpen ? Style.space(78) : 0)
+            height: root.pillHeight + (modelData === "power" && root.powerOpen ? Style.space(root.armed ? 96 : 78) : 0)
             glyph: info.glyph || ""
             airdrop: info.airdrop === true
             unavailable: info.unavailable === true

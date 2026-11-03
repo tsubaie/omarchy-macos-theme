@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Wayland
@@ -136,6 +137,32 @@ Item {
   readonly property var layout: Model.normalizeLayout(config.layout)
   readonly property int cols: Math.max(1, Math.floor((window.width - area.x + gap) / cell))
   readonly property int rows: Math.max(1, Math.floor((window.height - area.y + gap) / cell))
+  // The layout as this screen shows it, every widget on it.
+  readonly property var shown: Model.fitLayout(layout, cols, rows)
+
+  // The desktop under the widgets is in sight when the workspace on their
+  // screen is empty or floating; tiled windows cover it, and the weather's
+  // rain, snow and clouds stop there rather than run unseen all day.
+  readonly property var shownWorkspace: {
+    var monitor = root.targetScreen ? Hyprland.monitorFor(root.targetScreen) : null
+    return monitor ? monitor.activeWorkspace : null
+  }
+  property bool shownFloating: false
+  readonly property bool desktopSeen: !shownWorkspace || shownWorkspace.toplevels.values.length === 0 || shownFloating
+  onShownWorkspaceChanged: readMode()
+  // shortcut: a workspace's layout changed while it stays shown is seen on the next switch; the dock's refresh IPC would cover it.
+  function readMode() {
+    if (!shownWorkspace || !(shownWorkspace.id >= 1)) return
+    if (modeRead.running) { modeRead.again = true; return }
+    modeRead.command = ["omarchy-hyprland-workspace-layout-current", String(shownWorkspace.id)]
+    modeRead.running = true
+  }
+  Process {
+    id: modeRead
+    property bool again: false
+    stdout: StdioCollector { onStreamFinished: root.shownFloating = text.trim() === "floating" }
+    onExited: if (again) { again = false; Qt.callLater(root.readMode) }
+  }
   readonly property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/shell.json"
 
   // Shown at once, then written to shell.json (through a temporary file, so
@@ -220,7 +247,7 @@ Item {
           delegate: Glass {
             id: tile
             required property string modelData
-            readonly property var spot: Model.find(root.layout, modelData)
+            readonly property var spot: Model.find(root.shown, modelData)
             readonly property bool dragging: dragArea.drag.active
 
             visible: spot !== null
@@ -255,7 +282,8 @@ Item {
                 tile.x = Qt.binding(function() { return tile.spot ? tile.spot.col * root.cell : 0 })
                 tile.y = Qt.binding(function() { return tile.spot ? tile.spot.row * root.cell : 0 })
                 if (cell.col !== tile.spot.col || cell.row !== tile.spot.row)
-                  root.save(Model.moveTo(root.layout, tile.modelData, cell.col, cell.row))
+                  // From where widgets show, so a swap lands on this screen too.
+                  root.save(Model.moveTo(root.shown, tile.modelData, cell.col, cell.row))
               }
             }
 
@@ -485,6 +513,7 @@ Item {
         scene: root.weather ? root.weather.scene : "cloudy"
         phase: root.dayPhase
         windy: root.weather ? root.weather.windy : false
+        covered: !root.desktopSeen
         radius: root.radius
       }
 

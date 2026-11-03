@@ -76,6 +76,18 @@ assert.deepStrictEqual(m.add(l, "clock", 3, 4), l)
 assert.deepStrictEqual(m.add(start, "clock", 1, 4), start)
 assert.strictEqual(m.add([{ id: "clock", col: 0, row: 0 }], "weather", 1, 1).length, 1)
 
+// Laid out on a 4K screen, shown on a 7 × 4 laptop: a widget past the edge
+// takes the first free cell, so it can still be seen and right-clicked; one
+// that fits stays; the saved layout itself is left as it was.
+const wide = [{ id: "clock", col: 12, row: 0 }, { id: "calendar", col: 0, row: 0 }, { id: "weather", col: 3, row: 6 }]
+const fitted = m.fitLayout(wide, 7, 4)
+assert.deepStrictEqual(fitted, [{ id: "calendar", col: 0, row: 0 }, { id: "clock", col: 0, row: 1 }, { id: "weather", col: 0, row: 2 }])
+assert.strictEqual(wide[0].col, 12)
+assert.deepStrictEqual(m.fitLayout(start, 7, 4), start)
+// A grid with no free cell left: the last cell, rather than off screen.
+assert.deepStrictEqual(m.fitLayout([{ id: "clock", col: 0, row: 0 }, { id: "weather", col: 5, row: 0 }], 1, 1),
+  [{ id: "clock", col: 0, row: 0 }, { id: "weather", col: 0, row: 0 }])
+
 // Snapping rounds to the nearest cell and stays on the grid.
 assert.deepStrictEqual(m.snap(250, 80, 172, 5, 4), { col: 1, row: 0 })
 assert.deepStrictEqual(m.snap(-300, 9000, 172, 5, 4), { col: 0, row: 3 })
