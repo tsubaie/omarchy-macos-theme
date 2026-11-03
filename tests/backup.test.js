@@ -240,6 +240,20 @@ try {
   assert.ok(fs.lstatSync(g.config("omarchy/shell.json")).isSymbolicLink())
   assert.strictEqual(JSON.parse(fs.readFileSync(dotfile, "utf8")).dock.magnification, 1.2)
 
+  // A snapshot from an older version holds the link itself, by its full
+  // path: restoring it puts the link back and leaves the dotfile whole.
+  const oldSnap = g.config("omarchy/macos-theme-backups/snapshots/20200101-000000")
+  const oldFiles = path.join(g.home, "old-snapshot")
+  fs.mkdirSync(path.join(oldFiles, "omarchy"), { recursive: true })
+  fs.symlinkSync(dotfile, path.join(oldFiles, "omarchy/shell.json"))
+  fs.mkdirSync(oldSnap)
+  spawnSync("tar", ["-C", oldFiles, "-czf", path.join(oldSnap, "files.tar.gz"), "omarchy/shell.json"])
+  fs.writeFileSync(path.join(oldSnap, "meta.json"), JSON.stringify({ id: "20200101-000000", created: "2020-01-01T00:00:00+00:00", note: "old", theme: "", pinned: false, original: false }))
+  const oldRestore = g.run("--restore", "20200101-000000")
+  assert.strictEqual(oldRestore.status, 0, oldRestore.out)
+  assert.ok(fs.lstatSync(g.config("omarchy/shell.json")).isSymbolicLink())
+  assert.strictEqual(JSON.parse(fs.readFileSync(dotfile, "utf8")).dock.magnification, 1.2)
+
   // A setting for a theme that isn't installed is refused before its snapshot.
   const before = g.json("--backups", "--json").length
   const noTheme = g.run("--set", "glass=0.9")

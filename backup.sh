@@ -129,8 +129,13 @@ snapshot_unpack() {
   # Same filesystem, so each move is a rename. Globbed, so names may hold spaces.
   # Written into, not replaced: a dotfiles symlink stays one, and its file
   # gets the contents back. One the snapshot doesn't hold wasn't there then.
+  # A snapshot from before that held the link itself: put the link back, and
+  # never write through it, which could be onto the very file it points at.
   for p in $SNAPSHOT_FILES; do
-    if [[ -f $stage/$p ]]; then
+    if [[ -L $stage/$p ]]; then
+      rm -f "${CONFIG:?}/$p"
+      unpack_move "$stage" "$stage/$p" || moved=false
+    elif [[ -f $stage/$p ]]; then
       { mkdir -p "$(dirname "$CONFIG/$p")" && cat "$stage/$p" >"$CONFIG/$p"; } || moved=false
     else
       rm -f "${CONFIG:?}/$p"
