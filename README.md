@@ -181,7 +181,7 @@ macOS style icons for Omarchy's own Network, Bluetooth, Audio and Display widget
 
 ### Volume panel (`--osd`) and dictation HUD (`--dictation-hud`)
 
-- Volume and brightness as macOS 27.2 shows them: a clear glass capsule with a light rim, at the bottom middle, with an outlined speaker or sun on the left and a bar of sixteen steps. Icons from [Icons8](https://icons8.com) (`plugins/macos-theme.osd/icons8.json`).
+- Volume and brightness as macOS 27.2 shows them: a clear glass capsule with a light rim, at the bottom middle, with an outlined speaker or sun on the left and one continuous line that fills with the level. Icons from [Icons8](https://icons8.com) (`plugins/macos-theme.osd/icons8.json`).
 - The keyboard language, in the middle of the screen when it changes: its short name large and its full name under it.
 - For [Voxtype](https://voxtype.io) dictation: the same panel, the microphone and moving bars while recording, and "Transcribing" after.
 - All of them on clearer glass than your windows, as Apple's are; the Glass setting still sets how see-through, over the theme's blur.
