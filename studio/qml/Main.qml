@@ -293,6 +293,9 @@ Window {
         // one is turned off, or install.sh would refuse it after the fact.
         if (needsSwitchTo && !pendingSwitchTo) {
             closeAfterApply = false
+            // Apply's own next step, and no details left from an earlier failure.
+            start("apply", pendingCount)
+            backend.errorDetails = ""
             backend.error = "Pick the theme to switch to first, under macOS theme."
             open("general")
             return
