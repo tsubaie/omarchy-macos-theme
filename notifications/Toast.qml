@@ -253,13 +253,13 @@ Item {
     borderSpec: Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
                                    Math.max(1, Style.space(2)))
   }
-  // A faint light rim, as macOS's glass has.
+  // A faint light rim, as macOS's glass has: barely there.
   Rectangle {
     anchors.fill: plate
     radius: plate.radius
     color: "transparent"
     border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.16)
+    border.color: Qt.rgba(1, 1, 1, 0.07)
   }
 
   // The keyboard's card is tinted with the theme's hover fill, buttons and all.
