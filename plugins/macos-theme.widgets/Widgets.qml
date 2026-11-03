@@ -254,10 +254,13 @@ Item {
   // The right-click menu: Remove Widget, and Add for each widget not shown.
   property string menuFor: ""
   property point menuAt: Qt.point(0, 0)
+  // The screen it opened on: only that one's window shows it.
+  property string menuScreen: ""
 
-  function openMenu(id, x, y) {
+  function openMenu(id, x, y, screen) {
     if (!scan.running) scan.running = true
     root.menuFor = id
+    root.menuScreen = screen
     root.menuAt = Qt.point(x, y)
     menuLeave.stop()
   }
@@ -308,7 +311,7 @@ Item {
         width: window.showing ? tiles.childrenRect.width : 0
         height: window.showing ? tiles.childrenRect.height : 0
   
-        Region { item: root.menuFor && window.showing ? menu : null }
+        Region { item: root.menuFor && root.menuScreen === window.modelData.name && window.showing ? menu : null }
       }
   
       Item {
@@ -354,7 +357,7 @@ Item {
                 onPressed: function(event) {
                   if (event.button === Qt.RightButton) {
                     var p = mapToItem(area, event.x, event.y)
-                    root.openMenu(tile.modelData, p.x, p.y)
+                    root.openMenu(tile.modelData, p.x, p.y, window.modelData.name)
                   } else root.menuFor = ""
                 }
                 onReleased: {
@@ -398,7 +401,7 @@ Item {
   
         Rectangle {
           id: menu
-          visible: root.menuFor !== ""
+          visible: root.menuFor !== "" && root.menuScreen === window.modelData.name
           x: Math.min(root.menuAt.x, area.width - width - root.gap)
           y: Math.min(root.menuAt.y, area.height - height - root.gap)
           z: 20
