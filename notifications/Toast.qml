@@ -205,7 +205,7 @@ Item {
   // A block shorter than the mark is centred against it, measured at rest.
   readonly property real textOffset: Math.max(0, (thumb.height - restingBlock) / 2)
 
-  readonly property real fixedHeight: plate.borderTop + plate.borderBottom
+  readonly property real fixedHeight: hang + plate.borderTop + plate.borderBottom
       + contentPaddingY * 2 + Math.max(thumb.height, textOffset + textBlock)
 
   // The height this card's *state* implies, a step function the deck lays out
@@ -231,14 +231,35 @@ Item {
   // inset by those exact widths.
   // macOS's round corners, whatever the theme's cards use elsewhere.
   readonly property real cornerRadius: Style.space(18)
+  // The close button sits on the glass's top-left corner, half off it, as on
+  // macOS. Omarchy clips the deck to the cards, so the glass is drawn this far
+  // in from the card's top and left, leaving the button's outer half room.
+  readonly property real closeSize: Style.space(20)
+  readonly property real hang: Math.round(closeSize / 2)
+  // Frosted glass the desktop shows through, as macOS's is: the theme's color
+  // at about half, over the blur Hyprland draws behind notifications.
+  readonly property color glassColor: {
+    var c = Commons.Color.notifications.background
+    return Qt.rgba(c.r, c.g, c.b, Math.min(c.a, 0.5))
+  }
   BorderSurface {
     id: plate
-    width: body.width
-    height: body.height
+    x: card.hang
+    y: card.hang
+    width: body.width - card.hang
+    height: body.height - card.hang
     radius: card.cornerRadius
-    color: Commons.Color.notifications.background
+    color: card.glassColor
     borderSpec: Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
                                    Math.max(1, Style.space(2)))
+  }
+  // A faint light rim, as macOS's glass has.
+  Rectangle {
+    anchors.fill: plate
+    radius: plate.radius
+    color: "transparent"
+    border.width: 1
+    border.color: Qt.rgba(1, 1, 1, 0.16)
   }
 
   // The keyboard's card is tinted with the theme's hover fill, buttons and all.
@@ -259,9 +280,9 @@ Item {
       id: layout
       // Top-anchored: centred content would slide up as the card grows.
       anchors { left: parent.left; right: parent.right; top: parent.top
-                leftMargin: plate.contentLeftInset + Style.space(12)
+                leftMargin: card.hang + plate.contentLeftInset + Style.space(12)
                 rightMargin: plate.contentRightInset + Style.space(12)
-                topMargin: plate.contentTopInset + card.contentPaddingY }
+                topMargin: card.hang + plate.contentTopInset + card.contentPaddingY }
       spacing: thumb.compact ? Style.space(8) : Style.space(12)
 
       // The sender's image, else the icon resolved for its source, else the
@@ -499,7 +520,7 @@ Item {
     Item {
       id: deedArea
       anchors { left: parent.left; right: parent.right; bottom: parent.bottom
-                leftMargin: plate.borderLeft; rightMargin: plate.borderRight
+                leftMargin: card.hang + plate.borderLeft; rightMargin: plate.borderRight
                 bottomMargin: plate.borderBottom }
 
       readonly property bool shown: card.allDeeds.length > 0 && (card.expanded ? card.hovered : card.place.front)
@@ -557,16 +578,23 @@ Item {
     // The deck owns hover, so the card works out when it's under the pointer.
     Rectangle {
       id: shut
-      x: plate.contentLeftInset + Style.space(5)
-      y: plate.contentTopInset + Style.space(5)
+      // Centred where the glass's round corner curves, so about half of it is
+      // off the glass, as on macOS.
+      readonly property real onCurve: card.cornerRadius * (1 - Math.SQRT1_2)
+      x: Math.round(plate.x + onCurve - width / 2)
+      y: Math.round(plate.y + onCurve - height / 2)
       z: 2
-      width: Style.space(20)
+      width: card.closeSize
       height: width
       radius: width / 2
       readonly property bool hot: card.pointerOver(shut)
-      color: hot ? Qt.lighter(Commons.Color.notifications.background, 1.9) : Qt.lighter(Commons.Color.notifications.background, 1.4)
+      // Its own small frosted disc, lighter under the pointer.
+      color: {
+        var c = Qt.lighter(Commons.Color.notifications.background, hot ? 2.0 : 1.5)
+        return Qt.rgba(c.r, c.g, c.b, 0.9)
+      }
       border.width: 1
-      border.color: Qt.rgba(1, 1, 1, 0.18)
+      border.color: Qt.rgba(1, 1, 1, 0.22)
       enabled: card.hovered
       opacity: card.hovered ? card.contentOpacity : 0
       visible: opacity > 0.01
@@ -590,9 +618,12 @@ Item {
     }
 
     // Under the content (z: -1) so buttons get their clicks first; anything
-    // that does not accept a click falls through to here.
+    // that does not accept a click falls through to here. Only on the glass:
+    // the room left for the close button isn't the card.
     MouseArea {
       anchors.fill: parent
+      anchors.leftMargin: card.hang
+      anchors.topMargin: card.hang
       z: -1
       // Not hoverEnabled: a card taking hover would starve the deck's region.
       hoverEnabled: false
