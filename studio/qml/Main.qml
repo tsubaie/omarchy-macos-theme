@@ -35,11 +35,19 @@ Window {
     readonly property bool releaseBuild: /^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$/.test(backend.appVersion)
     property string studioLatest: ""
     property bool studioCheckFailed: false
+    property bool studioChecking: false
+    // When each was last asked, shown after its answer so a check that finds
+    // nothing new still visibly did something.
+    property string themeCheckedAt: ""
+    property string studioCheckedAt: ""
+    function now() { return Qt.formatTime(new Date(), "hh:mm") }
     // Updated, but this window still runs the old one until it reopens.
     property bool studioUpdated: false
     readonly property bool studioUpdate: releaseBuild && !studioUpdated && studioLatest !== "" && studioLatest !== backend.appVersion
+    // A build from source asks too, to say what the newest release is.
     function checkStudio() {
-        if (!releaseBuild) return
+        if (studioChecking) return
+        studioChecking = true
         const xhr = new XMLHttpRequest()
         xhr.onreadystatechange = () => {
             if (xhr.readyState !== XMLHttpRequest.DONE) return
@@ -47,12 +55,18 @@ Window {
             try { latest = xhr.status === 200 ? JSON.parse(xhr.responseText).tag_name || "" : "" } catch (e) {}
             studioCheckFailed = latest === ""
             if (latest !== "") studioLatest = latest
+            studioCheckedAt = now()
+            studioChecking = false
         }
         xhr.open("GET", "https://api.github.com/repos/tsubaie/omarchy-macos-theme/releases/latest")
         xhr.setRequestHeader("Accept", "application/vnd.github+json")
         xhr.send()
     }
     Component.onCompleted: checkStudio()
+    Connections {
+        target: backend
+        function onCheckingChanged() { if (!backend.checking) window.themeCheckedAt = window.now() }
+    }
 
     readonly property var backups: {
         try { return JSON.parse(backend.backupsJson) } catch (e) { return [] }
@@ -1373,10 +1387,21 @@ Window {
                         Value {
                             anchors.verticalCenter: parent.verticalCenter
                             // A check that failed (offline, say) is no "Up to date".
-                            text: backend.updates > 0 ? "Update available"
-                                : backend.updateError !== "" ? "Couldn't check for updates" : "Up to date"
-                            color: backend.updates > 0 ? "#0a84ff" : "white"
+                            text: backend.checking ? "Checking…"
+                                : backend.updates > 0 ? "Update available"
+                                : (backend.updateError !== "" ? "Couldn't check for updates" : "Up to date")
+                                    + (window.themeCheckedAt ? ", checked " + window.themeCheckedAt : "")
+                            color: backend.updates > 0 && !backend.checking ? "#0a84ff" : "white"
                             Accessible.description: backend.updateError
+                        }
+
+                        MacButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: backend.updates === 0
+                            text: "Check"
+                            enabled: !backend.busy && !backend.checking
+                            reason: backend.checking ? "Checking now" : "Wait for what's running to finish"
+                            onClicked: backend.checkTheme()
                         }
 
                         MacButton {
@@ -1402,11 +1427,22 @@ Window {
 
                         Value {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: !window.releaseBuild ? "Built from source"
+                            text: window.studioChecking ? "Checking…"
                                 : window.studioUpdated ? "Updated; reopen to use it"
                                 : window.studioUpdate ? window.studioLatest + " available"
-                                : window.studioCheckFailed ? "Couldn't check for updates" : "Up to date"
-                            color: window.studioUpdate || window.studioUpdated ? "#0a84ff" : "white"
+                                : (window.studioCheckFailed ? "Couldn't check for updates"
+                                    : !window.releaseBuild ? "Built from source" + (window.studioLatest ? "; newest release " + window.studioLatest : "")
+                                    : "Up to date") + (window.studioCheckedAt ? ", checked " + window.studioCheckedAt : "")
+                            color: (window.studioUpdate || window.studioUpdated) && !window.studioChecking ? "#0a84ff" : "white"
+                        }
+
+                        MacButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: !window.studioUpdate && !window.studioUpdated
+                            text: "Check"
+                            enabled: !window.studioChecking
+                            reason: "Checking now"
+                            onClicked: window.checkStudio()
                         }
 
                         MacButton {
@@ -1438,17 +1474,6 @@ Window {
                     Value { text: "Open source, MIT" }
                 }
 
-                Item { width: 1; height: 14 }
-
-                // The theme and Studio, both asked again: new commits for the
-                // theme, a new release for Studio.
-                MacButton {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Check for Updates"
-                    enabled: !backend.busy
-                    reason: "Wait for what's running to finish"
-                    onClicked: { window.start(""); backend.refresh(); window.checkStudio() }
-                }
 
                 Item { width: 1; height: 22 }
 

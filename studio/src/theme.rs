@@ -19,6 +19,8 @@ pub mod qobject {
         #[qproperty(QString, bar_json, cxx_name = "barJson")]
         #[qproperty(bool, busy)]
         #[qproperty(bool, downloaded)]
+        // Asking GitHub whether the theme has new commits, right now.
+        #[qproperty(bool, checking)]
         #[qproperty(QString, error)]
         // All a failed command wrote, for "Show Details"; empty when there is no more to it.
         #[qproperty(QString, error_details, cxx_name = "errorDetails")]
@@ -37,9 +39,14 @@ pub mod qobject {
         #[qproperty(QString, omarchy_logo, cxx_name = "omarchyLogo")]
         type ThemeBackend = super::ThemeBackendRust;
 
-        /// Reads what is installed again.
+        /// Reads what is installed again, and checks the theme for updates.
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
+
+        /// Asks GitHub whether the theme has new commits; `checking` while it does.
+        #[qinvokable]
+        #[cxx_name = "checkTheme"]
+        fn check_theme(self: Pin<&mut Self>);
 
         /// Applies the changes waiting in the window, as JSON:
         /// `{"add": [..], "remove": [..], "set": {key: value}}`, in one
@@ -132,6 +139,7 @@ pub struct ThemeBackendRust {
     bar_json: QString,
     busy: bool,
     downloaded: bool,
+    checking: bool,
     error: QString,
     error_details: QString,
     warning: QString,
@@ -167,6 +175,7 @@ impl Default for ThemeBackendRust {
             bar_json: QString::from("{}"),
             busy: false,
             downloaded: install::is_downloaded(&dir),
+            checking: false,
             error: QString::default(),
             error_details: QString::default(),
             warning: QString::default(),
@@ -207,19 +216,27 @@ impl qobject::ThemeBackend {
     /// thread of its own, so a slow or absent network keeps nothing waiting.
     pub fn refresh(mut self: Pin<&mut Self>) {
         self.as_mut().run(|_| Ok(install::Warnings::new()));
+        self.check_theme();
+    }
+
+    pub fn check_theme(mut self: Pin<&mut Self>) {
         let dir = self.rust().dir.clone();
+        if *self.checking() || !install::is_downloaded(&dir) {
+            return;
+        }
+        self.as_mut().set_checking(true);
         let qt_thread = self.qt_thread();
         thread::spawn(move || {
-            if !install::is_downloaded(&dir) {
-                return;
-            }
             let checked = install::fetch(&dir).map(|()| install::incoming(&dir));
-            let queued = qt_thread.queue(move |mut backend| match checked {
-                Ok(incoming) => {
-                    backend.as_mut().set_incoming(&incoming);
-                    backend.as_mut().set_update_error(QString::default());
+            let queued = qt_thread.queue(move |mut backend| {
+                match checked {
+                    Ok(incoming) => {
+                        backend.as_mut().set_incoming(&incoming);
+                        backend.as_mut().set_update_error(QString::default());
+                    }
+                    Err(error) => backend.as_mut().set_update_error(QString::from(format!("{error:#}").as_str())),
                 }
-                Err(error) => backend.as_mut().set_update_error(QString::from(format!("{error:#}").as_str())),
+                backend.as_mut().set_checking(false);
             });
             if let Err(error) = queued {
                 eprintln!("the window closed before GitHub answered: {error}");
