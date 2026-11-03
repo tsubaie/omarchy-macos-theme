@@ -289,6 +289,14 @@ Window {
     }
 
     function apply() {
+        // Every way to Apply waits for a theme to switch to when the current
+        // one is turned off, or install.sh would refuse it after the fact.
+        if (needsSwitchTo && !pendingSwitchTo) {
+            closeAfterApply = false
+            backend.error = "Pick the theme to switch to first, under macOS theme."
+            open("general")
+            return
+        }
         start("apply", pendingCount)
         backupBeforeApply = backups.length > 0 ? backups[0].id : ""
         const changes = { add: [], remove: [], set: pendingSettings, places: pendingPlaces }
