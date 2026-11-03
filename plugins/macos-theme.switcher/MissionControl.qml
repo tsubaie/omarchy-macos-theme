@@ -147,27 +147,51 @@ Item {
     readonly property var targets: MissionLayout.spread(root.windows, width - pad * 2,
       height - stripTop - stripHeight - Style.space(40) - pad * 2, Style.space(36))
 
-    // The wallpaper, blurred edge to edge and dimmed as the windows spread,
-    // as macOS has it. Drawn a little larger as it blurs, so the blur's soft
-    // rim stays off the screen.
+    // The wallpaper, sharp and dimmed as the windows spread, as macOS has it.
     Image {
+      id: wallpaperImage
       anchors.fill: parent
       source: root.wallpaper ? "file://" + root.wallpaper : ""
       sourceSize: Qt.size(overlay.width, overlay.height)
       fillMode: Image.PreserveAspectCrop
       asynchronous: true
       opacity: root.spreadOut
-      scale: root.blur > 0 ? 1 + 0.04 * root.spreadOut : 1
-      layer.enabled: root.blur > 0 && root.spreadOut > 0
-      layer.effect: MultiEffect {
-        autoPaddingEnabled: false
-        blurEnabled: true
-        // Blur 10, the theme's own, blurs as strongly as the lock screen does.
-        blurMax: Math.round(6.4 * root.blur)
-        blur: root.spreadOut
-      }
     }
     Rectangle { anchors.fill: parent; color: "black"; opacity: 0.28 * root.spreadOut }
+
+    // The workspaces' frosted strip across the top, sliding down with them:
+    // the wallpaper under it blurred as strongly as the Blur setting says
+    // (0 leaves it sharp), and lightly tinted. The same strip a window
+    // dragged to the top brings down (DropSpaces.qml).
+    Item {
+      id: band
+      width: parent.width
+      height: overlay.stripTop + overlay.stripHeight + Style.space(40)
+      y: -(1 - root.spreadOut) * height
+      opacity: root.spreadOut
+      clip: true
+      // The whole wallpaper, blurred, lined up with the one beneath, so the
+      // blur has no edge of its own at the strip's bottom.
+      Image {
+        y: -band.y
+        width: overlay.width
+        height: overlay.height
+        source: wallpaperImage.source
+        sourceSize: wallpaperImage.sourceSize
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        visible: root.blur > 0
+        layer.enabled: visible && root.opened
+        layer.effect: MultiEffect {
+          blurEnabled: true
+          // Blur 10, the theme's own, blurs as strongly as the lock screen does.
+          blurMax: Math.round(6.4 * root.blur)
+          blur: 1
+        }
+      }
+      Rectangle { anchors.fill: parent; color: Qt.rgba(0.11, 0.11, 0.12, 0.35) }
+      Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.12) }
+    }
 
     MouseArea {
       anchors.fill: parent

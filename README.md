@@ -149,7 +149,7 @@ Installs the [MacTahoe](https://github.com/vinceliuice/MacTahoe-icon-theme) icon
   ![App switcher](docs/screenshots/app-switcher.png)
 
 - **Super+Tab** does the same for workspaces, showing each one as a live miniature of its windows. A quick Super+Tab flips between your last two workspaces.
-- **Ctrl+Up** opens Mission Control, as on macOS: the workspace's windows fly into a spread over the wallpaper, live, blurred edge to edge and dimmed (as strongly as the Blur setting says; 0 leaves it sharp), with the screen's workspaces in a strip along the top.
+- **Ctrl+Up** opens Mission Control, as on macOS: the workspace's windows fly, live, into a spread over the dimmed wallpaper, and the screen's workspaces slide down in a frosted strip across the top (blurred as strongly as the Blur setting says; 0 leaves it clear). A window dragged to the top of the screen brings down the same strip.
   - Hover a window to see its title; click it (or press Return) to bring it forward.
   - Click a workspace in the strip to go there, or "+" at its end to go to a new, empty one.
   - Ctrl+Up again, Esc or a click on the wallpaper closes it.
