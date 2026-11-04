@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-theme.logo-menu",
+  "name": "Logo menu",
+  "version": "1.0.0",
+  "description": "The logo at the far left of the bar opens a menu like macOS's Apple menu: About This Computer, System Settings, Force Quit, sleep, restart, shut down, lock and log out.",
+  "license": "MIT",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "LogoMenu.qml"
+  },
+  "barWidget": {
+    "displayName": "Logo menu",
+    "description": "A logo that opens a macOS-like system menu",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}

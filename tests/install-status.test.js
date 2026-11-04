@@ -89,7 +89,7 @@ try {
   assert.deepStrictEqual(Object.keys(s.features), pieces)
   assert.ok(Object.values(s.features).every((on) => on === false))
   assert.strictEqual(s.active, false)
-  assert.deepStrictEqual(s.settings, { glass: 0.85, "web-glass": 1, snapping: 1, "drop-follow": 1, blur: 10, "title-bars": 1, "traffic-lights": 14, "reduce-motion": 0, magnification: 1.75, "dock-size": 48, "dock-previews": 1 })
+  assert.deepStrictEqual(s.settings, { glass: 0.85, "web-glass": 1, snapping: 1, "drop-follow": 1, blur: 10, "title-bars": 1, "traffic-lights": 14, "reduce-motion": 0, magnification: 1.75, "dock-size": 48, "dock-previews": 1, "logo-menu": 0, "logo-colors": 0 })
 
   // --add installs only what it names.
   assert.strictEqual(run("--add", "rows", "--add", "dock").status, 0)
@@ -184,7 +184,7 @@ try {
   const shellJson = path.join(home, ".config/omarchy/shell.json")
   fs.writeFileSync(shellJson, JSON.stringify({ dock: { position: "left" } }))
   assert.strictEqual(run("--set", "glass=0.9", "--set", "web-glass=0.9", "--set", "snapping=0", "--set", "drop-follow=0", "--set", "blur=15", "--set", "magnification=1.2", "--set", "dock-size=60", "--set", "dock-previews=0", "--set", "title-bars=0", "--set", "traffic-lights=18", "--set", "reduce-motion=1").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, "reduce-motion": 1, magnification: 1.2, "dock-size": 60, "dock-previews": 0 })
+  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, "reduce-motion": 1, magnification: 1.2, "dock-size": 60, "dock-previews": 0, "logo-menu": 0, "logo-colors": 0 })
   const look = fs.readFileSync(path.join(themeDir, "look.lua"), "utf8")
   // Glass is for the windows you aren't using: the active one stays solid.
   assert.match(look, /o\.window\("\.\*", \{ opacity = "1 0\.9" \}\)/)
@@ -200,7 +200,7 @@ try {
   assert.match(look, /^local REDUCE_MOTION = 1$/m)
   assert.strictEqual(JSON.parse(fs.readFileSync(shellJson, "utf8")).dock.position, "left")
   assert.strictEqual(run("--add", "theme").status, 0)
-  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, "reduce-motion": 1, magnification: 1.2, "dock-size": 60, "dock-previews": 0 })
+  assert.deepStrictEqual(status().settings, { glass: 0.9, "web-glass": 0.9, snapping: 0, "drop-follow": 0, blur: 15, "title-bars": 0, "traffic-lights": 18, "reduce-motion": 1, magnification: 1.2, "dock-size": 60, "dock-previews": 0, "logo-menu": 0, "logo-colors": 0 })
   // A look.lua from before (the same glass for every window, as low as 0.5) is
   // kept through a reinstall in the new form, raised to the least glass now takes.
   const lookPath = path.join(themeDir, "look.lua")
@@ -383,6 +383,24 @@ try {
   // Unknown pieces are refused.
   assert.strictEqual(run("--remove", "everything").status, 1)
   assert.strictEqual(run("--add").status, 1)
+
+  // The logo menu takes a cloned menu's place on the bar and keeps the clone
+  // listed (else Super+Space has no launcher); turned off, both go back.
+  const cloneDir = path.join(home, ".config/omarchy/plugins/tsubaie.menu")
+  fs.mkdirSync(cloneDir, { recursive: true })
+  fs.writeFileSync(path.join(cloneDir, "manifest.json"), JSON.stringify({ id: "tsubaie.menu", omarchy: { clonedFrom: "omarchy.menu" } }, null, 2))
+  fs.writeFileSync(shellJson, JSON.stringify({ plugins: [{ id: "x.other" }], bar: { layout: { left: [{ id: "tsubaie.menu" }, { id: "x.ws" }] } } }))
+  assert.strictEqual(run("--set", "logo-menu=1").status, 0)
+  let sj = JSON.parse(fs.readFileSync(shellJson, "utf8"))
+  assert.deepStrictEqual(sj.bar.layout.left.map((w) => w.id), ["macos-theme.logo-menu", "x.ws"])
+  assert.deepStrictEqual(sj.plugins.map((p) => p.id), ["x.other", "tsubaie.menu"])
+  assert.strictEqual(status()["settings"]["logo-menu"], 1)
+  assert.strictEqual(run("--set", "logo-menu=0").status, 0)
+  sj = JSON.parse(fs.readFileSync(shellJson, "utf8"))
+  assert.deepStrictEqual(sj.bar.layout.left.map((w) => w.id), ["tsubaie.menu", "x.ws"])
+  assert.deepStrictEqual(sj.plugins.map((p) => p.id), ["x.other"])
+  assert.strictEqual(sj.logo, undefined)
+  fs.rmSync(cloneDir, { recursive: true })
 
   // Edits to looknfeel.lua and gtk.css leave no .bak files: snapshots hold the old ones.
   const leftovers = ["hypr", "gtk-4.0"].flatMap((d) => fs.readdirSync(path.join(home, ".config", d)).filter((f) => f.includes(".bak.")))

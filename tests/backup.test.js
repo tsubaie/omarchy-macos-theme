@@ -119,7 +119,10 @@ try {
   const b = makeHome()
   assert.strictEqual(b.run("--add", "theme", "--add", "dock", "--add", "widgets", "--set", "glass=0.85").status, 0)
   const shellJson = b.config("omarchy/shell.json")
-  fs.writeFileSync(shellJson, JSON.stringify({ dock: { pinned: ["firefox.desktop"] }, widgets: { screen: "DP-1" }, bar: { mine: true } }))
+  const ownLogo = path.join(b.home, "me.svg")
+  fs.writeFileSync(ownLogo, "<svg/>")
+  fs.writeFileSync(shellJson, JSON.stringify({ dock: { pinned: ["firefox.desktop"] }, widgets: { screen: "DP-1" }, bar: { mine: true },
+    logo: { glyph: "arch", file: ownLogo, keepColors: true } }))
   fs.writeFileSync(b.config("omarchy/themes/macos/backgrounds/mine.jpg"), "photo")
   const exported = b.run("--export", b.home)
   assert.strictEqual(exported.status, 0, exported.out)
@@ -128,6 +131,7 @@ try {
   const exportPath = path.join(b.home, file)
   const listing = spawnSync("tar", ["-tzf", exportPath], { encoding: "utf8" }).stdout
   assert.match(listing, /backgrounds\/mine\.jpg/)
+  assert.match(listing, /logo\/logo\.svg/)
   assert.doesNotMatch(listing, /pawel/, "the theme's own wallpapers stay out")
 
   // Import elsewhere: the same pieces, settings, setup and wallpapers, and the
@@ -146,6 +150,11 @@ try {
   assert.deepStrictEqual(shell.dock.pinned, ["firefox.desktop"])
   assert.strictEqual(shell.widgets.screen, "DP-1")
   assert.deepStrictEqual(shell.bar, { theirs: true })
+  // The logo, your own picture copied in, keeping its colors.
+  assert.strictEqual(shell.logo.glyph, "arch")
+  assert.strictEqual(shell.logo.keepColors, true)
+  assert.strictEqual(fs.readFileSync(shell.logo.file, "utf8"), "<svg/>")
+  assert.ok(shell.logo.file.startsWith(c.config("omarchy")), shell.logo.file)
   assert.strictEqual(fs.readFileSync(c.config("omarchy/themes/macos/backgrounds/mine.jpg"), "utf8"), "photo")
   assert.match(c.json("--backups", "--json")[0].note, /^Before importing/)
 

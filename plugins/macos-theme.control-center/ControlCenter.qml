@@ -285,8 +285,12 @@ BarWidget {
       id: p
       property var target
       property var slot
-      readonly property real h: target && target.parent ? Math.round(target.parent.height * 0.74) : 0
-      readonly property real w: target && target.parent ? Math.max(target.parent.width, Math.round(h * 1.6)) : 0
+      // The size of the shown workspace's pill (workspaces-patch.pl), so all
+      // pills on the bar match: wider only for a wider widget, and then kept
+      // clear of its slot's edges so it never meets the pill beside it.
+      readonly property int icon: Math.round(Style.bar.iconCanvas * 0.85)
+      readonly property real h: icon + Math.round(icon * 0.2) * 2
+      readonly property real w: target && target.parent ? Math.max(icon + Math.round(icon * 0.45) * 2, target.parent.width - Style.space(8)) : 0
       property list<QtObject> bindings: [
         Binding { target: p.target; property: "z"; value: -1; restoreMode: Binding.RestoreBindingOrValue },
         Binding { target: p.target; property: "width"; value: p.w; restoreMode: Binding.RestoreBindingOrValue },

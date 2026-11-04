@@ -45,6 +45,9 @@
 #   ./install.sh --set traffic-lights=16  how big the traffic lights are, 10 to 20; 14 by default
 #   ./install.sh --set reduce-motion=1  fade windows, menus and workspaces instead of springing
 #                                 and sliding them, without the genie or moving weather (0: off)
+#   ./install.sh --set logo-menu=0  the bar's logo is Omarchy's menu button again (1: the macOS menu)
+#   ./install.sh --set logo=arch     the bar's logo: omarchy, arch, command, circle, hexagon, terminal
+#   ./install.sh --set logo-file=me.svg  your own logo, an SVG or PNG (logo-colors=1 keeps its colors)
 #   ./install.sh --preview --set blur=15  show settings at once, for a slider being dragged:
 #                                  no snapshot or theme refresh; blur and the dock's
 #                                  settings change in place until Apply, glass reloads
@@ -115,7 +118,12 @@ ROWS_LINE="@import url(\"file://$HOME/.local/state/omarchy/current/theme/gtk.css
 OSD_ID="macos-theme.osd"
 HUD_ID="macos-theme.dictation-hud"
 DOCK_ID="macos-theme.dock"
-MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center"
+MENUBAR_IDS="macos-theme.menubar macos-theme.app-name macos-theme.control-center macos-theme.logo-menu"
+# The logo menu's logos, as its LogoModel.js names them: never Apple's.
+LOGOS="omarchy arch command circle hexagon terminal"
+LOGO_MENU_ID="macos-theme.logo-menu"
+# Your own logo is copied here, outside the theme's folder, so updates keep it.
+LOGO_FILE_BASE="$CONFIG/omarchy/macos-theme-logo"
 # The bar widgets the Control Center stands in for. They wait in the bar's tray
 # drawer rather than leaving the bar, since their panels live in them.
 # Omdrop (AirDrop for Omarchy) included: Control Center has its switch.
@@ -171,6 +179,22 @@ while (( $# )); do
       fi
       if [[ ${2:-} =~ ^(volume-hud|dictation-hud)=(bottom|top)$ ]]; then
         settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+        shift; shift; continue
+      fi
+      # The logo menu: on or off, which logo, your own picture, its colors.
+      if [[ ${2:-} =~ ^(logo-menu|logo-colors)=([01])$ ]]; then
+        settings[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+        shift; shift; continue
+      fi
+      if [[ ${2:-} =~ ^logo=(.+)$ ]]; then
+        [[ " $LOGOS " == *" ${BASH_REMATCH[1]} "* ]] || { echo "Unknown logo: ${BASH_REMATCH[1]} (one of: ${LOGOS// /, })" >&2; exit 1; }
+        settings[logo]=${BASH_REMATCH[1]}
+        shift; shift; continue
+      fi
+      if [[ ${2:-} =~ ^logo-file=(.+)$ ]]; then
+        f=${BASH_REMATCH[1]}
+        [[ -f $f && ${f,,} =~ \.(svg|png)$ ]] || { echo "logo-file needs an SVG or PNG file: $f" >&2; exit 1; }
+        settings[logo-file]=$(realpath "$f")
         shift; shift; continue
       fi
       [[ ${2:-} =~ ^(glass|web-glass|magnification|dock-size|dock-previews|snapping|drop-follow|title-bars|reduce-motion|traffic-lights|blur)=([0-9]+(\.[0-9]+)?)$ ]] &&
@@ -519,6 +543,47 @@ set_clock() {
   esac
 }
 
+# The logo menu stands in the bar where Omarchy's menu button was (or a clone
+# of it, the wide menu's), in its very place; which one it replaced is kept in
+# shell.json's logo.replaced, so turning it off puts that one back there.
+logo_menu_on() { jq -e --arg id "$LOGO_MENU_ID" '[.bar.layout // {} | .[]? | arrays | .[] | .id?] | index($id)' "$SHELL_JSON" >/dev/null 2>&1; }
+menu_widgets() {
+  echo omarchy.menu
+  local dir
+  for dir in "$PLUGINS_DIR"/*; do grep -qs '"clonedFrom": "omarchy.menu"' "$dir/manifest.json" && basename "$dir"; done
+  return 0
+}
+set_logo_menu() {
+  if [[ $1 == 1 ]]; then
+    logo_menu_on && return 0
+    local menu
+    menu=$(jq -r --arg ids "$(menu_widgets | tr '\n' ' ')" \
+      '($ids | split(" ")) as $ids | [.bar.layout // {} | .[]? | arrays | .[] | .id? | select(. as $id | $ids | index($id))][0] // empty' "$SHELL_JSON" 2>/dev/null) || menu=""
+    if [[ -n $menu ]]; then
+      # A cloned menu is only on (and Super+Space only opens it) while
+      # shell.json lists it: off the bar, it stays in .plugins.
+      shell_write --arg from "$menu" --arg to "$LOGO_MENU_ID" \
+        '.bar.layout |= walk(if type == "object" and .id? == $from then .id = $to else . end) | .logo.replaced = $from
+        | if $from == "omarchy.menu" or any(.plugins[]?; .id? == $from) then . else .plugins += [{id: $from}] | .logo.listed = true end'
+    else
+      # No menu button on the bar: the logo goes first on the left, as macOS has it.
+      omarchy bar put "$LOGO_MENU_ID" --section left --index 0 >/dev/null 2>&1 || true
+    fi
+  else
+    logo_menu_on || return 0
+    local was
+    was=$(jq -r '.logo.replaced // "omarchy.menu" | strings' "$SHELL_JSON" 2>/dev/null) || was=omarchy.menu
+    shell_write --arg from "$LOGO_MENU_ID" --arg to "$was" \
+      '.bar.layout |= walk(if type == "object" and .id? == $from then .id = $to else . end)
+        | if .logo.listed then .plugins |= map(select(.id? != $to)) else . end | del(.logo.replaced, .logo.listed) | if .logo == {} then del(.logo) else . end'
+  fi
+}
+# The logo as shell.json says, for --status: { glyph, file, keepColors }.
+logo_json() {
+  jq -c '.logo // {} | {glyph: (.glyph // "omarchy"), file: (.file // ""), keepColors: (.keepColors == true)}' "$SHELL_JSON" 2>/dev/null ||
+    echo '{"glyph":"omarchy","file":"","keepColors":false}'
+}
+
 # The desktop widgets shown, as a JSON array: the known ids in shell.json's
 # widgets.layout, or all of them when it has none, as the widgets do.
 shown_widgets() {
@@ -655,8 +720,8 @@ if $status; then
     done
     set_out=""
     for k in $LOOK_SETTINGS; do set_out+="\"$k\":$(look_get "$k"),"; done
-    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"custom-widgets":%s,"widget-workspaces":%s,"widget-workspaces-there":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
-      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(custom_widgets)" "$(widget_workspaces)" "$(widget_workspaces_there)" \
+    printf '{"active":%s,"features":{%s},"settings":{%s"magnification":%s,"dock-size":%s,"dock-previews":%s,"logo-menu":%s,"logo-colors":%s},"clock":"%s","volume-hud":"%s","dictation-hud":"%s","widgets":%s,"logo":%s,"custom-widgets":%s,"widget-workspaces":%s,"widget-workspaces-there":%s,"icons-outside":%s,"themes":%s,"previous-theme":%s}\n' \
+      "$(active && echo true || echo false)" "$out" "$set_out" "$(magnification)" "$(dock_size)" "$(dock_previews)" "$(logo_menu_on && echo 1 || echo 0)" "$(jq -e ".logo.keepColors == true" "$SHELL_JSON" >/dev/null 2>&1 && echo 1 || echo 0)" "$(clock_position)" "$(hud_position volume)" "$(hud_position dictation)" "$(shown_widgets)" "$(logo_json)" "$(custom_widgets)" "$(widget_workspaces)" "$(widget_workspaces_there)" \
       "$( ! installed icons && [[ -d $HOME/.local/share/icons/MacTahoe-dark ]] && echo true || echo false)" \
       "$({ omarchy theme list 2>/dev/null || true; } | jq -Rcs 'split("\n") | map(select(length > 0 and . != "Macos"))')" \
       "$(t=$(previous_theme); [[ -n $t ]] && jq -n --arg t "$t" '$t' || echo null)"
@@ -738,6 +803,8 @@ remove_switcher() {
 }
 remove_menubar() {
   local id after=omarchy.tray
+  # The menu button back in the logo's place first, whichever way the bar goes back.
+  set_logo_menu 0
   # The arrangement you made, for when the menu bar comes back.
   mkdir -p "$BACKUP_DIR"
   jq -e '.bar.layout | objects' "$SHELL_JSON" >"$BAR_REMEMBERED" 2>/dev/null || rm -f "$BAR_REMEMBERED"
@@ -1203,6 +1270,8 @@ if want menubar && $menubar_ok; then
     # the clock. Widgets from other plugins stay where their owner put them.
     omarchy bar put macos-theme.app-name --section left >/dev/null 2>&1 || true
     omarchy bar move macos-theme.app-name --before omarchy.workspaces >/dev/null 2>&1 || true
+    # The logo opens the macOS menu, in the menu button's place.
+    set_logo_menu 1
     omarchy bar move omarchy.clock --section right >/dev/null 2>&1 || true
     omarchy bar put macos-theme.control-center >/dev/null 2>&1 || true
     omarchy bar move macos-theme.control-center --before omarchy.clock >/dev/null 2>&1 || true
@@ -1320,6 +1389,35 @@ fi
 if [[ -n ${settings[clock]:-} ]]; then
   set_clock "${settings[clock]}"
   say "Moved the clock to the ${settings[clock]} of the bar"
+fi
+# The logo menu and its logo; the logo menu follows shell.json itself.
+if [[ -n ${settings[logo-menu]:-} ]]; then
+  if [[ ${settings[logo-menu]} == 1 ]] && ! installed menubar; then
+    echo "The logo menu comes with the menu bar: add it first (--add menubar)" >&2
+    exit 1
+  else
+    set_logo_menu "${settings[logo-menu]}"
+    if [[ ${settings[logo-menu]} == 1 ]]; then say "The logo opens the macOS menu"; else say "The logo is Omarchy's menu button again"; fi
+  fi
+fi
+if [[ -n ${settings[logo]:-} ]]; then
+  shell_write --arg g "${settings[logo]}" '.logo.glyph = $g | del(.logo.file)'
+  say "Set the logo to ${settings[logo]}"
+fi
+if [[ -n ${settings[logo-file]:-} ]]; then
+  src=${settings[logo-file]} ext=${settings[logo-file]##*.}
+  # Your current logo given again is kept as it is, never deleted first.
+  if ! [[ $src -ef $LOGO_FILE_BASE.${ext,,} ]]; then
+    rm -f "$LOGO_FILE_BASE".svg "$LOGO_FILE_BASE".png
+    mkdir -p "$(dirname "$LOGO_FILE_BASE")" && cp "$src" "$LOGO_FILE_BASE.${ext,,}"
+  fi
+  shell_write --arg f "$LOGO_FILE_BASE.${ext,,}" '.logo.file = $f'
+  say "Set the logo to your own picture"
+fi
+if [[ -n ${settings[logo-colors]:-} ]]; then
+  if ((settings[logo-colors])); then on=true how="keeps its own colors"; else on=false how="takes the bar's color"; fi
+  shell_set '.logo.keepColors' "$on"
+  say "Your logo $how"
 fi
 for k in volume dictation; do
   [[ -n ${settings[$k-hud]:-} ]] || continue

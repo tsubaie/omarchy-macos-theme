@@ -230,6 +230,12 @@ export_profile() {
   set_json=$(jq --argjson v "$(magnification)" --arg c "$(clock_position)" \
     --arg vh "$(hud_position volume)" --arg dh "$(hud_position dictation)" \
     '.magnification = $v | .clock = $c | .["volume-hud"] = $vh | .["dictation-hud"] = $dh' <<<"$set_json")
+  # The logo menu, its logo and your own picture (in logo/, as logo.svg or .png).
+  set_json=$(jq --argjson on "$(logo_menu_on && echo 1 || echo 0)" --argjson logo "$(logo_json)" \
+    '.["logo-menu"] = $on | .logo = $logo.glyph | .["logo-colors"] = (if $logo.keepColors then 1 else 0 end)' <<<"$set_json")
+  mkdir -p "$tmp/logo"
+  f=$(jq -r '.logo.file // "" | strings' "$SHELL_JSON" 2>/dev/null) || f=""
+  [[ -f $f && ${f,,} =~ \.(svg|png)$ ]] && cp "$f" "$tmp/logo/logo.${f##*.}"
 
   jq -n --argjson format "$EXPORT_FORMAT" --arg created "$(date -Iseconds)" \
     --arg version "$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)" \
@@ -243,7 +249,7 @@ export_profile() {
       [[ -f $f ]] && ! repo_wallpaper "$(basename "$f")" && cp "$f" "$tmp/backgrounds/"
     done
   fi
-  tar -C "$tmp" -czf "$target" profile.json backgrounds
+  tar -C "$tmp" -czf "$target" profile.json backgrounds logo
   rm -rf "${tmp:?}"
   say "Exported your macOS theme setup to $target"
 }
@@ -255,7 +261,7 @@ import_profile() {
   local file="$1" tmp entry
   [[ -f $file ]] || { echo "No file $file" >&2; exit 1; }
   while read -r entry; do
-    [[ $entry =~ ^(\./)?(profile\.json|backgrounds/?|backgrounds/[A-Za-z0-9._\ -]+\.(jpg|jpeg|png|webp))$ ]] ||
+    [[ $entry =~ ^(\./)?(profile\.json|backgrounds/?|backgrounds/[A-Za-z0-9._\ -]+\.(jpg|jpeg|png|webp)|logo/?|logo/logo\.(svg|png))$ ]] ||
       { echo "Not a macOS theme export (unexpected $entry)" >&2; exit 1; }
   done < <(tar -tzf "$file" 2>/dev/null || echo "?")
   # Plain files and folders only: a link would let it copy any file of yours.
@@ -297,6 +303,14 @@ import_profile() {
     hud=$(jq -r --arg k "$f" '.settings[$k] | strings' "$profile")
     [[ $hud =~ ^(bottom|top)$ ]] && args+=(--set "$f=$hud")
   done
+  # The logo menu and its logo: a known logo, your own picture over it.
+  for f in logo-menu logo-colors; do
+    v=$(jq -r --arg k "$f" '.settings[$k] | numbers' "$profile")
+    [[ $v =~ ^[01]$ ]] && args+=(--set "$f=$v")
+  done
+  v=$(jq -r '.settings.logo | strings' "$profile")
+  [[ " $LOGOS " == *" $v "* ]] && args+=(--set "logo=$v")
+  for f in "$tmp"/logo/logo.svg "$tmp"/logo/logo.png; do [[ -f $f ]] && args+=(--set "logo-file=$f"); done
   # A piece that fails still lets the dock, widgets and wallpapers come in;
   # the import fails at the end, with what install.sh said about it.
   local failed=0

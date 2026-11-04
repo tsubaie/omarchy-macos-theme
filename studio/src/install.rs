@@ -61,7 +61,7 @@ impl fmt::Display for Piece {
 
 /// The settings Studio sets, each with the range `install.sh --set` accepts
 /// and whether it takes whole numbers only (a switch, a size in points).
-const SETTINGS: [(&str, f64, f64, bool); 10] = [
+const SETTINGS: [(&str, f64, f64, bool); 12] = [
     ("glass", 0.75, 1.0, false),
     ("web-glass", 0.5, 1.0, false),
     ("magnification", 1.0, 2.0, false),
@@ -72,6 +72,8 @@ const SETTINGS: [(&str, f64, f64, bool); 10] = [
     ("reduce-motion", 0.0, 1.0, true),
     ("traffic-lights", 10.0, 20.0, true),
     ("blur", 0.0, 20.0, true),
+    ("logo-menu", 0.0, 1.0, true),
+    ("logo-colors", 0.0, 1.0, true),
 ];
 
 /// A setting `install.sh --set` takes, with the range it accepts.
@@ -153,6 +155,9 @@ pub struct Status {
     /// The same for the dictation panel.
     #[serde(default, rename = "dictation-hud")]
     pub dictation_hud: Option<String>,
+    /// The bar's logo: `{glyph, file, keepColors}`. Older themes don't report it.
+    #[serde(default)]
+    pub logo: Option<serde_json::Value>,
 }
 
 /// The bar's sections, as `install.sh --bar-layout` takes them.
@@ -251,6 +256,31 @@ pub fn add_backgrounds(dir: &Path, files: &[PathBuf]) -> Result<Warnings> {
         args.push(file.to_str().context("a file's name isn't text")?);
     }
     run(dir, &args).map(|ran| ran.warnings)
+}
+
+/// The logos the bar's logo menu draws, as `install.sh --set logo=` takes them.
+const LOGOS: [&str; 6] = ["omarchy", "arch", "command", "circle", "hexagon", "terminal"];
+
+/// Sets the bar's logo to one of the theme's, after a snapshot.
+///
+/// # Errors
+///
+/// Fails for a logo the theme doesn't have, or with `install.sh`'s own message.
+pub fn set_logo(dir: &Path, name: &str) -> Result<Warnings> {
+    if !LOGOS.contains(&name) {
+        bail!("no logo {name:?}");
+    }
+    run(dir, &["--set", &format!("logo={name}")]).map(|ran| ran.warnings)
+}
+
+/// Sets the bar's logo to your own picture (SVG or PNG), which the theme copies.
+///
+/// # Errors
+///
+/// Fails with `install.sh`'s own message when it does (not an SVG or PNG, say).
+pub fn set_logo_file(dir: &Path, file: &Path) -> Result<Warnings> {
+    let file = file.to_str().context("the file's name isn't text")?;
+    run(dir, &["--set", &format!("logo-file={file}")]).map(|ran| ran.warnings)
 }
 
 /// The desktop widgets, as `install.sh --show-widgets` takes them.
@@ -1655,12 +1685,15 @@ mod contract {
         assert_eq!(install_sh_list("FEATURES"), PIECES);
         assert_eq!(install_sh_list("DESKTOP_WIDGETS"), DESKTOP_WIDGETS);
         assert_eq!(install_sh_list("BAR_SECTIONS"), BAR_SECTIONS);
+        assert_eq!(install_sh_list("LOGOS"), LOGOS);
+        assert!(set_logo(Path::new("/nonexistent"), "apple").is_err());
     }
 
     #[test]
     fn the_installer_takes_what_studio_sends_and_studio_reads_what_it_says() {
         let home = Home::new();
-        home.ok(&["--add", "theme"]);
+        // The menu bar too: the logo menu's switch needs it.
+        home.ok(&["--add", "theme", "--add", "menubar"]);
 
         // Every setting's range: its ends are taken, a step past them refused.
         for (key, low, high, whole) in SETTINGS {
